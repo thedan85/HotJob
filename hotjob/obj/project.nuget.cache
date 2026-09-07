@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "k+epFTXMghQ=",
+  "dgSpecHash": "C2ok+HHIO2w=",
   "success": true,
-  "projectFilePath": "D:\\Coding_Project\\dotnet\\source\\hotjob\\hotjob.csproj",
+  "projectFilePath": "D:\\Coding\\Phieu\\C#\\HotJob\\hotjob\\hotjob.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\ACER\\.nuget\\packages\\microsoft.aspnetcore.app.internal.assets\\10.0.2\\microsoft.aspnetcore.app.internal.assets.10.0.2.nupkg.sha512"
+    "C:\\Users\\phat\\.nuget\\packages\\microsoft.aspnetcore.app.internal.assets\\10.0.2\\microsoft.aspnetcore.app.internal.assets.10.0.2.nupkg.sha512"
   ],
   "logs": []
 }

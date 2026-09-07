@@ -45,19 +45,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\ACER\\.nuget\\packages\\": {}
+    "C:\\Users\\phat\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\Coding_Project\\dotnet\\source\\hotjob\\hotjob.csproj",
+      "projectUniqueName": "D:\\Coding\\Phieu\\C#\\HotJob\\hotjob\\hotjob.csproj",
       "projectName": "hotjob",
-      "projectPath": "D:\\Coding_Project\\dotnet\\source\\hotjob\\hotjob.csproj",
-      "packagesPath": "C:\\Users\\ACER\\.nuget\\packages\\",
-      "outputPath": "D:\\Coding_Project\\dotnet\\source\\hotjob\\obj\\",
+      "projectPath": "D:\\Coding\\Phieu\\C#\\HotJob\\hotjob\\hotjob.csproj",
+      "packagesPath": "C:\\Users\\phat\\.nuget\\packages\\",
+      "outputPath": "D:\\Coding\\Phieu\\C#\\HotJob\\hotjob\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\ACER\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\phat\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net10.0"
