@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("hotjob")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d553991144a376c82761e06f2cfe68cb91a293e2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+43b6eae6ddea1c63f2d3f13f91ab112b5ef6c035")]
 [assembly: System.Reflection.AssemblyProductAttribute("hotjob")]
 [assembly: System.Reflection.AssemblyTitleAttribute("hotjob")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
