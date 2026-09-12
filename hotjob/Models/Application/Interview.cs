@@ -1,5 +1,3 @@
-using hotjob.Models.Application;
-
 namespace hotjob.Models.Application;
 
 public enum InterviewStatus
