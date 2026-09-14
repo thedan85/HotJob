@@ -31,8 +31,8 @@ ATS = Applicant Tracking System: hệ theo dõi tuyển dụng Job → Apply →
 
 ## Flows
 
-1. **Auth (Identity):** Register → roles Candidate/Employer/Admin. Login/logout Identity lo. `Candidates.UserId` / `Employers.UserId` FK string → AspNetUsers.Id.
-2. **Company verify:** Owner tạo CompanyProfiles(Status=Pending) → Admin Approve/Rejected(+RejectionReason) → chỉ Approved mới Post Job. Member xin join Employers(MembershipStatus=Pending) → Owner duyệt Active.
+1. **Auth (Identity):** Register → role Candidate (tạo `Candidates`). Become Employer → tạo `Employers` + gán role Employer (1 user giữ cả 2 profile). Admin seed sẵn. `Candidates.UserId` / `Employers.UserId` FK string → AspNetUsers.Id.
+2. **Company verify:** Employer (từ Become Employer) tạo CompanyProfiles(Status=Pending) → Admin Approve/Rejected(+RejectionReason) → chỉ Approved mới Post Job. Member xin join Employers(MembershipStatus=Pending) → Owner duyệt Active.
 3. **Apply:** check Job Published + ExpiryDate > Now → copy file CV → Applications.SnapshotFileUrl + SnapshotSummary (freeze, HR xem bản lúc nộp) → unique(Job, Resume) chống trùng.
 4. **ATS state machine:** Pending → Viewed → Shortlisted → Interviewing → Offered/Rejected; Candidate chỉ Withdrawn (khi chưa Offered); Employer chỉ Job thuộc Company mình; Admin all. Mỗi chuyển insert ApplicationStatusHistory.
 5. **Close/Expire:** Close hoặc ExpiryDate qua → apps đang Pending/Viewed/Shortlisted/Interviewing mass chuyển Rejected, Notes="Job closed". Hết hạn không cho apply mới.

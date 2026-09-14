@@ -1,7 +1,7 @@
 # HotJob — Idea (ASP.NET Identity + ATS Job Board)
 
 ATS = Applicant Tracking System: hệ theo dõi tuyển dụng Job → Apply → Viewed → Shortlisted → Interview → Offer/Reject.
-Tài khoản: chỉ đăng ký `Candidate` hoặc `Employer`. `Admin` seed sẵn, không cho đăng ký.
+Tài khoản: chỉ đăng ký `Candidate`. `Candidate` bấm Become Employer để thêm vai `Employer` (1 user giữ cả 2 profile). `Admin` seed sẵn, không cho đăng ký.
 
 ## 1. Candidate flow (6 bước)
 
@@ -14,10 +14,10 @@ Tài khoản: chỉ đăng ký `Candidate` hoặc `Employer`. `Admin` seed sẵn
 
 ## 2. Employer flow (7 bước)
 
-1. **Đăng ký / vào Company** — Register role Employer. Tạo CompanyProfile mới (thành IsOwner, Company Pending) hoặc xin join Company có sẵn (MembershipStatus Pending). Bảng: `Employers`, `CompanyProfiles`.
-2. **Chờ duyệt** — Tạo mới: chờ Admin duyệt Company (Approved mới được đăng Job; Rejected kèm RejectionReason). Join: chờ Owner duyệt Active mới được thao tác. Bảng: `CompanyProfiles`, `Employers`.
-3. **Đăng Job** — Company Approved được đăng thẳng (không cần Admin duyệt từng Job). Chọn JobCategories (n-n qua Mappings), JobSkills + ImportanceWeight. Rule: chỉ Employer Active của Company. Bảng: `JobPostings`, `JobCategoryMappings`, `JobSkills`.
-4. **Duyệt Application** — Xem Applications của Job thuộc Company mình + CV snapshot. Chuyển trạng thái theo state machine: Pending → Viewed → Shortlisted → Interviewing → Offered/Rejected. Mỗi lần chuyển insert `ApplicationStatusHistory` (ai, lúc nào, ghi chú). Rule: Employer chỉ Job của Company mình; unique chống nộp trùng đã chặn ở bước Apply. Bảng: `Applications`, `ApplicationStatusHistory`. Event: đổi status → Notification cho Candidate.
+1. **Become Employer / vào Company** — 1 nút duy nhất: form gồm FullName + Position + radio Create/Join Company (tạo mới: tên/web/logo/location...; join: chọn Company có sẵn). Không tách nút riêng vì `Employer.CompanyProfileId` required — tách ra tạo state lửng. Tạo Company mới → thành IsOwner + Membership Active ngay (chỉ Company Pending). Join → Membership Pending, chờ Owner duyệt. Submit 1 transaction: tạo `Employers` + gán role Employer (giữ cả 2 vai). Bảng: `Employers`, `CompanyProfiles`.
+2. **Chờ duyệt** — Tạo mới (Owner): `Employer Active` ngay, chỉ Company Pending chờ Admin duyệt (Approved mới được đăng Job; Rejected kèm RejectionReason). Join: chờ Owner duyệt Active mới được thao tác. Bảng: `CompanyProfiles`, `Employers`.
+3. **Đăng Job** — Company Approved được đăng thẳng (không cần Admin duyệt từng Job). Chọn JobCategories (n-n qua Mappings), JobSkills + ImportanceWeight. Rule: chỉ Employer Active của Company; Owner thêm quyền duyệt member + sửa Company. Bảng: `JobPostings`, `JobCategoryMappings`, `JobSkills`.
+4. **Duyệt Application** — Xem Applications của Job thuộc Company mình + CV snapshot. Chuyển trạng thái theo state machine: Pending → Viewed → Shortlisted → Interviewing → Offered/Rejected. Mỗi lần chuyển insert `ApplicationStatusHistory` (ai, lúc nào, ghi chú). Rule: Employer Active chỉ Job của Company mình (Owner = Member về ATS); unique chống nộp trùng đã chặn ở bước Apply. Bảng: `Applications`, `ApplicationStatusHistory`. Event: đổi status → Notification cho Candidate.
 5. **Lọc Application (rule HR + điểm ML)** — Sắp xếp/lọc theo skill khớp + `MatchScores.MatchPercentage` có sẵn. Bảng: `Applications`, `MatchScores`, `JobSkills`, `ResumeSkills`.
 6. **Phỏng vấn (Interview)** — Sau Shortlisted, tạo N vòng: InterviewDate, LocationOrLink, InterviewType, Notes, Status (Scheduled/Completed/Cancelled). Bảng: `Interviews`. Event: Interview scheduled → Notification cho Candidate.
 7. **Đóng Job** — Chủ động Close → mass chuyển apps đang dở (Pending/Viewed/Shortlisted/Interviewing) sang Rejected, Notes="Job closed". Bảng: `JobPostings`, `Applications`, `ApplicationStatusHistory`.

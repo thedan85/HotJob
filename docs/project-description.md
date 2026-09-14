@@ -9,7 +9,7 @@ Không phải mạng xã hội kiểu LinkedIn. Chỉ làm 1 việc: **kết n�
 - **Employer (HR):** tạo công ty mới (chờ Admin duyệt) hoặc xin join công ty có sẵn (chờ Owner duyệt). Đăng job (chọn ngành + kỹ năng + trọng số), duyệt CV theo quy trình Pending → Viewed → Shortlisted → Interviewing → Offered/Rejected, lên lịch phỏng vấn, đóng job.
 - **Admin:** duyệt công ty (Approve/Reject + lý do), khóa/mở tài khoản, xem log train model ML.
 
-Đăng ký chỉ có Candidate/Employer. Admin seed sẵn.
+Đăng ký chỉ Candidate. Candidate bấm Become Employer để thêm vai Employer (1 user giữ cả 2 profile). Admin seed sẵn.
 
 ## 3. Có gì? (tính năng chính)
 1. **Auth Identity:** đăng nhập/đăng ký, phân quyền 3 roles, 7 bảng AspNet*.

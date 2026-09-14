@@ -47,6 +47,8 @@ Entities: `CompanyProfile` (+ `VerifiedBy` FK), `Review`, `JobPosting`.
 
 ## 5. Candidate (`[Authorize(Roles=Candidate)]`)
 
+- Register chỉ tạo Candidate. `/become-employer`: Candidate tạo `Employers` + gán role Employer, giữ cả 2 vai (không chờ Admin; chỉ Company cần duyệt mới đăng Job).
+
 - `/resumes`: multi-resume CRUD, upload `FileUrl`, `IsPrimary` flag, education/experience/skills entries.
 - Apply flow: pick resume → freeze `SnapshotFileUrl` + `SnapshotSummary` on `Application` → unique (JobPostingId, CandidateId).
 - `/my-applications`: ATS status timeline (`CurrentStatus` + `ApplicationStatusHistory`: who/when/notes), Withdraw (blocked when Offered).
@@ -69,30 +71,33 @@ Admin:
 
 `JobCard`, `CompanyCard`, `SkillChip`, `SearchBar`, `StatusTimeline`, `RatingStars`, `Pagination`. Forms use DataAnnotations validation from Models.
 
-## 9. UI system (itviec tokens, verbatim)
+> List strategy: server-side pagination (10–20 items/page) + `AsNoTracking()`. No `<Virtualize>` — DOM is small when paged, virtualization adds complexity (item-size measuring, scroll jump on filter, worse SEO/print) with ~zero benefit.
 
-Source: `application.css` (:root + Style Guide Figma link in comment).
+## 9. UI system (HotJob palette)
+
+Palette: `#1B262C` (ink) / `#0F4C75` (primary) / `#3282B8` (accent) / `#BBE1FA` (light). All pages follow this.
 
 ### 9.1 Colors
 
 ```css
---i-red: #ED1B2F;          /* primary brand */
---i-dark-red: #C82222;     /* primary hover */
---i-white-red: #FFF5F5;    /* secondary hover bg */
---i-light-red: #FFDFDF;    /* selected chip bg, search focus ring */
---i-black: #121212;        /* body text, header/footer gradient base (#54151C → #121212) */
+--i-primary: #0F4C75;      /* primary brand, ex-red */
+--i-primary-hover: #1B262C;/* primary hover, ex-dark-red */
+--i-primary-soft: #EAF4FB; /* secondary hover bg, ex-white-red */
+--i-primary-light: #BBE1FA;/* selected chip bg, search focus ring, ex-light-red */
+--i-ink: #1B262C;          /* body text, header/footer gradient base */
+--i-accent: #3282B8;       /* icons, HOT pill, links on dark */
 --i-rich-grey: #414042;    /* secondary text */
 --i-dark-grey: #A6A6A6;    /* muted, disabled */
 --i-silver-grey: #DEDEDE;  /* borders */
 --i-light-grey: #F7F7F7;   /* tertiary hover, code bg */
---i-hyperlink: #0E2EED;
+--i-hyperlink: #3282B8;
 --i-success-color: #0AB305; --i-light-success-color: #EAF9E9;
 --i-info-color: #085BDD;    --i-light-info-color: #EAF0FA;
 --i-error-color: #F60D00;   --i-light-error-color: #FEEEED;
 --i-warning-color: #FF9119; --i-light-warning-color: #FFF4E9;
 ```
 
-Header nav: `linear-gradient(269.85deg, #54151C 0%, #121212 54.89%)`. Footer: `linear-gradient(177.12deg, #121212 48.81%, #54151C 98.26%)`.
+Header nav: `linear-gradient(269.85deg, #1B262C 0%, #0F4C75 54.89%)`. Footer: `linear-gradient(177.12deg, #0F4C75 48.81%, #1B262C 98.26%)`. Logo: `hot` in `#BBE1FA`, `job` white.
 
 ### 9.2 Typography
 
