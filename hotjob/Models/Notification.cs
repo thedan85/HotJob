@@ -7,6 +7,7 @@ public class Notification
 {
     public int Id { get; set; }
 
+    [MaxLength(255)]
     public string UserId { get; set; } = default!;
 
     [Required, MaxLength(200)]

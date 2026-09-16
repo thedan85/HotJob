@@ -11,6 +11,7 @@ public class ApplicationStatusHistory
 
     public ApplicationStatus Status { get; set; }
 
+    [MaxLength(255)]
     public string? ChangedByUserId { get; set; }
 
     [MaxLength(1000)]
