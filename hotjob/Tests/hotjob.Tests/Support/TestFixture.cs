@@ -1,11 +1,13 @@
 using hotjob.Data;
 using hotjob.Models.Users;
 using hotjob.Services.Account;
+using hotjob.Services.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace hotjob.Tests.Support;
 
@@ -29,6 +31,51 @@ public sealed class TestFixture : IAsyncDisposable
         RoleManager,
         Db,
         NullLogger<AccountService>.Instance);
+
+    public AuthService AuthService => new(
+        UserManager,
+        Db,
+        TokenService,
+        Options.Create(new JwtOptions
+        {
+            SecretKey = "test-secret-key-at-least-32-chars-long",
+            Issuer = "HotJobTest",
+            Audience = "HotJobTestClient",
+            AccessTokenMinutes = 60,
+            RefreshTokenDays = 7
+        }),
+        TimeProvider.System,
+        NullLogger<AuthService>.Instance);
+
+    public TokenService TokenService => new(Options.Create(new JwtOptions
+    {
+        SecretKey = "test-secret-key-at-least-32-chars-long",
+        Issuer = "HotJobTest",
+        Audience = "HotJobTestClient",
+        AccessTokenMinutes = 60,
+        RefreshTokenDays = 7
+    }));
+
+    /// <summary>Hash helper so tests can look up stored token rows without duplicating SHA-256 code.</summary>
+    public string AuthServiceHash(string rawToken) => TokenService.HashToken(rawToken);
+
+    /// <summary>Creates a confirmed user via the real register pipeline, for login tests.</summary>
+    public async Task<ApplicationUser> SeedUserAsync(
+        string email = "user@example.com",
+        string password = "Str0ng!Pass",
+        string role = AppRoles.Candidate)
+    {
+        var user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true, IsActive = true };
+        var result = await UserManager.CreateAsync(user, password);
+        Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(e => e.Description)));
+        if (!await RoleManager.RoleExistsAsync(role))
+        {
+            Assert.True((await RoleManager.CreateAsync(new IdentityRole(role))).Succeeded);
+        }
+
+        Assert.True((await UserManager.AddToRoleAsync(user, role)).Succeeded);
+        return user;
+    }
 
     private TestFixture(SqliteConnection connection, IServiceProvider services, IServiceScope scope)
     {

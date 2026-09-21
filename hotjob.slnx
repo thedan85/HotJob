@@ -1,3 +1,7 @@
 <Solution>
+  <Folder Name="/hotjob/" />
+  <Folder Name="/hotjob/Tests/">
+    <Project Path="hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj" />
+  </Folder>
   <Project Path="hotjob/hotjob.csproj" />
 </Solution>

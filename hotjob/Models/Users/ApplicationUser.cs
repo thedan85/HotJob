@@ -17,4 +17,7 @@ public class ApplicationUser : IdentityUser
 
     /// <summary>Notifications sent to the user.</summary>
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+
+    /// <summary>Persisted refresh-token sessions for this user.</summary>
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }
