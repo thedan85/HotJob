@@ -855,6 +855,9 @@ namespace hotjob.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyName")
+                        .IsUnique();
+
                     b.HasIndex("VerifiedByAdminId");
 
                     b.ToTable("CompanyProfiles");

@@ -59,7 +59,13 @@ public static class IdentitySeeder
             }
 
             if (string.IsNullOrWhiteSpace(seed.AdminEmail) || string.IsNullOrWhiteSpace(seed.AdminPassword))
-                throw new InvalidOperationException($"Missing {SeedOptions.SectionName}:AdminEmail or {SeedOptions.SectionName}:AdminPassword.");
+            {
+                logger.LogWarning(
+                    "Identity roles were seeded, but the admin account was skipped because {Section}:AdminEmail and {Section}:AdminPassword are not configured.",
+                    SeedOptions.SectionName,
+                    SeedOptions.SectionName);
+                return;
+            }
 
             if (await userManager.FindByEmailAsync(seed.AdminEmail).ConfigureAwait(false) is null)
             {

@@ -53,6 +53,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<CompanyProfile>()
             .HasOne(x => x.VerifiedBy).WithMany().HasForeignKey(x => x.VerifiedByAdminId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<CompanyProfile>()
+            .HasIndex(x => x.CompanyName).IsUnique();
 
         modelBuilder.Entity<Resume>().HasOne(x => x.Candidate).WithMany(x => x.Resumes).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Education>().HasOne(x => x.Resume).WithMany(x => x.Educations).HasForeignKey(x => x.ResumeId).OnDelete(DeleteBehavior.Cascade);

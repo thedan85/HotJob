@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace hotjob.Models.Users;
 
-/// <summary>Identity user of the system. Each user is either a candidate or an employer.</summary>
+/// <summary>Identity user of the system. A user may have a candidate profile, an employer profile, or both.</summary>
 public class ApplicationUser : IdentityUser
 {
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
