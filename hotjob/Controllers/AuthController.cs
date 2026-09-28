@@ -14,6 +14,10 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     public const string RefreshCookieName = "hotjob_refresh";
     private const string RefreshCookiePath = "/api/auth";
 
+    /// <summary>Login with email + password. Sets the HttpOnly refresh cookie, returns access token + user + roles.</summary>
+    /// <response code="200">Authenticated. Access token in body, refresh token in cookie.</response>
+    /// <response code="400">Email/password missing.</response>
+    /// <response code="401">Bad credentials, locked out, or disabled account.</response>
     [HttpPost("login")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
@@ -33,6 +37,9 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return Ok(ToResponse(result.Data));
     }
 
+    /// <summary>Rotate the refresh token (cookie or body fallback). Revokes the presented token, issues a new pair.</summary>
+    /// <response code="200">New access token + rotated refresh cookie.</response>
+    /// <response code="401">Missing, invalid, reused, or expired refresh token (reuse revokes all sessions).</response>
     [HttpPost("refresh")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
@@ -52,7 +59,9 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return Ok(ToResponse(result.Data));
     }
 
-    /// <summary>Revokes ALL refresh sessions for the user (logout everywhere) and clears the cookie.</summary>
+    /// <summary>Logout everywhere: revokes ALL refresh sessions for the user and clears the cookie.</summary>
+    /// <response code="204">Logged out.</response>
+    /// <response code="401">Not authenticated (no user id or refresh token).</response>
     [HttpPost("logout")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

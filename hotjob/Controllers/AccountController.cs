@@ -10,6 +10,10 @@ namespace hotjob.Controllers;
 [Route("api/account")]
 public sealed class AccountController(IAccountService accountService) : ControllerBase
 {
+    /// <summary>Register a Candidate or Employer account. Employer joins an existing company (CompanyProfileId) or creates one (CompanyName).</summary>
+    /// <response code="201">Created. Returns user id, profile flags, company id.</response>
+    /// <response code="400">Validation failed (email, password rules, company selection).</response>
+    /// <response code="409">Email or company name already exists.</response>
     [HttpPost("register")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(RegisteredAccountResponse), StatusCodes.Status201Created)]

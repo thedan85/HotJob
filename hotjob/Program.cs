@@ -2,7 +2,11 @@ using System.Text;
 using hotjob.Components;
 using hotjob.Data;
 using hotjob.Models.Users;
+using hotjob.Repositories.Employer;
+using hotjob.Repositories.Job;
 using hotjob.Repositories.User;
+using hotjob.Services.Employer;
+using hotjob.Services.Job;
 using hotjob.Services.Account;
 using hotjob.Services.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -47,6 +51,44 @@ builder.Services.AddControllers()
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray());
     });
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "HotJob API",
+        Version = "v1",
+        Description = "Job Board + ATS backend: auth (2.1), employer job management (2.2), employer ATS (2.3)."
+    });
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Paste the access token from POST /api/auth/login. Example: Bearer eyJ..."
+    });
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+    var xml = Path.Combine(AppContext.BaseDirectory, $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml");
+    if (File.Exists(xml))
+    {
+        options.IncludeXmlComments(xml, includeControllerXmlComments: true);
+    }
+});
 builder.Services.AddAuthorization();
 builder.Services.AddAuthorizationCore();
 builder.Services.Configure<SeedOptions>(
@@ -109,6 +151,12 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IJobPostingRepository, JobPostingRepository>();
+builder.Services.AddScoped<IApplicantRepository, ApplicantRepository>();
+builder.Services.AddScoped<IJobService, JobService>();
+builder.Services.AddScoped<IApplicantService, ApplicantService>();
+builder.Services.AddScoped<IInterviewService, InterviewService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -161,6 +209,11 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapControllers();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
