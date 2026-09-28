@@ -16,6 +16,9 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
+// Application services
+builder.Services.AddScoped<hotjob.Services.ICompanyService, hotjob.Services.CompanyService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
