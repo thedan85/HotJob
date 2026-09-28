@@ -106,10 +106,24 @@ var jwtSecret = jwtSection["SecretKey"]
     ?? throw new InvalidOperationException("Missing Jwt:SecretKey.");
 var jwtIssuer = jwtSection["Issuer"];
 var jwtAudience = jwtSection["Audience"];
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+    {
+        options.User.RequireUniqueEmail = true;
+        options.Password.RequiredLength = 6;
+        options.Password.RequireDigit = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireNonAlphanumeric = true;
+    })
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddDefaultTokenProviders();
+// NB: AddIdentity registers cookie schemes as the default; JWT must be wired
+// AFTER it so Bearer stays the default challenge for [Authorize] API endpoints.
 builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
     })
     .AddJwtBearer(options =>
     {
@@ -139,17 +153,6 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 var serverVersion = new MySqlServerVersion(new Version(8, 0, 36));
 builder.Services.AddDbContext<ApplicationDbContext>(o =>
     o.UseMySql(connectionString, serverVersion));
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
-    {
-        options.User.RequireUniqueEmail = true;
-        options.Password.RequiredLength = 6;
-        options.Password.RequireDigit = true;
-        options.Password.RequireUppercase = true;
-        options.Password.RequireLowercase = true;
-        options.Password.RequireNonAlphanumeric = true;
-    })
-    .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddDefaultTokenProviders();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IJobPostingRepository, JobPostingRepository>();
 builder.Services.AddScoped<IApplicantRepository, ApplicantRepository>();
@@ -184,6 +187,13 @@ await using (var scope = app.Services.CreateAsyncScope())
         services.GetRequiredService<RoleManager<IdentityRole>>(),
         services.GetRequiredService<UserManager<ApplicationUser>>(),
             db,
+        services.GetRequiredService<IOptions<SeedOptions>>().Value,
+        logger,
+        cancellationToken);
+    await DemoSeeder.SeedAsync(
+        db,
+        services.GetRequiredService<UserManager<ApplicationUser>>(),
+        services.GetRequiredService<RoleManager<IdentityRole>>(),
         services.GetRequiredService<IOptions<SeedOptions>>().Value,
         logger,
         cancellationToken);

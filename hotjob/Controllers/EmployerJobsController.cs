@@ -4,6 +4,7 @@ using hotjob.DTOs.Job;
 using hotjob.Models.Job;
 using hotjob.Services.Common;
 using hotjob.Services.Job;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,7 +13,7 @@ namespace hotjob.Controllers;
 /// <summary>Employer job management (2.2): CRUD postings, assign categories/skills. Requires Employer role, active membership, approved company.</summary>
 [ApiController]
 [Route("api/employer/jobs")]
-[Authorize(Roles = "Employer")]
+[Authorize(Roles = "Employer", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public sealed class EmployerJobsController(IJobService jobService) : ControllerBase
 {
     /// <summary>2.2.1 Create a job posting (Draft default, or Published). Skills/categories validated inline.</summary>

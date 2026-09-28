@@ -3,6 +3,7 @@ using HotJob.Dtos;
 using hotjob.DTOs.Employer;
 using hotjob.Services.Common;
 using hotjob.Services.Employer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,7 +12,7 @@ namespace hotjob.Controllers;
 /// <summary>Employer ATS inbox (2.3): list/view applicants, change status, notify, manage interviews. Requires Employer role, active membership; every query scoped to own company.</summary>
 [ApiController]
 [Route("api/employer/applications")]
-[Authorize(Roles = "Employer")]
+[Authorize(Roles = "Employer", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public sealed class EmployerApplicationsController(
     IApplicantService applicantService,
     IInterviewService interviewService,
