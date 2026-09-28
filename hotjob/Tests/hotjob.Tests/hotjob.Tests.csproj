@@ -24,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\SeedTests\**\*.cs" Link="SeedTests\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\RegisterTests\**\*.cs" Link="RegisterTests\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\AuthTests\**\*.cs" Link="AuthTests\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>

@@ -179,7 +179,7 @@ public sealed class AccountService(
                 "Select an existing company or provide a company name.");
         }
 
-        var employer = new Employer
+        var employer = new global::hotjob.Models.Users.Employer
         {
             UserId = user.Id,
             FullName = request.FullName.Trim(),
