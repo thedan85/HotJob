@@ -3,6 +3,7 @@ using HotJob.Dtos;
 using hotjob.DTOs.Employer;
 using hotjob.Services.Common;
 using hotjob.Services.Employer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,7 +12,7 @@ namespace hotjob.Controllers;
 /// <summary>Interview management for own-company applications (2.3.4).</summary>
 [ApiController]
 [Route("api/employer/interviews")]
-[Authorize(Roles = "Employer")]
+[Authorize(Roles = "Employer", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public sealed class EmployerInterviewsController(IInterviewService interviewService) : ControllerBase
 {
     /// <summary>Reschedule / edit notes / change status of an interview.</summary>

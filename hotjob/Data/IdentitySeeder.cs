@@ -22,6 +22,18 @@ public sealed class SeedAdminAccount
     public string Password { get; set; } = string.Empty;
 }
 
+/// <summary>Demo dataset for local Swagger testing (one company, one employer, one job, one candidate+resume+application).</summary>
+public sealed class SeedDemoOptions
+{
+    public string CompanyName { get; set; } = string.Empty;
+    public string EmployerEmail { get; set; } = string.Empty;
+    public string EmployerPassword { get; set; } = string.Empty;
+    public string EmployerName { get; set; } = string.Empty;
+    public string CandidateEmail { get; set; } = string.Empty;
+    public string CandidatePassword { get; set; } = string.Empty;
+    public string CandidateName { get; set; } = string.Empty;
+}
+
 /// <summary>Strongly-typed admin seed settings. Bind from configuration; never hardcode credentials.</summary>
 public sealed class SeedOptions
 {
@@ -35,6 +47,9 @@ public sealed class SeedOptions
 
     /// <summary>Admin accounts to seed. Bound from Seed:Admins (appsettings) or Seed__Admins__N__Email/Password (env).</summary>
     public List<SeedAdminAccount> Admins { get; set; } = new();
+
+    /// <summary>Demo dataset for local Swagger testing. Bound from Seed:Demo. Skipped when CompanyName is empty.</summary>
+    public SeedDemoOptions Demo { get; set; } = new();
 }
 
 /// <summary>Seeds Identity roles and the initial admin account.</summary>
