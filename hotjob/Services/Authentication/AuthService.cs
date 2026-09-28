@@ -17,7 +17,10 @@ public sealed record AuthTokens(
     DateTime RefreshTokenExpiresAtUtc,
     string UserId,
     string Email,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles)
+{
+    public string? DisplayName { get; init; }
+}
 
 public sealed class AuthService(
     UserManager<ApplicationUser> userManager,
@@ -121,6 +124,7 @@ public sealed class AuthService(
 
         var roles = await userManager.GetRolesAsync(user);
         var accessToken = tokenService.CreateAccessToken(user, roles, out var accessExpiresAtUtc);
+        var displayName = await GetDisplayNameAsync(user.Id, cancellationToken);
         var refreshExpiresAtUtc = now.AddDays(_jwt.EffectiveRefreshTokenDays);
         dbContext.RefreshTokens.Add(new RefreshToken
         {
@@ -133,7 +137,10 @@ public sealed class AuthService(
         await dbContext.SaveChangesAsync(cancellationToken);
         return ServiceResult<AuthTokens>.Ok(new AuthTokens(
             accessToken, accessExpiresAtUtc, newRawToken, refreshExpiresAtUtc,
-            user.Id, user.Email!, roles.AsReadOnly()));
+            user.Id, user.Email!, roles.AsReadOnly())
+        {
+            DisplayName = displayName
+        });
     }
 
     public async Task<ServiceResult> LogoutAsync(
@@ -169,6 +176,7 @@ public sealed class AuthService(
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var roles = await userManager.GetRolesAsync(user);
         var accessToken = tokenService.CreateAccessToken(user, roles, out var accessExpiresAtUtc);
+        var displayName = await GetDisplayNameAsync(user.Id, cancellationToken);
 
         var rawRefreshToken = tokenService.GenerateRefreshToken();
         var refreshExpiresAtUtc = now.AddDays(_jwt.EffectiveRefreshTokenDays);
@@ -183,8 +191,17 @@ public sealed class AuthService(
         await dbContext.SaveChangesAsync(cancellationToken);
         return ServiceResult<AuthTokens>.Ok(new AuthTokens(
             accessToken, accessExpiresAtUtc, rawRefreshToken, refreshExpiresAtUtc,
-            user.Id, user.Email!, roles.AsReadOnly()));
+            user.Id, user.Email!, roles.AsReadOnly())
+        {
+            DisplayName = displayName
+        });
     }
+
+    private Task<string?> GetDisplayNameAsync(string userId, CancellationToken cancellationToken) =>
+        dbContext.Candidates
+            .Where(candidate => candidate.UserId == userId)
+            .Select(candidate => candidate.FullName)
+            .SingleOrDefaultAsync(cancellationToken);
 
     private async Task RevokeAllForUserAsync(
         string userId, string reason, DateTime now, CancellationToken cancellationToken)

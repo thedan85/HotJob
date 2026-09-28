@@ -8,14 +8,25 @@
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
-    <link rel="stylesheet" href="@Assets["hotjob.styles.css"]" />
+    <link rel="stylesheet" href="css/MainLayout.css" />
+    <link rel="stylesheet" href="css/NavMenu.css" />
+    <link rel="stylesheet" href="css/RegisterLayout.css" />
+    <link rel="stylesheet" href="css/ReconnectModal.css" />
+    <link rel="stylesheet" href="css/Home.css" />
+    <link rel="stylesheet" href="css/RegisterPage.css" />
+    <link rel="stylesheet" href="css/LoginPage.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
     <HeadOutlet />
 </head>
 
 <body>
-    <Routes />
+    <CascadingAuthenticationState>
+        <Routes />
+    </CascadingAuthenticationState>
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>

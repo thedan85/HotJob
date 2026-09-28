@@ -1,12 +1,12 @@
-:global(html), :global(body) {
+html, body {
     margin: 0;
     min-width: 320px;
-    background: #f4f6f7;
-    color: #17232c;
-    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+    background: #f7f7f7;
+    color: #1b262c;
+    font-family: 'Lexend', sans-serif;
 }
 
-:global(body) {
+body {
     overflow-x: hidden;
 }
 
@@ -14,7 +14,7 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(180deg, #f6f8f9 0%, #eef2f3 68%, #e8edef 100%);
+    background: linear-gradient(180deg, #f7f7f7 0%, #eef5f9 68%, #e5edf2 100%);
 }
 
 .register-header {
@@ -23,7 +23,7 @@
     display: flex;
     align-items: center;
     gap: 38px;
-    background: #0c4f76;
+    background: linear-gradient(269.85deg, #1b262c 0%, #0f4c75 54.89%);
     color: white;
     box-shadow: 0 1px 0 rgba(2, 27, 43, .24);
 }
@@ -37,7 +37,7 @@
 }
 
 .brand-mark {
-    color: #f5c84b;
+    color: #bbe1fa;
 }
 
 .header-links {
@@ -57,7 +57,7 @@
 
 .header-links a:hover,
 .header-actions a:hover {
-    color: #f5c84b;
+    color: #bbe1fa;
 }
 
 .header-actions {
@@ -81,9 +81,14 @@
 .register-content {
     flex: 1;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 44px 24px 50px;
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+}
+
+.register-content > * {
+    flex: 1;
+    min-width: 0;
 }
 
 .register-footer {
@@ -92,7 +97,7 @@
     gap: 30px;
     position: relative;
     padding: 31px 6vw 50px;
-    background: #0d5278;
+    background: linear-gradient(177.12deg, #0f4c75 48.81%, #1b262c 98.26%);
     color: rgba(255, 255, 255, .64);
 }
 
@@ -113,7 +118,7 @@
 }
 
 .register-footer a:hover {
-    color: #f5c84b;
+    color: #bbe1fa;
 }
 
 .footer-bottom {
@@ -136,10 +141,6 @@
 
     .header-actions {
         margin-left: auto;
-    }
-
-    .register-content {
-        padding: 25px 14px 32px;
     }
 
     .register-footer {

@@ -2,6 +2,63 @@
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<PageTitle>Find work that fits | HotJob</PageTitle>
 
-Welcome to your new app.
+<section class="home-hero" aria-labelledby="home-title">
+	<div class="hero-copy">
+		<p class="eyebrow">Vietnam's tech career community</p>
+		<h1 id="home-title">Find work that fits.</h1>
+		<p class="hero-lede">Discover roles from teams building what is next, with salary clarity and smarter matching.</p>
+	</div>
+
+	<form class="job-search" action="/it-jobs" method="get">
+		<label class="search-field">
+			<span>What are you looking for?</span>
+			<input type="search" name="keyword" placeholder="Job title, skill or company" />
+		</label>
+		<label class="search-field search-location">
+			<span>Where?</span>
+			<input type="search" name="city" placeholder="City or remote" />
+		</label>
+		<button type="submit" class="search-button">Search jobs <span aria-hidden="true">→</span></button>
+	</form>
+
+	<div class="trending" aria-label="Trending searches">
+		<span>Trending:</span>
+		<a href="/it-jobs?keyword=Java">Java</a>
+		<a href="/it-jobs?keyword=ReactJS">ReactJS</a>
+		<a href="/it-jobs?keyword=.NET">.NET</a>
+		<a href="/it-jobs?keyword=Tester">Tester</a>
+	</div>
+</section>
+
+<section class="home-section" aria-labelledby="shortcuts-title">
+	<div class="section-heading">
+		<div>
+			<p class="section-kicker">A better job search</p>
+			<h2 id="shortcuts-title">More than a job board</h2>
+		</div>
+		<a class="section-link" href="/register">Create your account <span aria-hidden="true">→</span></a>
+	</div>
+
+	<div class="shortcut-grid">
+		<a class="shortcut-card" href="/register">
+			<span class="shortcut-number">01</span>
+			<h3>Get matched</h3>
+			<p>Build your profile and see roles that fit your experience.</p>
+			<span class="card-arrow" aria-hidden="true">↗</span>
+		</a>
+		<a class="shortcut-card" href="/companies">
+			<span class="shortcut-number">02</span>
+			<h3>Meet great teams</h3>
+			<p>Explore company culture, reviews and the work behind the roles.</p>
+			<span class="card-arrow" aria-hidden="true">↗</span>
+		</a>
+		<a class="shortcut-card shortcut-card-dark" href="/register">
+			<span class="shortcut-number">03</span>
+			<h3>Know your value</h3>
+			<p>Use transparent salary signals to make your next move count.</p>
+			<span class="card-arrow" aria-hidden="true">↗</span>
+		</a>
+	</div>
+</section>
