@@ -20,7 +20,7 @@ Job board + ATS. Không có social feed, không duyệt từng job, MatchScore h
 
 **Một vòng tuyển trọn vẹn:** Candidate register, Employer tạo Company, Admin approve Company, Employer đăng job, Candidate xem match percent rồi Apply với CV sẽ được freeze, Employer duyệt từng bước, Interview tự nâng Shortlisted lên Interviewing, Offer khép vòng, nút withdraw biến mất.
 
-Ví dụ: Lan register, HR lập Acme, admin duyệt, HR đăng "Junior .NET Dev", Lan thấy 87% rồi nộp, HR chuyển Pending → Viewed → Shortlisted, đặt vòng 1 nên Lan thành Interviewing, rồi Offer. Mỗi bước Lan nhận Notification và history dài thêm một row.
+Ví dụ: Lan register, HR lập Acme, admin duyệt, HR đăng "Junior .NET Dev", Lan thấy 87% rồi nộp, CV thành Application, HR chuyển Application từ Pending → Viewed → Shortlisted, đặt vòng 1 nên Application của Lan thành Interviewing, rồi Offer. Mỗi bước Lan nhận Notification và history dài thêm một row.
 
 **State machine:**
 

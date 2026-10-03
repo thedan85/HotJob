@@ -16,7 +16,7 @@ Chỉ seed lúc startup, không tự register. Không cần Candidate hay Employ
 - Pending: Company mới tạo, chưa đăng job được.
 - Approve: chuyển sang Approved, mở đăng job.
 - Reject: chuyển sang Rejected + RejectionReason. Từ lúc này chặn việc mới: không join thêm, không đăng/sửa job.
-- Việc cũ giữ nguyên: job đã Published trước khi Reject vẫn hiện cho Candidate, vì filter hiện tại chỉ check JobPosting.Status + ExpiryDate, không check Company.Status. Muốn gỡ phải close tay hoặc chờ hết hạn.
+- Việc cũ giữ nguyên: job đã Published trước khi Reject vẫn hiện cho Candidate, các Application của Candidate sẽ không phải thông qua ATS của công ty bị rejected.
 
 Ví dụ:
 1. Thứ Hai Acme được Approved, HR đăng job "Junior .NET".

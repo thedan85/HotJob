@@ -24,7 +24,7 @@ Một user có một Candidate profile. Cùng user đó sau này có thể thêm
 
 Ví dụ: Lan mở job "Junior .NET Dev" với Resume "Backend CV" thấy 87%. Đổi sang Resume "Frontend CV" thấy 40%. Lan chọn bản backend để nộp.
 
-**Apply:** Hệ thống kiểm tra job còn Published và chưa hết hạn,điều kiện Resume thuộc về Candidate và Candidate chưa từng nộp job này. Đạt hết thì freeze bản CV lúc nộp vào Snapshot, tạo Application ở Pending kèm history row, rồi gửi Notification cho mọi Active Employer của Company đó.
+**Apply:** Hệ thống kiểm tra job còn Published và chưa hết hạn,điều kiện là Resume thuộc về Candidate và Candidate chưa từng nộp job này. Đạt hết thì freeze bản CV lúc nộp vào Snapshot, tạo Application ở Pending kèm history row, rồi gửi Notification cho mọi Active Employer của Company đó.
 
 Ví dụ: Lan nộp xong. Sau đó Lan sửa Resume gốc, HR vẫn thấy bản snapshot ngày nộp nằm cạnh Resume live.
 
