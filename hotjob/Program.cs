@@ -10,6 +10,7 @@ using hotjob.Services.Job;
 using hotjob.Services.Account;
 using hotjob.Services.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -89,6 +90,7 @@ builder.Services.AddSwaggerGen(options =>
     }
 });
 builder.Services.AddAuthorization();
+builder.Services.AddAuthorizationCore();
 builder.Services.Configure<SeedOptions>(
     builder.Configuration.GetSection(SeedOptions.SectionName));
 builder.Services.AddOptions<JwtOptions>()
@@ -161,6 +163,10 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<AuthSession>();
+builder.Services.AddScoped<HotJobAuthStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider>(services =>
+    services.GetRequiredService<HotJobAuthStateProvider>());
 
 var app = builder.Build();
 
@@ -180,6 +186,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     await IdentitySeeder.SeedAsync(
         services.GetRequiredService<RoleManager<IdentityRole>>(),
         services.GetRequiredService<UserManager<ApplicationUser>>(),
+            db,
         services.GetRequiredService<IOptions<SeedOptions>>().Value,
         logger,
         cancellationToken);
