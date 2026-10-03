@@ -26,10 +26,10 @@ Ví dụ: HR lập "Acme Corp" xong Active nhưng chưa đăng được job cho 
 
 Ví dụ: Acme close job "Intern .NET". Mười đơn Pending thành Rejected kèm ghi chú "Job closed". Hai đơn đã Offered giữ nguyên.
 
-**Duyệt ATS:** Mọi query lọc theo CompanyProfileId của mình, id lạ trả về not found. Mỗi bước tiến ghi history row và gửi Notification cho Candidate. Nhảy cóc bị từ chối. Withdraw là quyền của Candidate.
+**Duyệt ATS:** Mọi query lọc theo CompanyProfileId của mình(HR công ty khác không thấy Application của công ty mình), id lạ trả về not found. Mỗi bước tiến ghi history row và gửi Notification cho Candidate. Nhảy cóc bị từ chối(Bắt buộc đi từ Pending->Viewed->Shortlisted->Interviewing->Offered). Withdraw là quyền của Candidate.
 
-Ví dụ: HR chuyển Lan từ Pending sang Viewed kèm note "CV looks good". Lan nhận Notification. HR thử chuyển Viewed thẳng sang Offered thì bị từ chối.
+Ví dụ: HR chuyển Application Lan từ Pending sang Viewed kèm note "CV looks good". Lan nhận Notification. HR thử chuyển  Application từ Viewed thẳng sang Offered thì bị từ chối.
 
-**Interview:** Đặt lịch tạo Interview row kèm Notification cho Candidate ghi ngày giờ và địa điểm. Đặt lịch cho đơn Shortlisted thì tự nâng lên Interviewing. Đặt cho Pending hoặc Viewed thì chỉ thêm lịch, không đổi status. Đơn terminal thì từ chối lịch mới.
+**Interview:** Đặt lịch tạo Interview row kèm Notification cho Candidate ghi ngày giờ và địa điểm. Đặt lịch cho đơn Shortlisted thì tự nâng lên Interviewing(Ngoại lệ của ATS). Đặt cho Pending hoặc Viewed thì chỉ thêm lịch(không đổi status của application). Đơn terminal thì từ chối không cho đặt lịch mới.
 
-Ví dụ: Lan đang Shortlisted. HR đặt vòng 1. Status của Lan thành Interviewing kèm history "Interview scheduled."
+Ví dụ: Lan đang Shortlisted. HR đặt vòng 1. Status của  application Lan thành Interviewing kèm history "Interview scheduled."
