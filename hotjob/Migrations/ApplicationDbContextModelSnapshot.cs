@@ -786,9 +786,29 @@ namespace hotjob.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("varchar(2048)");
 
+                    b.Property<string>("JobSeekingStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.Property<string>("LinkedInUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("varchar(2048)");
+
+                    b.Property<string>("Position")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("PreferredLocation")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("PreferredWorkModel")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("varchar(2000)");
 
                     b.Property<string>("UserId")
                         .IsRequired()

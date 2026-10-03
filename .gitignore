@@ -8,3 +8,4 @@ TestResults/
 build.log
 *.log
 .env.local
+node_modules/

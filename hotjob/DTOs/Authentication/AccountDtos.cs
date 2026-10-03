@@ -51,6 +51,11 @@ public sealed class CandidateProfileDto
     public string? AvatarUrl { get; set; }
     public string? GithubUrl { get; set; }
     public string? LinkedInUrl { get; set; }
+    public string? Position { get; set; }
+    public string? Summary { get; set; }
+    public string? JobSeekingStatus { get; set; }
+    public string? PreferredWorkModel { get; set; }
+    public string? PreferredLocation { get; set; }
 }
 
 public sealed class EmployerProfileDto
@@ -94,6 +99,18 @@ public sealed class UpdateProfileRequest
 
     [MaxLength(100)]
     public string? Position { get; set; }
+
+    [MaxLength(2000)]
+    public string? Summary { get; set; }
+
+    [MaxLength(50)]
+    public string? JobSeekingStatus { get; set; }
+
+    [MaxLength(50)]
+    public string? PreferredWorkModel { get; set; }
+
+    [MaxLength(500)]
+    public string? PreferredLocation { get; set; }
 
     [EmailAddress, MaxLength(256)]
     public string? Email { get; set; }

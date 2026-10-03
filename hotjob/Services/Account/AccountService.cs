@@ -185,6 +185,11 @@ public sealed class AccountService(
                 if (request.AvatarUrl is not null) candidate.AvatarUrl = NullIfWhiteSpace(request.AvatarUrl);
                 if (request.GithubUrl is not null) candidate.GithubUrl = NullIfWhiteSpace(request.GithubUrl);
                 if (request.LinkedInUrl is not null) candidate.LinkedInUrl = NullIfWhiteSpace(request.LinkedInUrl);
+                if (request.Position is not null) candidate.Position = NullIfWhiteSpace(request.Position);
+                if (request.Summary is not null) candidate.Summary = NullIfWhiteSpace(request.Summary);
+                if (request.JobSeekingStatus is not null) candidate.JobSeekingStatus = NullIfWhiteSpace(request.JobSeekingStatus);
+                if (request.PreferredWorkModel is not null) candidate.PreferredWorkModel = NullIfWhiteSpace(request.PreferredWorkModel);
+                if (request.PreferredLocation is not null) candidate.PreferredLocation = NullIfWhiteSpace(request.PreferredLocation);
             }
             if (employer is not null)
             {
@@ -292,7 +297,12 @@ public sealed class AccountService(
                 Address = candidate.Address,
                 AvatarUrl = candidate.AvatarUrl,
                 GithubUrl = candidate.GithubUrl,
-                LinkedInUrl = candidate.LinkedInUrl
+                LinkedInUrl = candidate.LinkedInUrl,
+                Position = candidate.Position,
+                Summary = candidate.Summary,
+                JobSeekingStatus = candidate.JobSeekingStatus,
+                PreferredWorkModel = candidate.PreferredWorkModel,
+                PreferredLocation = candidate.PreferredLocation
             },
             employer is null ? null : new EmployerProfileDto
             {

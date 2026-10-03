@@ -128,6 +128,33 @@ public sealed class ProfileServiceTests
         Assert.NotNull(login.Data);
     }
 
+    [Fact]
+    public async Task Update_Candidate_PositionSummaryPrefs_RoundTrips()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var register = await RegisterCandidateAsync(fx);
+
+        var result = await fx.Service.UpdateProfileAsync(register.Data!.UserId, new UpdateProfileRequest
+        {
+            Position = "Senior Marketing Specialist",
+            Summary = "Growth lead with SEO focus.",
+            JobSeekingStatus = "Actively looking",
+            PreferredWorkModel = "Hybrid / Remote",
+            PreferredLocation = "Ho Chi Minh City"
+        });
+
+        Assert.True(result.Success);
+        Assert.Equal("Senior Marketing Specialist", result.Data!.Candidate!.Position);
+        Assert.Equal("Growth lead with SEO focus.", result.Data.Candidate.Summary);
+        Assert.Equal("Actively looking", result.Data.Candidate.JobSeekingStatus);
+        Assert.Equal("Hybrid / Remote", result.Data.Candidate.PreferredWorkModel);
+        Assert.Equal("Ho Chi Minh City", result.Data.Candidate.PreferredLocation);
+
+        var reloaded = await fx.Service.GetProfileAsync(register.Data.UserId);
+        Assert.Equal("Senior Marketing Specialist", reloaded.Data!.Candidate!.Position);
+        Assert.Equal("Growth lead with SEO focus.", reloaded.Data.Candidate.Summary);
+    }
+
     private static Task<ServiceResult<RegisteredAccountResponse>> RegisterCandidateAsync(
         TestFixture fx, string email = "candidate@example.com") =>
         fx.Service.RegisterAsync(new RegisterAccountRequest

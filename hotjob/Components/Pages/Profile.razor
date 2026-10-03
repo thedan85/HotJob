@@ -1,0 +1,221 @@
+@page "/profile"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Authentication
+@using hotjob.Models.Users
+@using hotjob.Services.Account
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject IAccountService AccountService
+
+<PageTitle>Candidate Profile & CV Management | HotJob</PageTitle>
+
+@if (isLoading)
+{
+    <div class="profile-loading" role="status">Loading your profile...</div>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="profile-alert" role="alert">@errorMessage</div>
+}
+else
+{
+    <section class="profile-page-header">
+        <div>
+            <p class="profile-eyebrow">Your career workspace</p>
+            <h1>Candidate Profile &amp; CV Management</h1>
+            <p>Manage your account settings, job seeking status, and uploaded resumes.</p>
+        </div>
+        <div class="profile-header-actions">
+            <a class="profile-btn profile-btn-secondary" href="#personal-info">Preview public profile</a>
+            <button class="profile-btn profile-btn-primary" type="button" @onclick="SaveProfileAsync" disabled="@isSaving">
+                @(isSaving ? "Saving..." : "Save changes")
+            </button>
+        </div>
+    </section>
+
+    <div class="profile-layout">
+        <aside class="profile-sidebar">
+            <div class="profile-card">
+                <div class="profile-summary">
+                    <div class="profile-avatar-large">@Initials</div>
+                    <button class="profile-avatar-edit" type="button" title="Change photo" aria-label="Change photo">+</button>
+                    <h2>@DisplayName</h2>
+                    <p>@(string.IsNullOrWhiteSpace(profileForm.Position) ? "Candidate" : profileForm.Position)</p>
+                    <span class="profile-status"><span></span> @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "Update your career preferences" : profileForm.JobSeekingStatus)</span>
+                </div>
+                <nav class="profile-nav" aria-label="Profile sections">
+                    <a class="active" href="#personal-info">Personal details</a>
+                    <a href="#cv-management">Manage CVs <span>(@cvs.Count)</span></a>
+                    <a href="#preferences">Career preferences</a>
+                </nav>
+            </div>
+        </aside>
+
+        <main class="profile-content">
+            <section id="personal-info" class="profile-box">
+                <div class="profile-box-heading">
+                    <div><h2>Personal details</h2><p>Keep your profile up to date so employers can find you.</p></div>
+                </div>
+                <EditForm Model="profileForm" OnValidSubmit="SaveProfileAsync">
+                    <DataAnnotationsValidator />
+                    <div class="profile-form-grid">
+                        <label>Full name <InputText @bind-Value="profileForm.FullName" /></label>
+                        <label>Email <InputText @bind-Value="profileForm.Email" type="email" /></label>
+                        <label>Location <InputText @bind-Value="profileForm.Address" placeholder="City, country" /></label>
+                        <label>Position <InputText @bind-Value="profileForm.Position" placeholder="e.g. Senior Marketing Specialist" /></label>
+                        <label class="profile-field-wide">LinkedIn URL <InputText @bind-Value="profileForm.LinkedInUrl" placeholder="https://linkedin.com/in/your-name" /></label>
+                        <label class="profile-field-wide">About you <InputTextArea @bind-Value="profileForm.Summary" placeholder="Tell employers what you do best" /></label>
+                    </div>
+                </EditForm>
+                @if (!string.IsNullOrWhiteSpace(saveMessage))
+                {
+                    <p class="profile-save-message" role="status">@saveMessage</p>
+                }
+            </section>
+
+            <section id="cv-management" class="profile-box">
+                <div class="profile-box-heading">
+                    <div><h2>CV &amp; resume management</h2><p>Choose which CV to use as your default for HotJob AI matching.</p></div>
+                    <span class="profile-badge">@cvs.Count / 5 resumes uploaded</span>
+                </div>
+                <div class="profile-upload">
+                    <div class="profile-upload-icon">↑</div>
+                    <h3>Click to upload or drag &amp; drop your CV here</h3>
+                    <p>Supported formats: PDF, DOC, DOCX (max size: 5MB)</p>
+                    <button class="profile-btn profile-btn-primary profile-btn-small" type="button">Browse files</button>
+                </div>
+                <div class="cv-list">
+                    @foreach (var cv in cvs)
+                    {
+                        <div class="cv-item @(cv.IsDefault ? "cv-item-default" : string.Empty)">
+                            <div class="cv-file"><span class="cv-type">@cv.Type</span><div><h3>@cv.Name @if (cv.IsDefault) { <span class="profile-badge profile-badge-green">Default CV</span> }</h3><p>@cv.Updated · @cv.Size</p></div></div>
+                            <div class="cv-actions">
+                                @if (!cv.IsDefault) { <button class="profile-btn profile-btn-secondary profile-btn-small" type="button">Set as default</button> }
+                                <button class="cv-icon-button" type="button" title="Download @cv.Name">↓</button>
+                                <button class="cv-icon-button cv-delete" type="button" title="Delete @cv.Name">×</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+
+            <section id="preferences" class="profile-box">
+                <div class="profile-box-heading"><div><h2>Career preferences</h2><p>Help us show you more relevant opportunities.</p></div></div>
+                <EditForm Model="profileForm" OnValidSubmit="SaveProfileAsync">
+                    <DataAnnotationsValidator />
+                    <div class="preference-grid">
+                        <label>Job seeking status <InputText @bind-Value="profileForm.JobSeekingStatus" placeholder="e.g. Actively looking" /></label>
+                        <label>Preferred work model <InputText @bind-Value="profileForm.PreferredWorkModel" placeholder="e.g. Hybrid / Remote" /></label>
+                        <label>Preferred location <InputText @bind-Value="profileForm.PreferredLocation" placeholder="e.g. Ho Chi Minh City" /></label>
+                    </div>
+                </EditForm>
+            </section>
+        </main>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isSaving;
+    private string? errorMessage;
+    private string? saveMessage;
+    private ProfileForm profileForm = new();
+
+    private string DisplayName => string.IsNullOrWhiteSpace(profileForm.FullName) ? "Your profile" : profileForm.FullName;
+    private string Initials => string.Join("", DisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
+
+    private readonly List<CvItem> cvs =
+    [
+        new("PDF", "Alex_Nguyen_Senior_Marketing_2025.pdf", "Updated Oct 24, 2024", "1.8 MB", true),
+        new("DOCX", "Alex_Nguyen_Growth_Lead_EN.docx", "Updated Sep 12, 2024", "840 KB", false),
+        new("PDF", "AlexNguyen_SEO_Content_Specialist.pdf", "Updated Aug 05, 2024", "1.2 MB", false)
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            errorMessage = "Please sign in to view your profile.";
+            isLoading = false;
+            return;
+        }
+
+        var result = await AccountService.GetProfileAsync(userId);
+        if (!result.Success || result.Data?.Candidate is null)
+        {
+            errorMessage = result.Errors.FirstOrDefault() ?? "We could not load your candidate profile.";
+            isLoading = false;
+            return;
+        }
+
+        var candidate = result.Data.Candidate;
+        profileForm = new ProfileForm
+        {
+            FullName = candidate.FullName,
+            Email = result.Data.Email,
+            Address = candidate.Address,
+            LinkedInUrl = candidate.LinkedInUrl,
+            Position = candidate.Position,
+            Summary = candidate.Summary,
+            JobSeekingStatus = candidate.JobSeekingStatus,
+            PreferredWorkModel = candidate.PreferredWorkModel,
+            PreferredLocation = candidate.PreferredLocation
+        };
+        isLoading = false;
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+        if (string.IsNullOrWhiteSpace(userId)) return;
+
+        isSaving = true;
+        saveMessage = null;
+        var result = await AccountService.UpdateProfileAsync(userId, new UpdateProfileRequest
+        {
+            FullName = profileForm.FullName,
+            Email = profileForm.Email,
+            Address = profileForm.Address,
+            LinkedInUrl = profileForm.LinkedInUrl,
+            Position = profileForm.Position,
+            Summary = profileForm.Summary,
+            JobSeekingStatus = profileForm.JobSeekingStatus,
+            PreferredWorkModel = profileForm.PreferredWorkModel,
+            PreferredLocation = profileForm.PreferredLocation
+        });
+        isSaving = false;
+        if (result.Success && result.Data?.Candidate is not null)
+        {
+            AuthStateProvider.RefreshIdentity(result.Data.Candidate.FullName, result.Data.Email);
+            profileForm.FullName = result.Data.Candidate.FullName;
+            profileForm.Email = result.Data.Email;
+            profileForm.Address = result.Data.Candidate.Address;
+            profileForm.LinkedInUrl = result.Data.Candidate.LinkedInUrl;
+            profileForm.Position = result.Data.Candidate.Position;
+            profileForm.Summary = result.Data.Candidate.Summary;
+            profileForm.JobSeekingStatus = result.Data.Candidate.JobSeekingStatus;
+            profileForm.PreferredWorkModel = result.Data.Candidate.PreferredWorkModel;
+            profileForm.PreferredLocation = result.Data.Candidate.PreferredLocation;
+        }
+        saveMessage = result.Success ? "Profile changes saved successfully." : result.Errors.FirstOrDefault() ?? "Unable to save your changes.";
+    }
+
+    private sealed class ProfileForm
+    {
+        public string FullName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string? Address { get; set; }
+        public string? LinkedInUrl { get; set; }
+        public string? Position { get; set; }
+        public string? Summary { get; set; }
+        public string? JobSeekingStatus { get; set; }
+        public string? PreferredWorkModel { get; set; }
+        public string? PreferredLocation { get; set; }
+    }
+
+    private sealed record CvItem(string Type, string Name, string Updated, string Size, bool IsDefault);
+}

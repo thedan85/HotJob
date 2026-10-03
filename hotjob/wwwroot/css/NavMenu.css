@@ -18,7 +18,8 @@
 .nav-language span { color: rgba(255, 255, 255, .4); margin: 0 4px; }
 .nav-sign-in { padding: 9px 15px; border: 1px solid rgba(255, 255, 255, .45); border-radius: var(--hj-radius-sm); }
 .nav-sign-in:hover { background: rgba(255, 255, 255, .1); color: white; }
-.nav-user { display: inline-flex; align-items: center; gap: 8px; max-width: 220px; overflow: hidden; color: white; font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.nav-user { display: inline-flex; align-items: center; gap: 8px; max-width: 220px; overflow: hidden; color: white; font-size: 13px; font-weight: 700; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.nav-user:hover { color: var(--hj-primary-light); }
 .nav-avatar { display: grid; width: 28px; height: 28px; flex: 0 0 28px; place-items: center; border: 1px solid rgba(187, 225, 250, .55); border-radius: 50%; background: rgba(187, 225, 250, .12); color: var(--hj-primary-light); }
 .nav-avatar svg { width: 17px; height: 17px; }
 .nav-sign-out { padding: 9px 12px; border: 0; border-radius: var(--hj-radius-sm); background: rgba(255, 255, 255, .1); color: rgba(255, 255, 255, .82); cursor: pointer; font-size: 12px; font-weight: 700; }

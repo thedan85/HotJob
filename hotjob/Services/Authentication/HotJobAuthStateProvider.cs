@@ -33,6 +33,14 @@ public sealed class HotJobAuthStateProvider(AuthSession session) : Authenticatio
         NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
     }
 
+    public void RefreshIdentity(string? displayName, string email)
+    {
+        var current = session.Tokens;
+        if (current is null) return;
+        session.SetTokens(current with { Email = email, DisplayName = displayName });
+        NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+    }
+
     private static ClaimsPrincipal CreatePrincipal(AuthTokens? tokens)
     {
         if (tokens is null)

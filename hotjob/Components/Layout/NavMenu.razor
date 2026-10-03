@@ -2,6 +2,7 @@
 @inject HotJobAuthStateProvider AuthStateProvider
 @inject AuthSession AuthSession
 @inject IJSRuntime JS
+@inject NavigationManager NavigationManager
 @using hotjob.Services.Authentication
 
 <header class="top-row">
@@ -26,7 +27,7 @@
             <a class="nav-language" href="">EN <span>/</span> VI</a>
             <AuthorizeView>
                 <Authorized Context="authState">
-                    <span class="nav-user" title="Signed in as @authState.User.Identity?.Name">
+                    <a class="nav-user" href="/profile" title="View your profile">
                         <span class="nav-avatar" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="8" r="3.5" />
@@ -34,7 +35,7 @@
                             </svg>
                         </span>
                         @authState.User.Identity?.Name
-                    </span>
+                    </a>
                     <button class="nav-sign-out" type="button" @onclick="SignOutAsync">Sign out</button>
                 </Authorized>
                 <NotAuthorized>
@@ -82,6 +83,7 @@
             if (result.Ok || result.Status == 401)
             {
                 AuthStateProvider.SignOut();
+                NavigationManager.NavigateTo("/");
             }
         }
         catch (Exception exception) when (exception is JSException or InvalidOperationException)
@@ -90,4 +92,3 @@
         }
     }
 }
-

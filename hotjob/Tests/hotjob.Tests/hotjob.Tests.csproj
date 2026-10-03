@@ -23,12 +23,4 @@
     <ProjectReference Include="..\..\hotjob.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\SeedTests\**\*.cs" Link="SeedTests\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\RegisterTests\**\*.cs" Link="RegisterTests\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\AuthTests\**\*.cs" Link="AuthTests\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\EmployerTests\**\*.cs" Link="EmployerTests\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="..\ProfileTests\**\*.cs" Link="ProfileTests\%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
-
 </Project>
