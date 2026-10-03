@@ -35,7 +35,8 @@ public sealed class EmployerGuardTests
 
     private static async Task<int> SeedApplicationAsync(TestFixture fx, int companyId)
     {
-        var candidate = new Candidate { UserId = "cand", FullName = "Cand" };
+        var candidateUser = await fx.SeedUserAsync("cand@example.com", "Str0ng!Pass", AppRoles.Candidate);
+        var candidate = new Candidate { UserId = candidateUser.Id, FullName = "Cand" };
         fx.Db.Candidates.Add(candidate);
         await fx.Db.SaveChangesAsync();
         var resume = new Resume { CandidateId = candidate.Id, Title = "CV" };

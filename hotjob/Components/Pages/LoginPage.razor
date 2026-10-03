@@ -3,8 +3,8 @@
 @rendermode InteractiveServer
 @using hotjob.DTOs.Authentication
 @using hotjob.Services.Authentication
-@inject IAuthService AuthService
 @inject HotJobAuthStateProvider AuthStateProvider
+@inject IJSRuntime JS
 @inject ILogger<LoginPage> Logger
 @inject NavigationManager NavigationManager
 
@@ -85,16 +85,23 @@
 
         try
         {
-            var result = await AuthService.LoginAsync(form);
-            if (result.Success)
+            // Browser-originated fetch: the HttpOnly refresh cookie is set on the browser,
+            // never through server-side HttpClient (which cannot deliver Set-Cookie to it).
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.login", form.Email, form.Password);
+            if (result.Ok && result.Data is not null)
             {
-                AuthStateProvider.SignIn(result.Data!);
+                AuthStateProvider.SignIn(result.ToTokens());
                 NavigationManager.NavigateTo("/");
             }
             else
             {
-                message = string.Join(" ", result.Errors);
+                message = result.ErrorMessage;
             }
+        }
+        catch (JSException exception)
+        {
+            Logger.LogError(exception, "Login request failed for {Email}.", form.Email);
+            message = "We could not sign you in right now. Please try again.";
         }
         catch (OperationCanceledException)
         {

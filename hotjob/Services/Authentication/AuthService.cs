@@ -143,6 +143,55 @@ public sealed class AuthService(
         });
     }
 
+    public async Task<ServiceResult<AuthTokens>> GetSessionAsync(
+        string? rawRefreshToken,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(rawRefreshToken))
+        {
+            return ServiceResult<AuthTokens>.Fail(ServiceErrorType.Unauthorized, "Not authenticated.");
+        }
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var hash = tokenService.HashToken(rawRefreshToken.Trim());
+
+        var stored = await dbContext.RefreshTokens
+            .Include(token => token.User)
+            .SingleOrDefaultAsync(token => token.TokenHash == hash, cancellationToken);
+        if (stored is null || stored.RevokedAtUtc is not null)
+        {
+            // Read-only restore: no revoke-all side effect here (stale-tab cookie races
+            // must not kill live sessions; reuse detection stays in RefreshAsync).
+            return ServiceResult<AuthTokens>.Fail(ServiceErrorType.Unauthorized, "Invalid refresh token.");
+        }
+
+        if (stored.ExpiresAtUtc <= now)
+        {
+            return ServiceResult<AuthTokens>.Fail(ServiceErrorType.Unauthorized, "Refresh token has expired.");
+        }
+
+        var user = stored.User;
+        if (user is null)
+        {
+            return ServiceResult<AuthTokens>.Fail(ServiceErrorType.Unauthorized, "Invalid refresh token.");
+        }
+
+        if (!user.IsActive)
+        {
+            return ServiceResult<AuthTokens>.Fail(ServiceErrorType.Unauthorized, "Account is disabled.");
+        }
+
+        var roles = await userManager.GetRolesAsync(user);
+        var accessToken = tokenService.CreateAccessToken(user, roles, out var accessExpiresAtUtc);
+        var displayName = await GetDisplayNameAsync(user.Id, cancellationToken);
+        return ServiceResult<AuthTokens>.Ok(new AuthTokens(
+            accessToken, accessExpiresAtUtc, rawRefreshToken.Trim(), stored.ExpiresAtUtc,
+            user.Id, user.Email!, roles.AsReadOnly())
+        {
+            DisplayName = displayName
+        });
+    }
+
     public async Task<ServiceResult> LogoutAsync(
         string? rawRefreshToken,
         string? currentUserId,
@@ -197,11 +246,22 @@ public sealed class AuthService(
         });
     }
 
-    private Task<string?> GetDisplayNameAsync(string userId, CancellationToken cancellationToken) =>
-        dbContext.Candidates
+    private async Task<string?> GetDisplayNameAsync(string userId, CancellationToken cancellationToken)
+    {
+        var employerName = await dbContext.Employers
+            .Where(employer => employer.UserId == userId)
+            .Select(employer => employer.FullName)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (employerName is not null)
+        {
+            return employerName;
+        }
+
+        return await dbContext.Candidates
             .Where(candidate => candidate.UserId == userId)
             .Select(candidate => candidate.FullName)
             .SingleOrDefaultAsync(cancellationToken);
+    }
 
     private async Task RevokeAllForUserAsync(
         string userId, string reason, DateTime now, CancellationToken cancellationToken)

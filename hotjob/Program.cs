@@ -4,7 +4,6 @@ using hotjob.Data;
 using hotjob.Models.Users;
 using hotjob.Repositories.Employer;
 using hotjob.Repositories.Job;
-using hotjob.Repositories.User;
 using hotjob.Services.Employer;
 using hotjob.Services.Job;
 using hotjob.Services.Account;
@@ -91,6 +90,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 builder.Services.AddAuthorization();
 builder.Services.AddAuthorizationCore();
+builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<SeedOptions>(
     builder.Configuration.GetSection(SeedOptions.SectionName));
 builder.Services.AddOptions<JwtOptions>()
@@ -153,7 +153,6 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 var serverVersion = new MySqlServerVersion(new Version(8, 0, 36));
 builder.Services.AddDbContext<ApplicationDbContext>(o =>
     o.UseMySql(connectionString, serverVersion));
-builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IJobPostingRepository, JobPostingRepository>();
 builder.Services.AddScoped<IApplicantRepository, ApplicantRepository>();
 builder.Services.AddScoped<IJobService, JobService>();

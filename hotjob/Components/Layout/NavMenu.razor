@@ -1,6 +1,7 @@
-﻿@inject HotJobAuthStateProvider AuthStateProvider
+﻿@rendermode InteractiveServer
+@inject HotJobAuthStateProvider AuthStateProvider
 @inject AuthSession AuthSession
-@inject IAuthService AuthService
+@inject IJSRuntime JS
 @using hotjob.Services.Authentication
 
 <header class="top-row">
@@ -45,12 +46,48 @@
 </header>
 
 @code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        // Session restore: the HttpOnly refresh cookie survives reloads, the scoped
+        // AuthSession does not — rehydrate the UI from GET /api/auth/me per circuit.
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
+            if (result.Ok && result.Data is not null)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+            }
+            else if (AuthSession.IsAuthenticated)
+            {
+                // Cookie gone (logout in another tab) — drop the stale in-memory session.
+                AuthStateProvider.SignOut();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // JS interop unavailable (prerender) — keep whatever state exists.
+        }
+    }
+
     private async Task SignOutAsync()
     {
-        var userId = AuthSession.Tokens?.UserId;
-        var refreshToken = AuthSession.Tokens?.RefreshToken;
-        await AuthService.LogoutAsync(refreshToken, userId);
-        AuthStateProvider.SignOut();
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.logout");
+            if (result.Ok || result.Status == 401)
+            {
+                AuthStateProvider.SignOut();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // Network/JS failure: keep the session so the user can retry sign out.
+        }
     }
 }
 

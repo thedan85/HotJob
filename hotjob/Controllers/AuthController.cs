@@ -9,6 +9,7 @@ namespace hotjob.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[IgnoreAntiforgeryToken]
 public sealed class AuthController(IAuthService authService) : ControllerBase
 {
     public const string RefreshCookieName = "hotjob_refresh";
@@ -59,6 +60,24 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         return Ok(ToResponse(result.Data));
     }
 
+    /// <summary>Restores the UI session from the HttpOnly refresh cookie: validates WITHOUT rotating, returns a fresh access token.</summary>
+    /// <response code="200">Valid cookie. Access token + user + roles (refresh token never in body).</response>
+    /// <response code="401">Missing, invalid, revoked, or expired refresh token; disabled account.</response>
+    [HttpGet("me")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
+    {
+        var result = await authService.GetSessionAsync(Request.Cookies[RefreshCookieName], cancellationToken);
+        if (!result.Success)
+        {
+            return MapError(result);
+        }
+
+        return Ok(ToResponse(result.Data!));
+    }
+
     /// <summary>Logout everywhere: revokes ALL refresh sessions for the user and clears the cookie.</summary>
     /// <response code="204">Logged out.</response>
     /// <response code="401">Not authenticated (no user id or refresh token).</response>
@@ -94,7 +113,8 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     }
 
     private static AuthResponse ToResponse(AuthTokens tokens) =>
-        new(tokens.AccessToken, tokens.AccessTokenExpiresAtUtc, tokens.UserId, tokens.Email, tokens.Roles);
+        new(tokens.AccessToken, tokens.AccessTokenExpiresAtUtc, tokens.UserId, tokens.Email, tokens.Roles,
+            tokens.DisplayName);
 
     private static IActionResult MapError(ServiceResult result) =>
         result.ErrorType switch

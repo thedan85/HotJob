@@ -30,6 +30,7 @@ public sealed class TestFixture : IAsyncDisposable
         UserManager,
         RoleManager,
         Db,
+        AuthService,
         NullLogger<AccountService>.Instance);
 
     public AuthService AuthService => new(

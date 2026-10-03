@@ -27,7 +27,8 @@ public static class DemoSeeder
         ArgumentNullException.ThrowIfNull(logger);
 
         var demo = seed.Demo;
-        if (string.IsNullOrWhiteSpace(demo.CompanyName)
+        if (demo is null
+            || string.IsNullOrWhiteSpace(demo.CompanyName)
             || string.IsNullOrWhiteSpace(demo.EmployerEmail)
             || string.IsNullOrWhiteSpace(demo.EmployerPassword)
             || string.IsNullOrWhiteSpace(demo.CandidateEmail)

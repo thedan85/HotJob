@@ -1,0 +1,32 @@
+@baseUrl = http://localhost:5000
+@accessToken = paste-access-token-here
+
+### Read the authenticated profile
+GET {{baseUrl}}/api/account/profile
+Authorization: Bearer {{accessToken}}
+
+### Update candidate or employer profile fields
+PUT {{baseUrl}}/api/account/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "fullName": "Updated Profile Name",
+  "address": "123 Example Street",
+  "position": "Senior Engineer",
+  "email": "updated@example.com"
+}
+
+### Change password
+POST {{baseUrl}}/api/account/change-password
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "Current123!",
+  "newPassword": "NewStrong123!"
+}
+
+### Profile for a missing authenticated user
+GET {{baseUrl}}/api/account/profile
+Authorization: Bearer invalid-token

@@ -17,6 +17,8 @@ public sealed class SeedOptions
 {
     public const string SectionName = "Seed";
 
+    public List<SeedAdminAccount> Admins { get; set; } = [];
+
     /// <summary>Admin email used for the initial admin account.</summary>
     public string AdminEmail { get; set; } = string.Empty;
 
@@ -26,6 +28,25 @@ public sealed class SeedOptions
     public string CandidateEmail { get; set; } = string.Empty;
 
     public string CandidatePassword { get; set; } = string.Empty;
+
+    public SeedDemoOptions? Demo { get; set; }
+}
+
+public sealed class SeedAdminAccount
+{
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+}
+
+public sealed class SeedDemoOptions
+{
+    public string CompanyName { get; set; } = string.Empty;
+    public string EmployerEmail { get; set; } = string.Empty;
+    public string EmployerPassword { get; set; } = string.Empty;
+    public string EmployerName { get; set; } = string.Empty;
+    public string CandidateEmail { get; set; } = string.Empty;
+    public string CandidatePassword { get; set; } = string.Empty;
+    public string CandidateName { get; set; } = string.Empty;
 }
 
 /// <summary>Seeds Identity roles and the initial admin account.</summary>
@@ -63,19 +84,34 @@ public static class IdentitySeeder
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(seed.AdminEmail) || string.IsNullOrWhiteSpace(seed.AdminPassword))
+            var admins = seed.Admins.Count > 0
+                ? seed.Admins
+                : string.IsNullOrWhiteSpace(seed.AdminEmail) || string.IsNullOrWhiteSpace(seed.AdminPassword)
+                    ? []
+                    : [new SeedAdminAccount { Email = seed.AdminEmail, Password = seed.AdminPassword }];
+
+            if (admins.Count == 0)
             {
                 logger.LogWarning(
-                    "Identity roles were seeded, but the admin account was skipped because {Section}:AdminEmail and {Section}:AdminPassword are not configured.",
-                    SeedOptions.SectionName,
+                    "Identity roles were seeded, but no admin account was configured in {Section}:Admins.",
                     SeedOptions.SectionName);
             }
-            else if (await userManager.FindByEmailAsync(seed.AdminEmail).ConfigureAwait(false) is null)
+            foreach (var adminSeed in admins.Where(admin =>
+                         !string.IsNullOrWhiteSpace(admin.Email) &&
+                         !string.IsNullOrWhiteSpace(admin.Password)))
             {
-                var admin = new ApplicationUser { UserName = seed.AdminEmail, Email = seed.AdminEmail, EmailConfirmed = true };
-                (await userManager.CreateAsync(admin, seed.AdminPassword).ConfigureAwait(false)).ThrowIfFailed();
-                (await userManager.AddToRoleAsync(admin, AppRoles.Admin).ConfigureAwait(false)).ThrowIfFailed();
-                logger.LogInformation("Seeded admin account {Email}.", seed.AdminEmail);
+                if (await userManager.FindByEmailAsync(adminSeed.Email).ConfigureAwait(false) is null)
+                {
+                    var admin = new ApplicationUser
+                    {
+                        UserName = adminSeed.Email,
+                        Email = adminSeed.Email,
+                        EmailConfirmed = true
+                    };
+                    (await userManager.CreateAsync(admin, adminSeed.Password).ConfigureAwait(false)).ThrowIfFailed();
+                    (await userManager.AddToRoleAsync(admin, AppRoles.Admin).ConfigureAwait(false)).ThrowIfFailed();
+                    logger.LogInformation("Seeded admin account {Email}.", adminSeed.Email);
+                }
             }
 
             if (string.IsNullOrWhiteSpace(seed.CandidateEmail) || string.IsNullOrWhiteSpace(seed.CandidatePassword))

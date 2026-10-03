@@ -24,4 +24,5 @@ public sealed record AuthResponse(
     DateTime AccessTokenExpiresAtUtc,
     string UserId,
     string Email,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    string? DisplayName = null);

@@ -17,16 +17,21 @@ public sealed class AuthControllerTests
         new DateTime(2026, 9, 28, 12, 0, 0, DateTimeKind.Utc),
         "user-1",
         "user@example.com",
-        ["Candidate"]);
+        ["Candidate"])
+    {
+        DisplayName = "Display Name"
+    };
 
     private sealed class StubAuthService : IAuthService
     {
         public ServiceResult<AuthTokens> LoginResult { get; set; } = ServiceResult<AuthTokens>.Ok(SampleTokens());
         public ServiceResult<AuthTokens> RefreshResult { get; set; } = ServiceResult<AuthTokens>.Ok(SampleTokens("rotated"));
+        public ServiceResult<AuthTokens> GetSessionResult { get; set; } = ServiceResult<AuthTokens>.Ok(SampleTokens("session-cookie"));
         public ServiceResult LogoutResult { get; set; } = ServiceResult.Ok();
 
         public string? SeenLoginEmail;
         public string? SeenRefreshToken;
+        public string? SeenSessionToken;
         public string? SeenLogoutCookie;
         public string? SeenLogoutUserId;
 
@@ -40,6 +45,12 @@ public sealed class AuthControllerTests
         {
             SeenRefreshToken = rawRefreshToken;
             return Task.FromResult(RefreshResult);
+        }
+
+        public Task<ServiceResult<AuthTokens>> GetSessionAsync(string? rawRefreshToken, CancellationToken cancellationToken = default)
+        {
+            SeenSessionToken = rawRefreshToken;
+            return Task.FromResult(GetSessionResult);
         }
 
         public Task<ServiceResult> LogoutAsync(string? rawRefreshToken, string? currentUserId, CancellationToken cancellationToken = default)
@@ -90,6 +101,7 @@ public sealed class AuthControllerTests
         Assert.Equal("access.jwt.token", body.AccessToken);
         Assert.Equal("user-1", body.UserId);
         Assert.Equal("user@example.com", body.Email);
+        Assert.Equal("Display Name", body.DisplayName);
         // Response body must never contain the refresh token (cookie-only transport).
         Assert.DoesNotContain("raw-refresh-token", System.Text.Json.JsonSerializer.Serialize(body));
 
@@ -233,11 +245,45 @@ public sealed class AuthControllerTests
         Assert.True(seen?.IsCancellationRequested);
     }
 
+    [Fact]
+    public async Task Me_WithValidCookie_Returns200_DisplayName_NoRefreshTokenInBody()
+    {
+        var stub = new StubAuthService();
+        var controller = CreateController(stub, cookie: "session-cookie");
+
+        var action = await controller.Me(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(action);
+        var body = Assert.IsType<AuthResponse>(ok.Value);
+        Assert.Equal("session-cookie", stub.SeenSessionToken);
+        Assert.Equal("user-1", body.UserId);
+        Assert.Equal("Display Name", body.DisplayName);
+        // The refresh token must never leak into the JSON body (HttpOnly cookie only).
+        Assert.DoesNotContain("session-cookie", System.Text.Json.JsonSerializer.Serialize(body));
+    }
+
+    [Fact]
+    public async Task Me_WithoutCookie_Returns401_ForwardsNull()
+    {
+        var stub = new StubAuthService
+        {
+            GetSessionResult = ServiceResult<AuthTokens>.Fail(ServiceErrorType.Unauthorized, "Not authenticated.")
+        };
+        var controller = CreateController(stub);
+
+        var action = await controller.Me(CancellationToken.None);
+
+        Assert.IsType<UnauthorizedObjectResult>(action);
+        Assert.Null(stub.SeenSessionToken);
+    }
+
     private sealed class TokenCapturingAuthService(Action<CancellationToken> capture) : IAuthService
     {
         public Task<ServiceResult<AuthTokens>> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
         public Task<ServiceResult<AuthTokens>> RefreshAsync(string? rawRefreshToken, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+        public Task<ServiceResult<AuthTokens>> GetSessionAsync(string? rawRefreshToken, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
         public Task<ServiceResult> LogoutAsync(string? rawRefreshToken, string? currentUserId, CancellationToken cancellationToken = default)
         {

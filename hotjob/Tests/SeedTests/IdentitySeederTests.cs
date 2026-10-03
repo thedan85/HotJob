@@ -22,7 +22,7 @@ public sealed class IdentitySeederTests
     {
         await using var fx = await TestFixture.CreateAsync();
 
-        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, ThreeAdmins(), NullLogger.Instance);
+        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, fx.Db, ThreeAdmins(), NullLogger.Instance);
 
         foreach (var email in new[] { "admin1@example.com", "admin2@example.com", "admin3@example.com" })
         {
@@ -37,8 +37,8 @@ public sealed class IdentitySeederTests
     {
         await using var fx = await TestFixture.CreateAsync();
 
-        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, ThreeAdmins(), NullLogger.Instance);
-        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, ThreeAdmins(), NullLogger.Instance);
+        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, fx.Db, ThreeAdmins(), NullLogger.Instance);
+        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, fx.Db, ThreeAdmins(), NullLogger.Instance);
 
         foreach (var email in new[] { "admin1@example.com", "admin2@example.com", "admin3@example.com" })
         {
@@ -53,7 +53,7 @@ public sealed class IdentitySeederTests
         await using var fx = await TestFixture.CreateAsync();
         var seed = new SeedOptions { AdminEmail = "legacy@example.com", AdminPassword = "Admin123!" };
 
-        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, seed, NullLogger.Instance);
+        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, fx.Db, seed, NullLogger.Instance);
 
         var user = await fx.UserManager.FindByEmailAsync("legacy@example.com");
         Assert.NotNull(user);
@@ -65,7 +65,7 @@ public sealed class IdentitySeederTests
     {
         await using var fx = await TestFixture.CreateAsync();
 
-        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, new SeedOptions(), NullLogger.Instance);
+        await IdentitySeeder.SeedAsync(fx.RoleManager, fx.UserManager, fx.Db, new SeedOptions(), NullLogger.Instance);
 
         Assert.True(await fx.RoleManager.RoleExistsAsync(AppRoles.Admin));
         Assert.Equal(0, await fx.UserManager.Users.CountAsync());

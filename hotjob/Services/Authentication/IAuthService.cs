@@ -15,6 +15,14 @@ public interface IAuthService
         string? rawRefreshToken,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Validates a refresh cookie WITHOUT rotating or revoking anything and mints a fresh
+    /// access token. Used by <c>GET /api/auth/me</c> to restore the UI session on circuit start.
+    /// </summary>
+    Task<ServiceResult<AuthTokens>> GetSessionAsync(
+        string? rawRefreshToken,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Revokes ALL refresh sessions for the user (logout everywhere).</summary>
     Task<ServiceResult> LogoutAsync(
         string? rawRefreshToken,
