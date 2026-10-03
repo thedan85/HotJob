@@ -10,7 +10,7 @@ namespace hotjob.Repositories.Employer;
 public sealed class ApplicantRepository(ApplicationDbContext db) : IApplicantRepository
 {
     public Task<Models.Users.Employer?> GetEmployerByUserIdAsync(string userId, CancellationToken cancellationToken = default) =>
-        db.Employers.AsNoTracking().FirstOrDefaultAsync(e => e.UserId == userId, cancellationToken);
+        db.Employers.AsNoTracking().Include(e => e.Company).FirstOrDefaultAsync(e => e.UserId == userId, cancellationToken);
 
     public async Task<(IReadOnlyList<Application> Items, int TotalCount)> ListOwnedAsync(
         int companyProfileId,
