@@ -16,7 +16,7 @@ Một user có một Employer row gắn với một Company. Cùng user đó có
 
 ## 2. Luồng dữ liệu chảy thế nào
 
-**Join hoặc tạo Company:** Employer đưa CompanyProfileId có sẵn(Join company) hoặc CompanyName mới(Tạo profile công ty mới), không bao giờ cả hai. Tên Company mới phải unique. Tạo mới cho ra owner Active của Company Pending. Join cho ra member Pending. Mọi API Employer đòi MembershipStatus Active, riêng API job đòi thêm Company Approved. Join Company đã Rejected thì bị từ chối.
+**Join hoặc tạo Company:** Employer đưa `Employer.CompanyProfileId` có sẵn (Join) hoặc `CompanyProfile.CompanyName` mới (Tạo), không bao giờ cả hai. `CompanyProfile.CompanyName` mới phải unique. Tạo mới cho ra `Employer{IsOwner=true, MembershipStatus=Active}` và `CompanyProfile{Status=Pending}`. Join cho ra `Employer{IsOwner=false, MembershipStatus=Pending}`. Mọi API Employer đòi `Employer.MembershipStatus=Active`, riêng API job đòi thêm `CompanyProfile.Status=Approved`. Join `CompanyProfile{Status=Rejected}` thì bị từ chối.
 
 Ví dụ: HR lập "Acme Corp" xong Active nhưng chưa đăng được job cho tới khi admin duyệt. Một HR khác join Acme thì phải chờ owner duyệt mới thấy hộp ATS.
 
