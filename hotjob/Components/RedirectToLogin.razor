@@ -1,6 +1,55 @@
+@rendermode InteractiveServer
 @inject NavigationManager NavigationManager
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject IJSRuntime JS
+@using hotjob.Services.Authentication
+@using Microsoft.JSInterop
+
+@if (isAuthenticated)
+{
+    <p>You do not have access to this page.</p>
+}
+else
+{
+    <p role="status">Checking your sign-in...</p>
+}
 
 @code {
-    protected override void OnInitialized() =>
+    private bool isAuthenticated;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            // Logged in but missing the required role (e.g. Candidate on an employer page).
+            // Stay put with access-denied instead of bouncing to /login.
+            isAuthenticated = true;
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
+            if (result.Ok && result.Data is not null)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+                // AuthorizeView flips to Authorized; this component is disposed, no redirect.
+                return;
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // JS unavailable (prerender) — keep the loading UI; the interactive pass retries.
+            return;
+        }
+
         NavigationManager.NavigateTo("/login");
+    }
 }
