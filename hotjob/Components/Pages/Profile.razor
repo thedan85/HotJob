@@ -1,12 +1,11 @@
 @page "/profile"
 @rendermode InteractiveServer
-@using System.Security.Claims
 @using hotjob.DTOs.Authentication
 @using hotjob.Models.Users
-@using hotjob.Services.Account
-@inject AuthenticationStateProvider AuthenticationStateProvider
+@using hotjob.Services.Api
+@using hotjob.Services.Authentication
 @inject HotJobAuthStateProvider AuthStateProvider
-@inject IAccountService AccountService
+@inject AccountApiClient AccountApi
 
 <PageTitle>Candidate Profile & CV Management | HotJob</PageTitle>
 
@@ -134,16 +133,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            errorMessage = "Please sign in to view your profile.";
-            isLoading = false;
-            return;
-        }
-
-        var result = await AccountService.GetProfileAsync(userId);
+        var result = await AccountApi.GetProfileAsync();
         if (!result.Success || result.Data?.Candidate is null)
         {
             errorMessage = result.Errors.FirstOrDefault() ?? "We could not load your candidate profile.";
@@ -169,13 +159,9 @@ else
 
     private async Task SaveProfileAsync()
     {
-        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
-        if (string.IsNullOrWhiteSpace(userId)) return;
-
         isSaving = true;
         saveMessage = null;
-        var result = await AccountService.UpdateProfileAsync(userId, new UpdateProfileRequest
+        var result = await AccountApi.UpdateProfileAsync(new UpdateProfileRequest
         {
             FullName = profileForm.FullName,
             Email = profileForm.Email,

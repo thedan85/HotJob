@@ -166,6 +166,13 @@ builder.Services.AddScoped<AuthSession>();
 builder.Services.AddScoped<HotJobAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(services =>
     services.GetRequiredService<HotJobAuthStateProvider>());
+builder.Services.AddHttpClient(nameof(hotjob.Services.Api.ApiClientBase));
+builder.Services.AddScoped<hotjob.Services.Api.EmployerJobsApiClient>();
+builder.Services.AddScoped<hotjob.Services.Api.EmployerApplicantsApiClient>();
+builder.Services.AddScoped<hotjob.Services.Api.EmployerInterviewsApiClient>();
+builder.Services.AddScoped<hotjob.Services.Api.AccountApiClient>();
+builder.Services.AddScoped<hotjob.Services.Api.CompanyApiClient>();
+builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
 
 var app = builder.Build();
 

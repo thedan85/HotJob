@@ -1,0 +1,381 @@
+@page "/employer/interviews"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using hotjob.DTOs.Employer
+@using hotjob.Models.Application
+@using hotjob.Services.Api
+@inject EmployerApplicantsApiClient ApplicantsApi
+@inject EmployerInterviewsApiClient InterviewsApi
+
+<PageTitle>Interviews &amp; Applicants | HotJob</PageTitle>
+
+<AuthorizeView Roles="Employer">
+    <Authorized Context="auth">
+        <div class="ei-page">
+            <section class="ei-header">
+                <div>
+                    <p class="ei-eyebrow">ATS Interview Ops</p>
+                    <h1>Interview Scheduling &amp; Candidate Evaluation</h1>
+                    <p>Review applicants, advance them one step at a time, schedule interviews, and message candidates — all scoped to your own company.</p>
+                </div>
+            </section>
+
+            <div class="ei-banner" role="note"><strong>ATS guardrail:</strong> scheduling for a <strong>Shortlisted</strong> application auto-advances it to Interviewing. Terminal applications (Offered / Rejected / Withdrawn) cannot take new interviews. Status moves forward-only: Pending → Viewed → Shortlisted → Interviewing → Offered, or Reject from any open state.</div>
+
+            @if (isLoading)
+            {
+                <div class="ei-loading" role="status">Loading applicants...</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="ei-alert" role="alert">@loadError</div>
+            }
+            else
+            {
+                @if (!string.IsNullOrWhiteSpace(actionMessage))
+                {
+                    <div class="ei-notice" role="status">@actionMessage</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(actionError))
+                {
+                    <div class="ei-alert" role="alert">@actionError</div>
+                }
+
+                <section class="ei-filters" aria-label="Applicant filters">
+                    <label class="ei-field">Job posting id <InputNumber @bind-Value="query.JobPostingId" /></label>
+                    <label class="ei-field">Status
+                        <InputSelect @bind-Value="statusFilter">
+                            <option value="">All statuses</option>
+                            @foreach (var s in Enum.GetValues<ApplicationStatus>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <label class="ei-field ei-field-grow">Search <InputText @bind-Value="query.Search" placeholder="Name or email" /></label>
+                    <button class="ei-btn ei-btn-secondary" type="button" @onclick="SearchAsync">Filter</button>
+                </section>
+
+                <div class="ei-layout">
+                    <section class="ei-list" aria-label="Applicants">
+                        <div class="ei-card">
+                            <h2>Applicants</h2>
+                            <p class="ei-sub">@(totalCount) total · page @(page) of @(Math.Max(totalPages, 1))</p>
+                            @foreach (var a in applicants)
+                            {
+                                <article class="ei-applicant @(selected?.ApplicationId == a.ApplicationId ? "ei-selected" : string.Empty)">
+                                    <div class="ei-applicant-head">
+                                        <strong>@a.CandidateFullName</strong>
+                                        <span class="ei-badge ei-@a.CurrentStatus.ToString().ToLowerInvariant()">@a.CurrentStatus</span>
+                                    </div>
+                                    <small>@a.JobTitle · applied @a.AppliedAt.ToString("dd MMM yyyy")</small>
+                                    <small>@(a.CandidateEmail ?? "no email") · CV: @a.ResumeTitle</small>
+                                    <div><button class="ei-btn ei-btn-secondary ei-btn-small" type="button" @onclick="() => SelectAsync(a.ApplicationId)">Open</button></div>
+                                </article>
+                            }
+                            @if (applicants.Count == 0)
+                            {
+                                <p class="ei-sub">No applicants match this filter.</p>
+                            }
+                            <div class="ei-pagination" style="margin-top:10px">
+                                <button class="ei-btn ei-btn-secondary ei-btn-small" type="button" disabled="@(page <= 1)" @onclick="() => ChangePageAsync(page - 1)">← Prev</button>
+                                <button class="ei-btn ei-btn-secondary ei-btn-small" type="button" disabled="@(page >= totalPages)" @onclick="() => ChangePageAsync(page + 1)">Next →</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="ei-detail" aria-label="Application detail">
+                        @if (selected is null)
+                        {
+                            <div class="ei-card"><h2>No application selected</h2><p class="ei-sub">Pick an applicant to see the resume snapshot, history, interviews, and actions.</p></div>
+                        }
+                        else
+                        {
+                            <div class="ei-section">
+                                <h3>@selected.CandidateFullName — @selected.JobTitle</h3>
+                                <p class="ei-sub"><span class="ei-badge ei-@selected.CurrentStatus.ToString().ToLowerInvariant()">@selected.CurrentStatus</span> · applied @selected.AppliedAt.ToString("dd MMM yyyy HH:mm")</p>
+                                <dl class="ei-meta">
+                                    <div><dt>Email</dt><dd>@(selected.CandidateEmail ?? "—")</dd></div>
+                                    <div><dt>Cover letter</dt><dd>@(selected.CoverLetter ?? "—")</dd></div>
+                                    <div><dt>Snapshot summary</dt><dd class="ei-snapshot">@(selected.SnapshotSummary ?? "—")</dd></div>
+                                    <div><dt>Snapshot file</dt><dd>@(selected.SnapshotFileUrl ?? "—")</dd></div>
+                                </dl>
+                            </div>
+
+                            <div class="ei-section">
+                                <h3>Resume (live)</h3>
+                                <p class="ei-sub"><strong>@selected.Resume.Title</strong>@(selected.Resume.IsPrimary ? " · primary" : string.Empty) — @(selected.Resume.Summary ?? "no summary")</p>
+                                <p class="ei-sub">Education: @(selected.Resume.Educations.Count == 0 ? "—" : string.Join("; ", selected.Resume.Educations.Select(e => $"{e.SchoolName} ({e.Major ?? "—"})")))</p>
+                                <p class="ei-sub">Experience: @(selected.Resume.WorkExperiences.Count == 0 ? "—" : string.Join("; ", selected.Resume.WorkExperiences.Select(w => $"{w.JobTitle ?? "—"} @ {w.CompanyName}")))</p>
+                                <p class="ei-sub">Skills: @(selected.Resume.Skills.Count == 0 ? "—" : string.Join(", ", selected.Resume.Skills.Select(s => $"{s.SkillName} ({s.YearsOfExperience}y)")))</p>
+                            </div>
+
+                            <div class="ei-section">
+                                <h3>Advance status</h3>
+                                <EditForm Model="statusForm" OnValidSubmit="AdvanceStatusAsync">
+                                    <DataAnnotationsValidator />
+                                    <ValidationSummary />
+                                    <div class="ei-form-grid">
+                                        <label>Next status
+                                            <InputSelect @bind-Value="statusForm.Status">
+                                                @foreach (var s in new[] { ApplicationStatus.Viewed, ApplicationStatus.Shortlisted, ApplicationStatus.Interviewing, ApplicationStatus.Offered, ApplicationStatus.Rejected })
+                                                {
+                                                    <option value="@s">@s</option>
+                                                }
+                                            </InputSelect>
+                                        </label>
+                                        <label class="ei-wide">Note <InputTextArea @bind-Value="statusForm.Notes" rows="2" placeholder="Optional note for history + candidate notification" /></label>
+                                    </div>
+                                    <div style="margin-top:10px"><button class="ei-btn ei-btn-primary ei-btn-small" type="submit" disabled="@isActing">Update status</button></div>
+                                </EditForm>
+                                <h3 style="margin-top:14px">Status history</h3>
+                                <ul class="ei-timeline">
+                                    @foreach (var h in selected.StatusHistory.OrderByDescending(h => h.ChangedAt))
+                                    {
+                                        <li><strong>@h.Status</strong> — @(h.Notes ?? "no note")<br /><small>@h.ChangedAt.ToString("dd MMM yyyy HH:mm")</small></li>
+                                    }
+                                    @if (selected.StatusHistory.Count == 0)
+                                    {
+                                        <li>No history yet.</li>
+                                    }
+                                </ul>
+                            </div>
+
+                            <div class="ei-section">
+                                <h3>Interviews</h3>
+                                @foreach (var iv in interviews.OrderBy(i => i.InterviewDate))
+                                {
+                                    <div class="ei-interview">
+                                        <strong>@iv.InterviewDate.ToString("dd MMM yyyy HH:mm")</strong>
+                                        <span class="ei-badge ei-@iv.Status.ToString().ToLowerInvariant()">@iv.Status</span><br />
+                                        <span>@(iv.InterviewType?.ToString() ?? "—") · @(iv.LocationOrLink ?? "no location/link")</span><br />
+                                        <span>@(iv.Notes ?? "no notes")</span>
+                                        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+                                            @if (iv.Status == InterviewStatus.Scheduled)
+                                            {
+                                                <button class="ei-btn ei-btn-secondary ei-btn-small" type="button" @onclick="() => CompleteAsync(iv.Id)">Mark completed</button>
+                                                <button class="ei-btn ei-btn-danger ei-btn-small" type="button" @onclick="() => CancelAsync(iv.Id)">Cancel</button>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                                @if (interviews.Count == 0)
+                                {
+                                    <p class="ei-sub">No interviews scheduled for this application.</p>
+                                }
+                                <h3 style="margin-top:12px">Schedule interview</h3>
+                                <EditForm Model="interviewForm" OnValidSubmit="ScheduleAsync">
+                                    <DataAnnotationsValidator />
+                                    <div class="ei-form-grid">
+                                        <label>Date &amp; time (UTC, future) <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="interviewForm.InterviewDate" /></label>
+                                        <label>Type
+                                            <InputSelect @bind-Value="interviewForm.InterviewType">
+                                                <option value="">—</option>
+                                                @foreach (var t in Enum.GetValues<InterviewType>())
+                                                {
+                                                    <option value="@t">@t</option>
+                                                }
+                                            </InputSelect>
+                                        </label>
+                                        <label class="ei-wide">Location or link <InputText @bind-Value="interviewForm.LocationOrLink" placeholder="Room / address / meeting URL" /></label>
+                                        <label class="ei-wide">Notes <InputTextArea @bind-Value="interviewForm.Notes" rows="2" /></label>
+                                    </div>
+                                    <div style="margin-top:10px"><button class="ei-btn ei-btn-primary ei-btn-small" type="submit" disabled="@isActing">Schedule</button></div>
+                                </EditForm>
+                            </div>
+
+                            <div class="ei-section">
+                                <h3>Message candidate</h3>
+                                <EditForm Model="notifyForm" OnValidSubmit="NotifyAsync">
+                                    <DataAnnotationsValidator />
+                                    <ValidationSummary />
+                                    <div class="ei-form-grid">
+                                        <label class="ei-wide">Title <InputText @bind-Value="notifyForm.Title" placeholder="e.g. Next-round invitation" /></label>
+                                        <label class="ei-wide">Content <InputTextArea @bind-Value="notifyForm.Content" rows="2" /></label>
+                                    </div>
+                                    <div style="margin-top:10px"><button class="ei-btn ei-btn-secondary ei-btn-small" type="submit" disabled="@isActing">Send message</button></div>
+                                </EditForm>
+                            </div>
+                        }
+                    </section>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private bool isActing;
+    private string? loadError;
+    private string? actionMessage;
+    private string? actionError;
+    private int page = 1;
+    private const int PageSize = 15;
+    private int totalCount;
+    private int totalPages;
+    private ApplicationStatus? statusFilter;
+    private readonly ApplicantListQuery query = new() { PageSize = PageSize };
+    private List<ApplicantListItemResponse> applicants = new();
+    private ApplicantDetailResponse? selected;
+    private List<InterviewResponse> interviews = new();
+    private readonly UpdateStatusRequest statusForm = new() { Status = ApplicationStatus.Viewed };
+    private readonly CreateInterviewRequest interviewForm = new() { InterviewDate = DateTime.UtcNow.AddDays(1) };
+    private readonly SendNotificationRequest notifyForm = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        // Same guard as Jobs: overlapping loads sharing circuit state kill the circuit.
+        if (isLoading && hasLoadedOnce)
+        {
+            return;
+        }
+        isLoading = true;
+        hasLoadedOnce = true;
+        loadError = null;
+        try
+        {
+            query.Page = page;
+            query.PageSize = PageSize;
+            query.Status = statusFilter;
+            var result = await ApplicantsApi.ListAsync(query);
+            if (!result.Success || result.Data is null)
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "We could not load applicants.";
+                return;
+            }
+            applicants = result.Data.Items.ToList();
+            totalCount = result.Data.TotalCount;
+            totalPages = Math.Max(result.Data.TotalPages, 1);
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        page = 1;
+        await LoadAsync();
+    }
+
+    private async Task ChangePageAsync(int next)
+    {
+        page = next;
+        await LoadAsync();
+    }
+
+    private async Task SelectAsync(int applicationId)
+    {
+        actionMessage = actionError = null;
+        var detail = await ApplicantsApi.GetDetailAsync(applicationId);
+        if (!detail.Success || detail.Data is null)
+        {
+            actionError = detail.Errors.FirstOrDefault() ?? "Could not load this application.";
+            return;
+        }
+        selected = detail.Data;
+        var list = await ApplicantsApi.ListInterviewsAsync(applicationId);
+        interviews = list.Success && list.Data is not null ? list.Data.ToList() : new();
+    }
+
+    private async Task AdvanceStatusAsync()
+    {
+        if (selected is null) return;
+        actionMessage = actionError = null;
+        isActing = true;
+        var result = await ApplicantsApi.UpdateStatusAsync(selected.ApplicationId, statusForm);
+        isActing = false;
+        if (result.Success && result.Data is not null)
+        {
+            selected = result.Data;
+            actionMessage = $"Status updated to {selected.CurrentStatus}; candidate notified.";
+            await LoadAsync();
+        }
+        else
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "Illegal transition — move one step forward or Reject from an open state.";
+        }
+    }
+
+    private async Task ScheduleAsync()
+    {
+        if (selected is null) return;
+        actionMessage = actionError = null;
+        isActing = true;
+        var result = await ApplicantsApi.CreateInterviewAsync(selected.ApplicationId, interviewForm);
+        isActing = false;
+        if (result.Success && result.Data is not null)
+        {
+            interviews.Add(result.Data);
+            actionMessage = "Interview scheduled and candidate notified. Shortlisted applications auto-advance to Interviewing — reloading detail.";
+            await SelectAsync(selected.ApplicationId);
+        }
+        else
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "Could not schedule — date must be future and application non-terminal.";
+        }
+    }
+
+    private async Task CompleteAsync(int interviewId)
+    {
+        actionMessage = actionError = null;
+        var result = await InterviewsApi.UpdateAsync(interviewId, new UpdateInterviewRequest { Status = InterviewStatus.Completed });
+        if (result.Success && result.Data is not null)
+        {
+            var index = interviews.FindIndex(i => i.Id == interviewId);
+            if (index >= 0) interviews[index] = result.Data;
+            actionMessage = "Interview marked completed.";
+        }
+        else
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "Could not update this interview.";
+        }
+    }
+
+    private async Task CancelAsync(int interviewId)
+    {
+        actionMessage = actionError = null;
+        var result = await InterviewsApi.CancelAsync(interviewId);
+        if (result.Success && result.Data is not null)
+        {
+            var index = interviews.FindIndex(i => i.Id == interviewId);
+            if (index >= 0) interviews[index] = result.Data;
+            actionMessage = "Interview cancelled (row kept).";
+        }
+        else
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "Could not cancel this interview.";
+        }
+    }
+
+    private async Task NotifyAsync()
+    {
+        if (selected is null) return;
+        actionMessage = actionError = null;
+        isActing = true;
+        var result = await ApplicantsApi.NotifyAsync(selected.ApplicationId, notifyForm);
+        isActing = false;
+        if (result.Success)
+        {
+            actionMessage = "Message sent to candidate.";
+            notifyForm.Title = string.Empty;
+            notifyForm.Content = null;
+        }
+        else
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "Could not send this message.";
+        }
+    }
+}
