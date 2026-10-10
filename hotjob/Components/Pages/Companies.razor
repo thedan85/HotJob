@@ -1,0 +1,279 @@
+@page "/companies"
+@rendermode InteractiveServer
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+@using hotjob.DTOs.Company
+@using hotjob.DTOs.Job
+@using hotjob.Models.Users
+@using hotjob.Services.Company
+@inject ICompanyService CompanyService
+
+<PageTitle>Companies | HotJob</PageTitle>
+
+<section class="companies-page" aria-labelledby="companies-title">
+    <div class="companies-hero">
+        <p class="eyebrow">Meet great teams</p>
+        <h1 id="companies-title">Companies</h1>
+        <p class="companies-lede">Explore approved companies hiring on HotJob — filter by industry and location to find your fit.</p>
+        <form class="companies-toolbar" @onsubmit="SearchAsync" @onsubmit:preventDefault="true">
+            <label class="companies-search-field">
+                <span class="visually-hidden">Search companies by name</span>
+                <input type="search" placeholder="Search by company name…" @bind="searchInput" @bind:event="oninput" aria-label="Search companies by name" />
+            </label>
+            <button type="submit" class="btn-search">Search</button>
+            <button type="button" class="btn-filters" @onclick="ToggleFilters" aria-expanded="@showFilters">
+                Filters @if (ActiveFilterCount > 0) { <span class="count">@ActiveFilterCount</span> }
+            </button>
+        </form>
+    </div>
+
+    @if (showFilters)
+    {
+        <div class="filters-panel">
+            <div class="filter-group">
+                <h2>Industry</h2>
+                @if (filterOptions is null)
+                {
+                    <p class="filter-empty">Loading…</p>
+                }
+                else if (filterOptions.Industries.Count == 0)
+                {
+                    <p class="filter-empty">No industries yet.</p>
+                }
+                else
+                {
+                    <div class="filter-options">
+                        @foreach (var industry in filterOptions.Industries)
+                        {
+                            <label class="filter-option">
+                                <input type="checkbox" checked="@selectedIndustries.Contains(industry)" @onchange="(e => ToggleSelection(selectedIndustries, industry, e))" />
+                                @industry
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="filter-group">
+                <h2>Location</h2>
+                @if (filterOptions is null)
+                {
+                    <p class="filter-empty">Loading…</p>
+                }
+                else if (filterOptions.Locations.Count == 0)
+                {
+                    <p class="filter-empty">No locations yet.</p>
+                }
+                else
+                {
+                    <div class="filter-options">
+                        @foreach (var location in filterOptions.Locations)
+                        {
+                            <label class="filter-option">
+                                <input type="checkbox" checked="@selectedLocations.Contains(location)" @onchange="(e => ToggleSelection(selectedLocations, location, e))" />
+                                @location
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="filters-actions">
+                <button type="button" class="btn-apply" @onclick="ApplyFiltersAsync">Apply filters</button>
+                <button type="button" class="btn-clear" @onclick="ClearFiltersAsync">Clear all</button>
+            </div>
+        </div>
+    }
+
+    @if (ActiveFilterCount > 0 || !string.IsNullOrWhiteSpace(appliedSearch))
+    {
+        <div class="active-chips" aria-label="Active filters">
+            @if (!string.IsNullOrWhiteSpace(appliedSearch))
+            {
+                <span class="chip">“@appliedSearch” <button type="button" @onclick="ClearSearchAsync" aria-label="Clear search">×</button></span>
+            }
+            @foreach (var industry in selectedIndustries)
+            {
+                <span class="chip">@industry <button type="button" @onclick="() => RemoveFilterAsync(selectedIndustries, industry)" aria-label="Remove @industry filter">×</button></span>
+            }
+            @foreach (var location in selectedLocations)
+            {
+                <span class="chip">@location <button type="button" @onclick="() => RemoveFilterAsync(selectedLocations, location)" aria-label="Remove @location filter">×</button></span>
+            }
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="company-grid" aria-hidden="true">
+            @for (var i = 0; i < 6; i++)
+            {
+                <article class="company-card skeleton-card">
+                    <div class="company-logo-row"><div class="company-initials skeleton" style="width:52px;height:52px"></div></div>
+                    <div class="skeleton" style="height:20px;width:70%"></div>
+                    <div class="skeleton" style="height:14px;width:50%"></div>
+                    <div class="skeleton" style="height:14px;width:60%"></div>
+                </article>
+            }
+        </div>
+        <p role="status" class="visually-hidden">Loading companies…</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <p class="companies-error" role="alert">@errorMessage</p>
+    }
+    else if (paged is null || paged.Items.Count == 0)
+    {
+        <div class="companies-empty">
+            <h2>No companies found</h2>
+            <p>Try a different name, or clear your search and filters.</p>
+            <button type="button" class="btn-apply" @onclick="ClearFiltersAsync">Clear search and filters</button>
+        </div>
+    }
+    else
+    {
+        <p class="result-count" role="status">@paged.TotalCount @(paged.TotalCount == 1 ? "company" : "companies") found</p>
+        <div class="company-grid">
+            @foreach (var company in paged.Items)
+            {
+                <article class="company-card">
+                    <div class="company-logo-row">
+                        @if (!string.IsNullOrWhiteSpace(company.LogoUrl))
+                        {
+                            <img class="company-logo" src="@company.LogoUrl" alt="@company.CompanyName logo" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="company-initials" aria-hidden="true">@Initials(company.CompanyName)</div>
+                        }
+                    </div>
+                    <h2>@company.CompanyName</h2>
+                    <div class="company-meta">
+                        @if (!string.IsNullOrWhiteSpace(company.Industry)) { <span class="meta-pill">@company.Industry</span> }
+                        @if (!string.IsNullOrWhiteSpace(company.Location)) { <span class="meta-pill">@company.Location</span> }
+                    </div>
+                    @if (company.Scale.HasValue) { <p class="company-scale">@ScaleLabel(company.Scale.Value)</p> }
+                    @if (!string.IsNullOrWhiteSpace(company.Description)) { <p class="company-desc">@company.Description</p> }
+                </article>
+            }
+        </div>
+        @if (paged.TotalPages > 1)
+        {
+            <nav class="pagination" aria-label="Companies pages">
+                <button type="button" class="page-btn" disabled="@(paged.Page <= 1)" @onclick="PrevPageAsync" aria-label="Previous page">‹ Prev</button>
+                @for (var p = PageWindowStart; p <= PageWindowEnd; p++)
+                {
+                    var pageNumber = p;
+                    <button type="button" class="page-btn @(pageNumber == paged.Page ? "active" : string.Empty)" @onclick="() => GoToPageAsync(pageNumber)" aria-label="Page @pageNumber" aria-current="@(pageNumber == paged.Page ? "page" : null)">@pageNumber</button>
+                }
+                <button type="button" class="page-btn" disabled="@(paged.Page >= paged.TotalPages)" @onclick="NextPageAsync" aria-label="Next page">Next ›</button>
+                <p class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount companies</p>
+            </nav>
+        }
+        else
+        {
+            <p class="page-info">@paged.TotalCount @(paged.TotalCount == 1 ? "company" : "companies") · all shown on one page</p>
+        }
+    }
+</section>
+
+@code {
+    private string? searchInput;
+    private string? appliedSearch;
+    private readonly HashSet<string> selectedIndustries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> selectedLocations = new(StringComparer.OrdinalIgnoreCase);
+    private bool showFilters;
+    private bool isLoading = true;
+    private string? errorMessage;
+    private PagedResponse<CompanyListItemDto>? paged;
+    private CompanyFilterOptionsDto? filterOptions;
+
+    private int ActiveFilterCount => selectedIndustries.Count + selectedLocations.Count;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFiltersAsync();
+        await LoadPageAsync(1);
+    }
+
+    private async Task SearchAsync()
+    {
+        appliedSearch = searchInput;
+        await LoadPageAsync(1);
+    }
+
+    private void ToggleFilters() => showFilters = !showFilters;
+
+    private static void ToggleSelection(HashSet<string> set, string value, ChangeEventArgs e)
+    {
+        if (e.Value is true) set.Add(value);
+        else set.Remove(value);
+    }
+
+    private async Task ApplyFiltersAsync() => await LoadPageAsync(1);
+
+    private async Task ClearFiltersAsync()
+    {
+        searchInput = null;
+        appliedSearch = null;
+        selectedIndustries.Clear();
+        selectedLocations.Clear();
+        await LoadPageAsync(1);
+    }
+
+    private async Task PrevPageAsync() => await LoadPageAsync((paged?.Page ?? 1) - 1);
+
+    private async Task NextPageAsync() => await LoadPageAsync((paged?.Page ?? 1) + 1);
+
+    private async Task GoToPageAsync(int page) => await LoadPageAsync(page);
+
+    private int PageWindowStart => Math.Max(1, (paged?.Page ?? 1) - 2);
+
+    private int PageWindowEnd => Math.Min(paged?.TotalPages ?? 1, PageWindowStart + 4);
+
+    private async Task ClearSearchAsync()
+    {
+        searchInput = null;
+        appliedSearch = null;
+        await LoadPageAsync(1);
+    }
+
+    private async Task RemoveFilterAsync(HashSet<string> set, string value)
+    {
+        set.Remove(value);
+        await LoadPageAsync(1);
+    }
+
+    private async Task LoadFiltersAsync()
+    {
+        var result = await CompanyService.GetFilterOptionsAsync();
+        if (result.Success) filterOptions = result.Data;
+    }
+
+    private async Task LoadPageAsync(int page)
+    {
+        isLoading = true;
+        errorMessage = null;
+        var result = await CompanyService.ListAsync(new CompanyListQuery
+        {
+            Search = appliedSearch,
+            Industries = selectedIndustries.ToArray(),
+            Locations = selectedLocations.ToArray(),
+            Page = page
+        });
+        isLoading = false;
+        if (result.Success) paged = result.Data;
+        else errorMessage = result.Errors.FirstOrDefault() ?? "We could not load companies.";
+    }
+
+    private static string Initials(string name) =>
+        string.Join("", name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
+
+    private static string ScaleLabel(CompanyScale scale) => scale switch
+    {
+        CompanyScale.LessThan10 => "1–10 employees",
+        CompanyScale.From10To49 => "10–49 employees",
+        CompanyScale.From50To199 => "50–199 employees",
+        CompanyScale.From200To499 => "200–499 employees",
+        CompanyScale.MoreThan500 => "500+ employees",
+        _ => scale.ToString()
+    };
+}

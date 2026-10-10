@@ -87,6 +87,44 @@ public sealed class DemoSeederTests
     }
 
     [Fact]
+    public async Task SeedAsync_SeedsCatalogCompaniesWithOwnerEmployers()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await DatabaseSeeder.SeedAsync(fx.Db, NullLogger.Instance);
+
+        await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, DemoSeed(), NullLogger.Instance);
+
+        var catalogCount = await fx.Db.CompanyProfiles.CountAsync(c => c.CompanyName != "Acme Corp");
+        Assert.True(catalogCount >= 20, $"Expected at least 20 catalog companies, got {catalogCount}.");
+
+        var approved = await fx.Db.CompanyProfiles.CountAsync(c => c.Status == CompanyStatus.Approved);
+        Assert.Equal(await fx.Db.CompanyProfiles.CountAsync(), approved);
+
+        var companiesWithoutOwner = await fx.Db.CompanyProfiles
+            .Where(c => !c.Employers.Any(e => e.IsOwner && e.MembershipStatus == MembershipStatus.Active))
+            .Select(c => c.CompanyName)
+            .ToListAsync();
+        Assert.Empty(companiesWithoutOwner);
+    }
+
+    [Fact]
+    public async Task SeedAsync_CatalogSecondRun_IsIdempotent()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await DatabaseSeeder.SeedAsync(fx.Db, NullLogger.Instance);
+        var seed = DemoSeed();
+
+        await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, seed, NullLogger.Instance);
+        var firstCount = await fx.Db.CompanyProfiles.CountAsync();
+        var firstEmployers = await fx.Db.Employers.CountAsync();
+
+        await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, seed, NullLogger.Instance);
+
+        Assert.Equal(firstCount, await fx.Db.CompanyProfiles.CountAsync());
+        Assert.Equal(firstEmployers, await fx.Db.Employers.CountAsync());
+    }
+
+    [Fact]
     public async Task SeedAsync_EmptyDemoConfig_SkipsWithoutThrowing()
     {
         await using var fx = await TestFixture.CreateAsync();
