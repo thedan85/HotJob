@@ -8,7 +8,7 @@ Một user có một Employer row gắn với một Company. Cùng user đó có
 - Chờ trong lúc Company Pending. Chỉ Company Approved mới được đăng job.
 - Đăng và sửa JobPosting kèm Category, Skill + ImportanceWeight, lương, ExpiryDate. Job Draft thì xóa hẳn. Job Published thì close.
 - Xem job của Company mình kèm số lượng Application. Tìm kiếm, lọc.
-- Duyệt đơn: lọc theo job và status, tìm theo tên hoặc email, xem Snapshot CV đông lạnh đặt cạnh Resume live.
+- Duyệt đơn: lọc theo job và status, tìm theo tên hoặc email, xem Snapshot CV đặt cạnh Resume live.
 - Chuyển Application tiến từng bước Pending → Viewed → Shortlisted → Interviewing → Offered, hoặc Reject từ trạng thái mở bất kỳ. Đặt trùng status thì coi như no-op. Không được đặt Withdrawn.
 - Nhắn thủ công cho Candidate.
 - Tạo nhiều Interview cho mỗi Application. Dời lịch, sửa, hủy. Application terminal thì không đặt thêm.
@@ -16,7 +16,7 @@ Một user có một Employer row gắn với một Company. Cùng user đó có
 
 ## 2. Luồng dữ liệu chảy thế nào
 
-**Join hoặc tạo Company:** Employer đưa `Employer.CompanyProfileId` có sẵn (Join) hoặc `CompanyProfile.CompanyName` mới (Tạo), không bao giờ cả hai. `CompanyProfile.CompanyName` mới phải unique. Tạo mới cho ra `Employer{IsOwner=true, MembershipStatus=Active}` và `CompanyProfile{Status=Pending}`. Join cho ra `Employer{IsOwner=false, MembershipStatus=Pending}`. Mọi API Employer đòi `Employer.MembershipStatus=Active`, riêng API job đòi thêm `CompanyProfile.Status=Approved`. Join `CompanyProfile{Status=Rejected}` thì bị từ chối.
+**Join hoặc tạo Company:** Employer đưa `Ejmployer.CompanyProfileId` có sẵn (Join) hoặc `CompanyProfile.CompanyName` mới (Tạo), không bao giờ cả hai. `CompanyProfile.CompanyName` mới phải unique. Tạo mới cho ra `Employer{IsOwner=true, MembershipStatus=Active}` và `CompanyProfile{Status=Pending}`. Join cho ra `Employer{IsOwner=false, MembershipStatus=Pending}`. Mọi API Employer đòi `Employer.MembershipStatus=Active`, riêng API job đòi thêm `CompanyProfile.Status=Approved`. Join `CompanyProfile{Status=Rejected}` thì bị từ chối.
 
 Ví dụ: HR lập "Acme Corp" xong Active nhưng chưa đăng được job cho tới khi admin duyệt. Một HR khác join Acme thì phải chờ owner duyệt mới thấy hộp ATS.
 
