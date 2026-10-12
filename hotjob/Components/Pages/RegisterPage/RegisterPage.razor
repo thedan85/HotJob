@@ -3,8 +3,8 @@
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components
 @using hotjob.DTOs.Authentication
-@using hotjob.Services.Api
-@inject AccountApiClient AccountApi
+@using hotjob.Services.Account
+@inject IAccountService AccountService
 @inject ILogger<RegisterPage> Logger
 
 <PageTitle>Create your HotJob account</PageTitle>
@@ -126,7 +126,7 @@
         isSubmitting = true;
         try
         {
-            var result = await AccountApi.RegisterAsync(form);
+            var result = await AccountService.RegisterAsync(form);
             if (result.Success)
             {
                 isSuccess = true;
