@@ -1,0 +1,78 @@
+@page "/company/members"
+@using hotjob.Models.Users
+@inject hotjob.Services.ICompanyService CompanyService
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+
+<h3>Quản lý thành viên công ty</h3>
+
+@if (loading)
+{
+    <p>Đang tải...</p>
+}
+else
+{
+    if (pending.Count == 0)
+    {
+        <p>Không có yêu cầu gia nhập đang chờ.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr><th>Họ tên</th><th>Chức danh</th><th>Email</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var e in pending)
+                {
+                    <tr>
+                        <td>@e.FullName</td>
+                        <td>@e.Position</td>
+                        <td>@e.User?.Email</td>
+                        <td>
+                            <button class="btn btn-sm btn-success" @onclick="() => Review(e.Id, true)">Duyệt</button>
+                            <button class="btn btn-sm btn-danger ms-2" @onclick="() => Review(e.Id, false)">Từ chối</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private List<Employer> pending = new();
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPending();
+    }
+
+    private async Task LoadPending()
+    {
+        loading = true;
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
+        {
+            pending = new List<Employer>();
+        }
+        else
+        {
+            pending = await CompanyService.GetPendingEmployersForOwnerAsync(userId);
+        }
+        loading = false;
+        StateHasChanged();
+    }
+
+    private async Task Review(int employerId, bool approve)
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userId = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId)) return;
+
+        var ok = await CompanyService.ReviewEmployerAsync(employerId, userId, approve);
+        if (ok) await LoadPending();
+    }
+}
