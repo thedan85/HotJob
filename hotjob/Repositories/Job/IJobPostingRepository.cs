@@ -10,10 +10,24 @@ public interface IJobPostingRepository
         bool includeDetails,
         CancellationToken cancellationToken = default);
 
+    Task<JobPosting?> GetPublishedByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default);
+
     Task<(IReadOnlyList<JobPosting> Items, int TotalCount)> ListOwnedAsync(
         int companyId,
         JobStatus? status,
         string? search,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<(IReadOnlyList<JobPosting> Items, int TotalCount)> BrowsePublishedAsync(
+        string? keyword,
+        string? city,
+        string? skill,
+        string? company,
+        JobType? jobType,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);

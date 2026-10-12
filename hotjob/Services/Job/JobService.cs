@@ -274,6 +274,49 @@ public sealed class JobService(
         return await GetDetailAsync(employer.CompanyProfileId, id, cancellationToken);
     }
 
+    public async Task<ServiceResult<PagedResponse<PublicJobListItemResponse>>> BrowsePublishedAsync(
+        string? keyword,
+        string? city,
+        string? skill,
+        string? company,
+        JobType? jobType,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var (items, total) = await jobRepository.BrowsePublishedAsync(keyword, city, skill, company, jobType, page, pageSize, cancellationToken);
+
+        return ServiceResult<PagedResponse<PublicJobListItemResponse>>.Ok(new PagedResponse<PublicJobListItemResponse>
+        {
+            Items = items.Select(ToPublicListItem).ToList(),
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        });
+    }
+
+    public async Task<ServiceResult<JobDetailResponse>> GetPublishedAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        if (id <= 0)
+        {
+            return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.NotFound, "Job not found.");
+        }
+
+        var job = await jobRepository.GetPublishedByIdAsync(id, cancellationToken);
+        if (job is null)
+        {
+            return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.NotFound, "Job not found.");
+        }
+
+        var count = await dbContext.Applications.CountAsync(application => application.JobPostingId == id, cancellationToken);
+        return ServiceResult<JobDetailResponse>.Ok(ToDetail(job, count));
+    }
+
     private async Task<ServiceResult<JobDetailResponse>> GetDetailAsync(
         int companyId,
         int jobId,
@@ -462,7 +505,21 @@ public sealed class JobService(
             job.JobSkills.Select(jobSkill => new JobSkillDto(jobSkill.SkillId, jobSkill.Skill?.Name ?? string.Empty, jobSkill.ImportanceWeight)).ToList(),
             job.CategoryMappings.Select(mapping => new JobCategoryDto(mapping.JobCategoryId, mapping.Category?.Name ?? string.Empty)).ToList(),
             applicationsCount,
-            job.CreatedAt);
+            job.CreatedAt,
+            job.Company?.Location);
+
+    private static PublicJobListItemResponse ToPublicListItem(JobPosting job) =>
+        new(
+            job.Id,
+            job.Title,
+            job.Company?.CompanyName ?? string.Empty,
+            job.Company?.Location,
+            job.SalaryMin,
+            job.SalaryMax,
+            job.JobType,
+            job.ExpiryDate,
+            job.CreatedAt,
+            job.JobSkills.Select(jobSkill => jobSkill.Skill?.Name ?? string.Empty).Where(name => name.Length > 0).ToList());
 
     private static JobListItemResponse ToListItem(JobPosting job, int applicationsCount) =>
         new(
