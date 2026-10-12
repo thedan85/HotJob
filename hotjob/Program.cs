@@ -181,9 +181,6 @@ builder.Services.AddScoped<hotjob.Services.Api.AccountApiClient>();
 builder.Services.AddScoped<hotjob.Services.Api.CompanyApiClient>();
 builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
 
-// Application services
-builder.Services.AddScoped<hotjob.Services.ICompanyService, hotjob.Services.CompanyService>();
-
 var app = builder.Build();
 
 await using (var scope = app.Services.CreateAsyncScope())
