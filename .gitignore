@@ -10,3 +10,5 @@ build.log
 .env.local
 node_modules/
 AGENTS.md
+
+.dll
