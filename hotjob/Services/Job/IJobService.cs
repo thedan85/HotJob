@@ -46,4 +46,18 @@ public interface IJobService
         string userId,
         int id,
         CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<PagedResponse<PublicJobListItemResponse>>> BrowsePublishedAsync(
+        string? keyword,
+        string? city,
+        string? skill,
+        string? company,
+        JobType? jobType,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<JobDetailResponse>> GetPublishedAsync(
+        int id,
+        CancellationToken cancellationToken = default);
 }

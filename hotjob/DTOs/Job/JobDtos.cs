@@ -77,7 +77,8 @@ public sealed record JobDetailResponse(
     IReadOnlyList<JobSkillDto> Skills,
     IReadOnlyList<JobCategoryDto> Categories,
     int ApplicationsCount,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? CompanyLocation);
 
 public sealed record JobListItemResponse(
     int Id,
@@ -95,6 +96,19 @@ public sealed record JobListItemResponse(
     DateTime CreatedAt);
 
 public sealed record JobDeleteResponse(int Id, bool Closed, JobStatus Status);
+
+/// <summary>Public job card item for /it-jobs browsing (published only).</summary>
+public sealed record PublicJobListItemResponse(
+    int Id,
+    string Title,
+    string CompanyName,
+    string? CompanyLocation,
+    decimal? SalaryMin,
+    decimal? SalaryMax,
+    JobType JobType,
+    DateTime? ExpiryDate,
+    DateTime CreatedAt,
+    IReadOnlyList<string> Skills);
 
 public sealed class PagedResponse<T>
 {

@@ -22,6 +22,18 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         return query.FirstOrDefaultAsync(cancellationToken);
     }
 
+    public Task<JobPosting?> GetPublishedByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        return DetailsQuery()
+            .Where(job => job.Id == id
+                && job.Status == JobStatus.Published
+                && (job.ExpiryDate == null || job.ExpiryDate > now))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<(IReadOnlyList<JobPosting> Items, int TotalCount)> ListOwnedAsync(
         int companyId,
         JobStatus? status,
@@ -46,6 +58,70 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
             query = query.Where(job =>
                 EF.Functions.Like(job.Title, $"%{term}%") ||
                 EF.Functions.Like(job.Description, $"%{term}%"));
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(job => job.CreatedAt)
+            .ThenByDescending(job => job.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
+    public async Task<(IReadOnlyList<JobPosting> Items, int TotalCount)> BrowsePublishedAsync(
+        string? keyword,
+        string? city,
+        string? skill,
+        string? company,
+        JobType? jobType,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var now = DateTime.UtcNow;
+        var query = DetailsQuery()
+            .Where(job => job.Status == JobStatus.Published
+                && (job.ExpiryDate == null || job.ExpiryDate > now));
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var term = keyword.Trim();
+            query = query.Where(job =>
+                EF.Functions.Like(job.Title, $"%{term}%") ||
+                EF.Functions.Like(job.Description, $"%{term}%") ||
+                EF.Functions.Like(job.Company.CompanyName, $"%{term}%") ||
+                job.JobSkills.Any(jobSkill => EF.Functions.Like(jobSkill.Skill.Name, $"%{term}%")));
+        }
+
+        if (!string.IsNullOrWhiteSpace(city))
+        {
+            var term = city.Trim();
+            query = query.Where(job =>
+                job.Company.Location != null && EF.Functions.Like(job.Company.Location, $"%{term}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(skill))
+        {
+            var term = skill.Trim();
+            query = query.Where(job =>
+                job.JobSkills.Any(jobSkill => EF.Functions.Like(jobSkill.Skill.Name, $"%{term}%")));
+        }
+
+        if (!string.IsNullOrWhiteSpace(company))
+        {
+            var term = company.Trim();
+            query = query.Where(job => EF.Functions.Like(job.Company.CompanyName, $"%{term}%"));
+        }
+
+        if (jobType.HasValue)
+        {
+            query = query.Where(job => job.JobType == jobType.Value);
         }
 
         var total = await query.CountAsync(cancellationToken);

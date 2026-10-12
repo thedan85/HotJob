@@ -1,0 +1,252 @@
+@page "/it-jobs"
+@using hotjob.DTOs.Job
+@using hotjob.Models.Job
+@using hotjob.Services.Job
+@inject IJobService JobService
+@attribute [StreamRendering]
+
+<PageTitle>Explore jobs | HotJob</PageTitle>
+
+<section class="jobs-hero" aria-labelledby="jobs-title">
+    <p class="eyebrow">Published roles, updated daily</p>
+    <h1 id="jobs-title">Explore jobs</h1>
+    <p class="jobs-lede">Search by keyword, city, skill, or company. Only published roles that have not expired are listed.</p>
+
+    <form class="jobs-search" method="get" action="/it-jobs">
+        <label class="jobs-field">
+            <span>Keyword</span>
+            <input type="search" name="keyword" value="@Keyword" placeholder="Job title, skill or company" />
+        </label>
+        <label class="jobs-field">
+            <span>City</span>
+            <input type="search" name="city" value="@City" placeholder="City" />
+        </label>
+        <label class="jobs-field">
+            <span>Skill</span>
+            <input type="search" name="skill" value="@Skill" placeholder="e.g. C#, SQL, React" />
+        </label>
+        <label class="jobs-field">
+            <span>Type</span>
+            <select name="jobType">
+                <option value="">All types</option>
+                @foreach (var type in Enum.GetValues<JobType>())
+                {
+                    @if (string.Equals(JobTypeFilter, type.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        <option value="@type" selected>@type</option>
+                    }
+                    else
+                    {
+                        <option value="@type">@type</option>
+                    }
+                }
+            </select>
+        </label>
+        <button type="submit" class="jobs-search-button">Search</button>
+    </form>
+</section>
+
+<section class="jobs-section" aria-label="Job results">
+    @if (isLoading)
+    {
+        <p class="jobs-status" role="status">Loading jobs…</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <p class="jobs-status jobs-error" role="alert">@loadError</p>
+    }
+    else if (paged is null || paged.Items.Count == 0)
+    {
+        <div class="jobs-empty">
+            <h2>No jobs found</h2>
+            <p>Try a different keyword or clear your filters.</p>
+            <a class="jobs-clear" href="/it-jobs">Clear filters</a>
+        </div>
+    }
+    else
+    {
+        <p class="jobs-count" role="status">
+            @paged.TotalCount job@(paged.TotalCount == 1 ? string.Empty : "s") found
+            @if (paged.TotalPages > 1)
+            {
+                <span> · Page @paged.Page of @paged.TotalPages</span>
+            }
+        </p>
+
+        <div class="jobs-list">
+            @foreach (var job in paged.Items)
+            {
+                <a class="job-card" href="@($"/jobs/{job.Id}")">
+                    <div class="job-logo" aria-hidden="true">@CompanyInitial(job.CompanyName)</div>
+                    <div class="job-main">
+                        <h2>@job.Title</h2>
+                        <p class="job-company">@job.CompanyName@(string.IsNullOrWhiteSpace(job.CompanyLocation) ? string.Empty : $" · {job.CompanyLocation}")</p>
+                        @if (job.Skills.Count > 0)
+                        {
+                            <div class="job-tags">
+                                @foreach (var skill in job.Skills.Take(5))
+                                {
+                                    <span class="job-tag">@skill</span>
+                                }
+                            </div>
+                        }
+                        <p class="job-meta">
+                            <span>@job.JobType</span>
+                            <span> · Posted @job.CreatedAt.ToString("MMM dd, yyyy")</span>
+                            @if (job.ExpiryDate.HasValue)
+                            {
+                                <span> · Expires @job.ExpiryDate.Value.ToString("MMM dd, yyyy")</span>
+                            }
+                        </p>
+                    </div>
+                    <div class="job-side">
+                        <span class="job-salary">@FormatSalary(job.SalaryMin, job.SalaryMax)</span>
+                    </div>
+                </a>
+            }
+        </div>
+
+        @if (paged.TotalPages > 1)
+        {
+            <nav class="jobs-pager" aria-label="Job pages">
+                @if (paged.Page > 1)
+                {
+                    <a href="@PageUrl(paged.Page - 1)">← Prev</a>
+                }
+                @foreach (var pageNumber in PageNumbers(paged.Page, paged.TotalPages))
+                {
+                    if (pageNumber == paged.Page)
+                    {
+                        <span class="current" aria-current="page">@pageNumber</span>
+                    }
+                    else
+                    {
+                        <a href="@PageUrl(pageNumber)">@pageNumber</a>
+                    }
+                }
+                @if (paged.Page < paged.TotalPages)
+                {
+                    <a href="@PageUrl(paged.Page + 1)">Next →</a>
+                }
+            </nav>
+        }
+    }
+</section>
+
+@code {
+    private const int PageSize = 10;
+
+    [SupplyParameterFromQuery(Name = "keyword")]
+    public string? Keyword { get; set; }
+
+    [SupplyParameterFromQuery(Name = "city")]
+    public string? City { get; set; }
+
+    [SupplyParameterFromQuery(Name = "skill")]
+    public string? Skill { get; set; }
+
+    [SupplyParameterFromQuery(Name = "company")]
+    public string? Company { get; set; }
+
+    [SupplyParameterFromQuery(Name = "jobType")]
+    public string? JobTypeFilter { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")]
+    public int Page { get; set; } = 1;
+
+    private PagedResponse<PublicJobListItemResponse>? paged;
+    private bool isLoading = true;
+    private string? loadError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        paged = null;
+
+        Enum.TryParse<JobType>(JobTypeFilter, ignoreCase: true, out var parsedJobType);
+        var hasJobType = !string.IsNullOrWhiteSpace(JobTypeFilter) && Enum.IsDefined(typeof(JobType), parsedJobType)
+            && string.Equals(JobTypeFilter, parsedJobType.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        var result = await JobService.BrowsePublishedAsync(
+            NullIfWhiteSpace(Keyword),
+            NullIfWhiteSpace(City),
+            NullIfWhiteSpace(Skill),
+            NullIfWhiteSpace(Company),
+            hasJobType ? parsedJobType : null,
+            Page <= 0 ? 1 : Page,
+            PageSize);
+
+        if (result.Success && result.Data is not null)
+        {
+            paged = result.Data;
+        }
+        else
+        {
+            loadError = result.Errors.FirstOrDefault() ?? "We could not load jobs right now.";
+        }
+
+        isLoading = false;
+    }
+
+    private string PageUrl(int page)
+    {
+        var parts = new List<string>();
+        AddQuery(parts, "keyword", Keyword);
+        AddQuery(parts, "city", City);
+        AddQuery(parts, "skill", Skill);
+        AddQuery(parts, "company", Company);
+        AddQuery(parts, "jobType", JobTypeFilter);
+        if (page > 1)
+        {
+            parts.Add($"page={page}");
+        }
+
+        return parts.Count == 0 ? "/it-jobs" : $"/it-jobs?{string.Join("&", parts)}";
+    }
+
+    private static void AddQuery(List<string> parts, string name, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            parts.Add($"{name}={Uri.EscapeDataString(value.Trim())}");
+        }
+    }
+
+    private static IEnumerable<int> PageNumbers(int current, int total)
+    {
+        var start = Math.Max(1, Math.Min(current - 2, total - 4));
+        var end = Math.Min(total, start + 4);
+        start = Math.Max(1, end - 4);
+        for (var i = start; i <= end; i++)
+        {
+            yield return i;
+        }
+    }
+
+    private static string? NullIfWhiteSpace(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string CompanyInitial(string companyName) =>
+        string.IsNullOrWhiteSpace(companyName) ? "?" : companyName.Trim().Substring(0, 1).ToUpperInvariant();
+
+    private static string FormatSalary(decimal? min, decimal? max)
+    {
+        if (min.HasValue && max.HasValue)
+        {
+            return $"${min.Value:N0} – ${max.Value:N0}";
+        }
+
+        if (min.HasValue)
+        {
+            return $"From ${min.Value:N0}";
+        }
+
+        if (max.HasValue)
+        {
+            return $"Up to ${max.Value:N0}";
+        }
+
+        return "Negotiable";
+    }
+}
