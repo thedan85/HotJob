@@ -16,6 +16,7 @@ public class Candidate
 {
     public int Id { get; set; }
 
+    [MaxLength(255)]
     public string UserId { get; set; } = default!;
 
     [Required, MaxLength(100)]
@@ -36,6 +37,21 @@ public class Candidate
 
     [Url, MaxLength(2048)]
     public string? LinkedInUrl { get; set; }
+
+    [MaxLength(200)]
+    public string? Position { get; set; }
+
+    [MaxLength(2000)]
+    public string? Summary { get; set; }
+
+    [MaxLength(50)]
+    public string? JobSeekingStatus { get; set; }
+
+    [MaxLength(50)]
+    public string? PreferredWorkModel { get; set; }
+
+    [MaxLength(500)]
+    public string? PreferredLocation { get; set; }
 
     /// <summary>Identity user owning this profile.</summary>
     public ApplicationUser User { get; set; } = default!;

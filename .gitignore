@@ -1,4 +1,4 @@
-080204[Bb]in/
+[Bb]in/
 [Oo]bj/
 .vs/
 *.user
@@ -7,3 +7,6 @@ TestResults/
 
 build.log
 *.log
+.env.local
+node_modules/
+AGENTS.md

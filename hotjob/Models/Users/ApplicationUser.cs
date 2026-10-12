@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace hotjob.Models.Users;
 
-/// <summary>Identity user of the system. Each user is either a candidate or an employer.</summary>
+/// <summary>Identity user of the system. A user may have a candidate profile, an employer profile, or both.</summary>
 public class ApplicationUser : IdentityUser
 {
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -17,4 +17,7 @@ public class ApplicationUser : IdentityUser
 
     /// <summary>Notifications sent to the user.</summary>
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+
+    /// <summary>Persisted refresh-token sessions for this user.</summary>
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

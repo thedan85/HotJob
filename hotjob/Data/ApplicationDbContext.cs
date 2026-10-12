@@ -33,6 +33,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<MatchScore> MatchScores => Set<MatchScore>();
     public DbSet<ModelTrainingLog> ModelTrainingLogs => Set<ModelTrainingLog>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     /// <summary>Configures relationships, delete behaviors, indexes and column precision.</summary>
     /// <param name="modelBuilder">Fluent API builder.</param>
@@ -53,6 +54,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<CompanyProfile>()
             .HasOne(x => x.VerifiedBy).WithMany().HasForeignKey(x => x.VerifiedByAdminId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<CompanyProfile>()
+            .HasIndex(x => x.CompanyName).IsUnique();
 
         modelBuilder.Entity<Resume>().HasOne(x => x.Candidate).WithMany(x => x.Resumes).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Education>().HasOne(x => x.Resume).WithMany(x => x.Educations).HasForeignKey(x => x.ResumeId).OnDelete(DeleteBehavior.Cascade);
@@ -104,5 +107,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<MatchScore>().HasOne(x => x.Resume).WithMany(x => x.MatchScores).HasForeignKey(x => x.ResumeId).OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ModelTrainingLog>().HasOne(x => x.TrainedBy).WithMany().HasForeignKey(x => x.TrainedByUserId).OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<RefreshToken>()
+            .HasOne(x => x.User).WithMany(x => x.RefreshTokens).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<RefreshToken>().HasIndex(x => x.TokenHash).IsUnique();
+        modelBuilder.Entity<RefreshToken>().HasIndex(x => new { x.UserId, x.RevokedAtUtc });
     }
 }

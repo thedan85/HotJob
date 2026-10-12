@@ -15,6 +15,7 @@ public class Employer
 {
     public int Id { get; set; }
 
+    [MaxLength(255)]
     public string UserId { get; set; } = default!;
 
     public int CompanyProfileId { get; set; }

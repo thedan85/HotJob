@@ -1,0 +1,120 @@
+@page "/login"
+@layout RegisterLayout
+@rendermode InteractiveServer
+@using hotjob.DTOs.Authentication
+@using hotjob.Services.Authentication
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject IJSRuntime JS
+@inject ILogger<LoginPage> Logger
+@inject NavigationManager NavigationManager
+
+<PageTitle>Sign in | HotJob</PageTitle>
+
+<div class="login-card">
+    <section class="login-form-panel" aria-labelledby="login-title">
+        <div class="login-form-inner">
+            <div class="eyebrow"><span class="spark" aria-hidden="true">✦</span> Welcome back</div>
+            <h1 id="login-title">Sign in to HotJob</h1>
+            <p class="intro">Pick up where you left off and find your next opportunity.</p>
+
+            <EditForm Model="form" OnValidSubmit="SubmitAsync" class="login-form">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="validation-summary" />
+
+                <div class="field-group">
+                    <label for="login-email">Email</label>
+                    <InputText id="login-email" type="email" @bind-Value="form.Email" placeholder="you@example.com" autocomplete="email" />
+                    <ValidationMessage For="@(() => form.Email)" />
+                </div>
+
+                <div class="field-group">
+                    <div class="field-label-row">
+                        <label for="login-password">Password</label>
+                        <a href="/">Forgot password?</a>
+                    </div>
+                    <div class="password-wrap">
+                        <InputText id="login-password" type="@(showPassword ? "text" : "password")" @bind-Value="form.Password" placeholder="Enter your password" autocomplete="current-password" />
+                        <button type="button" class="password-toggle" @onclick="TogglePassword" aria-label="@(showPassword ? "Hide password" : "Show password")">@(showPassword ? "Hide" : "Show")</button>
+                    </div>
+                    <ValidationMessage For="@(() => form.Password)" />
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(message))
+                {
+                    <div class="form-message @(isSuccess ? "success" : "error")" role="alert">@message</div>
+                }
+
+                <button class="submit-button" type="submit" disabled="@isSubmitting">
+                    @(isSubmitting ? "Signing in..." : "Sign In")
+                    <span aria-hidden="true">→</span>
+                </button>
+            </EditForm>
+
+            <p class="login-prompt">New to HotJob? <a href="/register">Create an account</a></p>
+        </div>
+    </section>
+
+    <aside class="login-benefits-panel" aria-label="HotJob benefits">
+        <div class="login-benefits-inner">
+            <p class="panel-kicker">Your next move starts here</p>
+            <h2>Make work fit your life.</h2>
+            <p>Keep your profile, saved jobs, and applications in one focused workspace.</p>
+            <div class="login-points">
+                <span><strong>01</strong>Personalized job matches</span>
+                <span><strong>02</strong>Transparent salary signals</span>
+                <span><strong>03</strong>Thoughtful company reviews</span>
+            </div>
+        </div>
+    </aside>
+</div>
+
+@code {
+    private readonly LoginRequest form = new();
+    private bool isSubmitting;
+    private bool isSuccess;
+    private bool showPassword;
+    private string? message;
+
+    private void TogglePassword() => showPassword = !showPassword;
+
+    private async Task SubmitAsync()
+    {
+        message = null;
+        isSuccess = false;
+        isSubmitting = true;
+
+        try
+        {
+            // Browser-originated fetch: the HttpOnly refresh cookie is set on the browser,
+            // never through server-side HttpClient (which cannot deliver Set-Cookie to it).
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.login", form.Email, form.Password);
+            if (result.Ok && result.Data is not null)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+                NavigationManager.NavigateTo("/");
+            }
+            else
+            {
+                message = result.ErrorMessage;
+            }
+        }
+        catch (JSException exception)
+        {
+            Logger.LogError(exception, "Login request failed for {Email}.", form.Email);
+            message = "We could not sign you in right now. Please try again.";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Login failed for {Email}.", form.Email);
+            message = "We could not sign you in right now. Please try again.";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+}

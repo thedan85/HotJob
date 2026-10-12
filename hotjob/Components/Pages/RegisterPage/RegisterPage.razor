@@ -1,0 +1,165 @@
+@page "/register"
+@layout RegisterLayout
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components
+@using hotjob.DTOs.Authentication
+@using hotjob.Services.Api
+@inject AccountApiClient AccountApi
+@inject ILogger<RegisterPage> Logger
+
+<PageTitle>Create your HotJob account</PageTitle>
+
+<div class="register-card">
+    <section class="register-form-panel" aria-labelledby="register-title">
+        <div class="form-inner">
+            <div class="eyebrow"><span class="spark" aria-hidden="true">✦</span> Candidate Account Creation</div>
+            <h1 id="register-title">Create Your Account</h1>
+            <p class="intro">Access 1,000+ top job opportunities across industries.</p>
+
+            <EditForm Model="form" OnValidSubmit="SubmitAsync" class="registration-form">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="validation-summary" />
+
+                <div class="field-group">
+                    <label for="full-name">Full Name</label>
+                    <InputText id="full-name" @bind-Value="form.FullName" placeholder="Nguyen Van A" autocomplete="name" />
+                    <ValidationMessage For="@(() => form.FullName)" />
+                </div>
+
+                <div class="field-group">
+                    <label for="email">Email</label>
+                    <InputText id="email" type="email" @bind-Value="form.Email" placeholder="talent@company.com" autocomplete="email" />
+                    <ValidationMessage For="@(() => form.Email)" />
+                </div>
+
+                <div class="field-group">
+                    <label for="password">Password</label>
+                    <div class="password-wrap">
+                        <InputText id="password" type="@(showPassword ? "text" : "password")" @bind-Value="form.Password" placeholder="Create a password" autocomplete="new-password" />
+                        <button type="button" class="password-toggle" @onclick="TogglePassword" aria-label="@(showPassword ? "Hide password" : "Show password")">@(showPassword ? "Hide" : "Show")</button>
+                    </div>
+                    <span class="field-hint">Minimum 6 characters, including uppercase, lowercase, number, and special character.</span>
+                    <ValidationMessage For="@(() => form.Password)" />
+                </div>
+
+                <label class="consent-row" for="consent">
+                    <input id="consent" type="checkbox" @bind="agreedToTerms" />
+                    <span>I agree to the <a href="/">Terms of Service</a> and <a href="/">Privacy Policy</a>.</span>
+                </label>
+
+                @if (!string.IsNullOrWhiteSpace(message))
+                {
+                    <div class="form-message @(isSuccess ? "success" : "error")" role="alert">@message</div>
+                }
+
+                <button class="submit-button" type="submit" disabled="@isSubmitting">
+                    @(isSubmitting ? "Creating account..." : "Create Account")
+                    <span aria-hidden="true">→</span>
+                </button>
+            </EditForm>
+
+            <p class="login-prompt">Already have a HotJob account? <a href="/login">Log in now</a></p>
+        </div>
+    </section>
+
+    <aside class="benefits-panel" aria-label="Why join HotJob">
+        <div class="benefits-inner">
+            <h2>@((MarkupString)panel.HeadingHtml)</h2>
+            <p class="panel-copy">@panel.Subheading</p>
+
+            <div class="benefit-list">
+                @foreach (var benefit in panel.Benefits)
+                {
+                    <div class="benefit-item">
+                        <span class="benefit-icon" aria-hidden="true">@benefit.Icon</span>
+                        <div><strong>@benefit.Title</strong><span>@benefit.Description</span></div>
+                    </div>
+                }
+            </div>
+
+            <blockquote>
+                <div class="stars" aria-label="Rated 5 out of 5">★★★★★</div>
+                "@panel.Quote"
+                <cite>— @panel.QuoteAuthor</cite>
+            </blockquote>
+        </div>
+    </aside>
+</div>
+
+@code {
+    private bool agreedToTerms;
+    private bool isSubmitting;
+    private bool isSuccess;
+    private bool showPassword;
+    private string? message;
+
+    private RegisterAccountRequest form = new()
+    {
+        AccountType = AccountType.Candidate
+    };
+
+    private PanelContent panel => new(
+            "Join a Community of <span>70,000+ Talents</span>",
+            "Find your ideal career destination with premier benefits from HotJob.",
+            new[]
+            {
+                new Benefit("⚡", "AI-Powered Job Matching", "Smart resume analysis and real-time match percentage calculation for each open role."),
+                new Benefit("🔒", "Confidential Passive Search", "Browse incognito with stealth mode, proactively shielding your profile from current employers."),
+                new Benefit("📊", "Transparent Salary Reports", "Access verified compensation benchmarks categorized by specialized role and years of experience.")
+            },
+            "Thanks to the AI Matching feature, I quickly connected with tailored roles matching my actual background with an immediate 35% compensation increase.",
+            "Hoang Nam, Marketing Manager");
+
+    private void TogglePassword() => showPassword = !showPassword;
+
+    private async Task SubmitAsync()
+    {
+        message = null;
+        isSuccess = false;
+
+        if (!agreedToTerms)
+        {
+            message = "Please accept the Terms of Service and Privacy Policy to continue.";
+            return;
+        }
+
+        isSubmitting = true;
+        try
+        {
+            var result = await AccountApi.RegisterAsync(form);
+            if (result.Success)
+            {
+                isSuccess = true;
+                message = "Your account is ready. Welcome to HotJob.";
+                form = new RegisterAccountRequest { AccountType = AccountType.Candidate };
+                agreedToTerms = false;
+            }
+            else
+            {
+                message = string.Join(" ", result.Errors);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Registration submission failed for {Email}.", form.Email);
+            message = "We could not create your account right now. Please try again.";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private sealed record Benefit(string Icon, string Title, string Description);
+
+    private sealed record PanelContent(
+        string HeadingHtml,
+        string Subheading,
+        IReadOnlyList<Benefit> Benefits,
+        string Quote,
+        string QuoteAuthor);
+}

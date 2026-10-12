@@ -1,0 +1,278 @@
+@page "/employer/company"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using hotjob.DTOs.Employer
+@using hotjob.Models.Users
+@using hotjob.Services.Api
+@inject CompanyApiClient CompanyApi
+
+<PageTitle>Company Profile &amp; Team | HotJob</PageTitle>
+
+<AuthorizeView Roles="Employer">
+    <Authorized Context="auth">
+        <div class="ec-page">
+            <div class="ec-header-grid">
+                <section class="ec-header">
+                    <p class="ec-eyebrow">Enterprise management</p>
+                    <h1>Company Profile &amp; Team Member Management</h1>
+                    <p>Manage organization identity, verification status, and team member approvals under enterprise compliance standards.</p>
+                    @if (companyPage is not null)
+                    {
+                        <div class="ec-stat-row">
+                            <div class="ec-stat"><span>Organization ID</span><strong>#@(companyPage.Company.Id)</strong></div>
+                            <div class="ec-stat"><span>Your role</span><strong>@(companyPage.IsOwner ? "Owner" : "Member")</strong></div>
+                            <div class="ec-stat"><span>Active Seats</span><strong>@(companyPage.Members.Count(m => m.MembershipStatus == MembershipStatus.Active)) allocated</strong></div>
+                        </div>
+                    }
+                </section>
+                <section class="ec-status-card" aria-label="Verification status">
+                    @if (companyPage is not null)
+                    {
+                        <span class="ec-badge @(companyPage.Company.Status == CompanyStatus.Approved ? "ec-approved" : string.Empty)">@(companyPage.Company.Status == CompanyStatus.Approved ? "✓ Approved Enterprise" : companyPage.Company.Status.ToString())</span>
+                        <p>COMPANY STATUS</p>
+                        <h2>@(companyPage.Company.CompanyName)</h2>
+                        <p>Identity verified by HotJob Enterprise Operations. Only approved companies can publish postings and access ATS data.</p>
+                    }
+                </section>
+            </div>
+
+            <nav class="ec-tabs" aria-label="Company sections">
+                <button class="ec-tab @(activeTab == "team" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => activeTab = "team"'>⛉ Team Members &amp; Permissions</button>
+                <button class="ec-tab @(activeTab == "profile" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => activeTab = "profile"'>▤ Company Profile &amp; Branding</button>
+                <button class="ec-tab @(activeTab == "compliance" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => activeTab = "compliance"'>☑ Verification &amp; Compliance</button>
+                <button class="ec-tab @(activeTab == "audit" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => activeTab = "audit"'>◷ Activity &amp; Audit Log</button>
+            </nav>
+
+            @if (isLoading)
+            {
+                <div class="ec-card" role="status">Loading your company...</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="ec-card" role="alert">@loadError</div>
+            }
+            else if (companyPage is not null)
+            {
+                @if (activeTab == "team")
+                {
+                    <section class="ec-card">
+                        <h2>Member Access Control</h2>
+                        <p class="ec-sub">Users joining an existing company stay Pending and cannot access ATS data or post jobs until the owner approves them.</p>
+                        @{
+                            var pending = companyPage.Members.Where(m => m.MembershipStatus == MembershipStatus.Pending).ToList();
+                            var active = companyPage.Members.Where(m => m.MembershipStatus != MembershipStatus.Pending).ToList();
+                        }
+                        <h3>@pending.Count pending join request@(pending.Count == 1 ? string.Empty : "s")@(companyPage.IsOwner ? " awaiting owner approval" : string.Empty)</h3>
+                        <div class="ec-grid-2" style="margin-bottom:16px">
+                            @foreach (var p in pending)
+                            {
+                                <div class="ec-pending-card">
+                                    <strong>@p.FullName</strong>
+                                    <span style="font-size:12px;color:var(--hj-muted)">@(p.Position ?? "Member") · @(p.Email ?? "no email")</span>
+                                    @if (companyPage.IsOwner)
+                                    {
+                                        <div class="ec-btn-row">
+                                            <button class="ec-btn ec-btn-primary ec-btn-small" type="button" disabled="@isActing" @onclick="() => ApproveAsync(p.Id, p.FullName)">Approve</button>
+                                            <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" disabled="@isActing" @onclick="() => RejectAsync(p.Id, p.FullName)">Reject</button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            @if (pending.Count == 0)
+                            {
+                                <p class="ec-sub">No pending requests.</p>
+                            }
+                        </div>
+                        <h3>Active members</h3>
+                        @foreach (var m in active)
+                        {
+                            <div class="ec-member-row">
+                                <div><strong>@m.FullName</strong><br /><small>@(m.Position ?? "Member") · @(m.Email ?? "no email")</small></div>
+                                <span class="ec-badge @(m.IsOwner ? "ec-owner" : "ec-active")">@(m.IsOwner ? "Owner" : m.MembershipStatus.ToString())</span>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(notice))
+                        {
+                            <p class="ec-notice" role="status" style="margin-top:12px">@notice</p>
+                        }
+                    </section>
+                }
+                else if (activeTab == "profile")
+                {
+                    <section class="ec-card">
+                        <h2>Company Profile &amp; Branding</h2>
+                        <p class="ec-sub">@(companyPage.IsOwner ? "Only the owner can edit these fields." : "Read-only — only the company owner can edit.")</p>
+                        <EditForm Model="companyForm" OnValidSubmit="SaveAsync">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary />
+                            <div class="ec-form-grid">
+                                <label>Company name <InputText @bind-Value="companyName" disabled="true" /></label>
+                                <label>Website <InputText @bind-Value="companyForm.Website" disabled="@(!editing)" /></label>
+                                <label>Industry <InputText @bind-Value="companyForm.Industry" disabled="@(!editing)" /></label>
+                                <label>Location <InputText @bind-Value="companyForm.Location" disabled="@(!editing)" /></label>
+                                <label>Scale
+                                    <InputSelect @bind-Value="companyForm.Scale" disabled="@(!editing)">
+                                        <option value="">—</option>
+                                        @foreach (var s in Enum.GetValues<CompanyScale>())
+                                        {
+                                            <option value="@s">@s</option>
+                                        }
+                                    </InputSelect>
+                                </label>
+                                <label class="ec-wide">Description <InputTextArea @bind-Value="companyForm.Description" rows="3" disabled="@(!editing)" /></label>
+                            </div>
+                            <div class="ec-btn-row">
+                                @if (companyPage.IsOwner)
+                                {
+                                    @if (!editing)
+                                    {
+                                        <button class="ec-btn ec-btn-secondary" type="button" @onclick="() => editing = true">Edit profile</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="ec-btn ec-btn-primary" type="submit" disabled="@isActing">@(isActing ? "Saving..." : "Save")</button>
+                                    }
+                                }
+                            </div>
+                        </EditForm>
+                        @if (!string.IsNullOrWhiteSpace(savedMessage))
+                        {
+                            <p class="ec-notice" role="status" style="margin-top:12px">@savedMessage</p>
+                        }
+                    </section>
+                }
+                else if (activeTab == "compliance")
+                {
+                    <section class="ec-card">
+                        <h2>Verification &amp; Compliance Documents</h2>
+                        <p class="ec-sub">Status: @(companyPage.Company.Status). Strict data isolation active — HR of another company cannot see your applications.</p>
+                        <div class="ec-pending-card"><strong>Business License</strong><span style="font-size:12px;color:var(--hj-muted)">@(companyPage.Company.Status)</span></div>
+                    </section>
+                }
+                else
+                {
+                    @* ponytail: no audit model exists; entries below are hardcoded demo. *@
+                    <section class="ec-card">
+                        <h2>Activity &amp; Access Audit Log</h2>
+                        <p class="ec-sub">Demo entries.</p>
+                        <ul class="ec-audit">
+                            <li><strong>Job closed</strong> — “Intern .NET”, 10 open applications mass-rejected.<br /><small>09 Oct 2026 · by owner</small></li>
+                            <li><strong>Member approved</strong> — recruiter join request accepted.<br /><small>02 Oct 2026 · by owner</small></li>
+                            <li><strong>Interview scheduled</strong> — Shortlisted → Interviewing auto-advance.<br /><small>28 Sep 2026 · by recruiter</small></li>
+                        </ul>
+                    </section>
+                }
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string activeTab = "team";
+    private bool editing;
+    private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private bool isActing;
+    private string? loadError;
+    private string? notice;
+    private string? savedMessage;
+    private string companyName = string.Empty;
+    private CompanyPageResponse? companyPage;
+    private readonly UpdateCompanyRequest companyForm = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (isLoading && hasLoadedOnce)
+        {
+            return;
+        }
+        isLoading = true;
+        hasLoadedOnce = true;
+        loadError = null;
+        try
+        {
+            var result = await CompanyApi.GetPageAsync();
+            if (!result.Success || result.Data is null)
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "We could not load your company.";
+                return;
+            }
+            companyPage = result.Data;
+            companyName = companyPage.Company.CompanyName;
+            companyForm.Website = companyPage.Company.Website;
+            companyForm.Industry = companyPage.Company.Industry;
+            companyForm.Location = companyPage.Company.Location;
+            companyForm.Scale = companyPage.Company.Scale;
+            companyForm.Description = companyPage.Company.Description;
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        savedMessage = null;
+        isActing = true;
+        try
+        {
+            var result = await CompanyApi.UpdateAsync(companyForm);
+            if (result.Success && result.Data is not null)
+            {
+                editing = false;
+                savedMessage = "Company profile saved.";
+                await LoadAsync();
+            }
+            else
+            {
+                savedMessage = result.Errors.FirstOrDefault() ?? "Could not save this company.";
+            }
+        }
+        finally
+        {
+            isActing = false;
+        }
+    }
+
+    private async Task ApproveAsync(int memberId, string fullName)
+    {
+        notice = null;
+        isActing = true;
+        try
+        {
+            var result = await CompanyApi.ApproveMemberAsync(memberId);
+            notice = result.Success ? $"Approved {fullName}." : result.Errors.FirstOrDefault() ?? "Could not approve this member.";
+            if (result.Success) await LoadAsync();
+        }
+        finally
+        {
+            isActing = false;
+        }
+    }
+
+    private async Task RejectAsync(int memberId, string fullName)
+    {
+        notice = null;
+        isActing = true;
+        try
+        {
+            var result = await CompanyApi.RejectMemberAsync(memberId);
+            notice = result.Success ? $"Rejected {fullName}." : result.Errors.FirstOrDefault() ?? "Could not reject this member.";
+            if (result.Success) await LoadAsync();
+        }
+        finally
+        {
+            isActing = false;
+        }
+    }
+}

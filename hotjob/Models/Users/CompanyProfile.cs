@@ -53,6 +53,7 @@ public class CompanyProfile
     public DateTime? VerifiedAt { get; set; }
 
     /// <summary>Admin who verified this company. Null until reviewed.</summary>
+    [MaxLength(255)]
     public string? VerifiedByAdminId { get; set; }
 
     /// <summary>Admin who verified this company. Null until reviewed.</summary>

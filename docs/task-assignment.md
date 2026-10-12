@@ -3,10 +3,10 @@
 Sử dụng code Blazor pages + service/EF . Dùng chung `ApplicationDbContext`, entities trong `hotjob/Models/`, roles `Admin/Candidate/Employer`. Không ai sửa DbContext/entities khi chưa thống nhất nhóm.
 
 ## M1 — Nền tảng: Auth + Layout + Admin
-- Frontend: layout, nav theo role, trang Login/Register, trang Admin (duyệt Company, ban/unban user, xem ModelTrainingLogs).
-- Backend: Identity wiring (đã có trong Program.cs), `IdentitySeeder`, authorize policies, CRUD admin cho `CompanyProfiles` (Approve/Reject + RejectionReason), khóa `ApplicationUser.IsActive`.
+- Frontend: layout, nav theo role, trang Login/Register (chỉ Candidate), nút Become Employer, trang Admin (duyệt Company, ban/unban user, xem ModelTrainingLogs).
+- Backend: Identity wiring (đã có trong Program.cs), `IdentitySeeder`, authorize policies, endpoint Become Employer (tạo `Employers` + gán role, không chờ Admin), CRUD admin cho `CompanyProfiles` (Approve/Reject + RejectionReason), khóa `ApplicationUser.IsActive`.
 - Nhận: xong đầu tiên, các cụm khác chờ auth để gắn `[Authorize]`.
-- Xong khi: đăng nhập 3 roles, Admin duyệt Company được, user bị ban không login được.
+- Xong khi: register ra Candidate, Become Employer lên Employer ngay, Admin duyệt Company được, user bị ban không login được.
 
 ## M2 — Candidate: Resume/CV
 - Frontend: trang quản lý Resumes (list/tạo/sửa/xóa, set primary), form Education + WorkExperience + ResumeSkills, upload file CV.

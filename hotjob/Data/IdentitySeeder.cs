@@ -12,22 +12,47 @@ public static class AppRoles
     public const string Employer = "Employer";
 }
 
-/// <summary>Strongly-typed admin seed settings. Bind from configuration; never hardcode credentials.</summary>
+/// <summary>Strongly-typed development seed settings. Bind from configuration; never hardcode credentials.</summary>
 public sealed class SeedOptions
 {
     public const string SectionName = "Seed";
+
+    public List<SeedAdminAccount> Admins { get; set; } = [];
 
     /// <summary>Admin email used for the initial admin account.</summary>
     public string AdminEmail { get; set; } = string.Empty;
 
     /// <summary>Admin password (provide via user-secrets or env vars, never source control).</summary>
     public string AdminPassword { get; set; } = string.Empty;
+
+    public string CandidateEmail { get; set; } = string.Empty;
+
+    public string CandidatePassword { get; set; } = string.Empty;
+
+    public SeedDemoOptions? Demo { get; set; }
+}
+
+public sealed class SeedAdminAccount
+{
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+}
+
+public sealed class SeedDemoOptions
+{
+    public string CompanyName { get; set; } = string.Empty;
+    public string EmployerEmail { get; set; } = string.Empty;
+    public string EmployerPassword { get; set; } = string.Empty;
+    public string EmployerName { get; set; } = string.Empty;
+    public string CandidateEmail { get; set; } = string.Empty;
+    public string CandidatePassword { get; set; } = string.Empty;
+    public string CandidateName { get; set; } = string.Empty;
 }
 
 /// <summary>Seeds Identity roles and the initial admin account.</summary>
 public static class IdentitySeeder
 {
-    /// <summary>Creates roles and the admin user if missing. Idempotent.</summary>
+    /// <summary>Creates roles and configured development users if missing. Idempotent.</summary>
     /// <param name="roleManager">Identity role manager.</param>
     /// <param name="userManager">Identity user manager.</param>
     /// <param name="seed">Admin seed settings from configuration.</param>
@@ -36,6 +61,7 @@ public static class IdentitySeeder
     public static async Task SeedAsync(
         RoleManager<IdentityRole> roleManager,
         UserManager<ApplicationUser> userManager,
+        ApplicationDbContext dbContext,
         SeedOptions seed,
         ILogger logger,
         CancellationToken cancellationToken = default)
@@ -58,15 +84,63 @@ public static class IdentitySeeder
                 }
             }
 
-            if (string.IsNullOrWhiteSpace(seed.AdminEmail) || string.IsNullOrWhiteSpace(seed.AdminPassword))
-                throw new InvalidOperationException($"Missing {SeedOptions.SectionName}:AdminEmail or {SeedOptions.SectionName}:AdminPassword.");
+            var admins = seed.Admins.Count > 0
+                ? seed.Admins
+                : string.IsNullOrWhiteSpace(seed.AdminEmail) || string.IsNullOrWhiteSpace(seed.AdminPassword)
+                    ? []
+                    : [new SeedAdminAccount { Email = seed.AdminEmail, Password = seed.AdminPassword }];
 
-            if (await userManager.FindByEmailAsync(seed.AdminEmail).ConfigureAwait(false) is null)
+            if (admins.Count == 0)
             {
-                var admin = new ApplicationUser { UserName = seed.AdminEmail, Email = seed.AdminEmail, EmailConfirmed = true };
-                (await userManager.CreateAsync(admin, seed.AdminPassword).ConfigureAwait(false)).ThrowIfFailed();
-                (await userManager.AddToRoleAsync(admin, AppRoles.Admin).ConfigureAwait(false)).ThrowIfFailed();
-                logger.LogInformation("Seeded admin account {Email}.", seed.AdminEmail);
+                logger.LogWarning(
+                    "Identity roles were seeded, but no admin account was configured in {Section}:Admins.",
+                    SeedOptions.SectionName);
+            }
+            foreach (var adminSeed in admins.Where(admin =>
+                         !string.IsNullOrWhiteSpace(admin.Email) &&
+                         !string.IsNullOrWhiteSpace(admin.Password)))
+            {
+                if (await userManager.FindByEmailAsync(adminSeed.Email).ConfigureAwait(false) is null)
+                {
+                    var admin = new ApplicationUser
+                    {
+                        UserName = adminSeed.Email,
+                        Email = adminSeed.Email,
+                        EmailConfirmed = true
+                    };
+                    (await userManager.CreateAsync(admin, adminSeed.Password).ConfigureAwait(false)).ThrowIfFailed();
+                    (await userManager.AddToRoleAsync(admin, AppRoles.Admin).ConfigureAwait(false)).ThrowIfFailed();
+                    logger.LogInformation("Seeded admin account {Email}.", adminSeed.Email);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(seed.CandidateEmail) || string.IsNullOrWhiteSpace(seed.CandidatePassword))
+            {
+                logger.LogWarning(
+                    "The candidate account was skipped because {Section}:CandidateEmail and {Section}:CandidatePassword are not configured.",
+                    SeedOptions.SectionName,
+                    SeedOptions.SectionName);
+                return;
+            }
+
+            var candidateUser = await userManager.FindByEmailAsync(seed.CandidateEmail).ConfigureAwait(false);
+            if (candidateUser is null)
+            {
+                candidateUser = new ApplicationUser
+                {
+                    UserName = seed.CandidateEmail,
+                    Email = seed.CandidateEmail,
+                    EmailConfirmed = true
+                };
+                (await userManager.CreateAsync(candidateUser, seed.CandidatePassword).ConfigureAwait(false)).ThrowIfFailed();
+                (await userManager.AddToRoleAsync(candidateUser, AppRoles.Candidate).ConfigureAwait(false)).ThrowIfFailed();
+                dbContext.Candidates.Add(new Candidate
+                {
+                    UserId = candidateUser.Id,
+                    FullName = "Demo Candidate"
+                });
+                await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                logger.LogInformation("Seeded candidate account {Email}.", seed.CandidateEmail);
             }
         }
         catch (OperationCanceledException)

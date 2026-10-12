@@ -1,0 +1,177 @@
+@page "/jobs/{id:int}"
+@using hotjob.DTOs.Job
+@using hotjob.Models.Job
+@using hotjob.Services.Common
+@using hotjob.Services.Job
+@inject IJobService JobService
+@attribute [StreamRendering]
+
+<PageTitle>@(job is null ? "Job detail" : $"{job.Title} | HotJob")</PageTitle>
+
+@if (isLoading)
+{
+    <p class="job-detail-status" role="status">Loading job…</p>
+}
+else if (loadError == "not-found" || job is null)
+{
+    <div class="job-detail-empty">
+        <h1>Job not found</h1>
+        <p>This role is no longer available or never existed.</p>
+        <a class="jobs-clear" href="/it-jobs">← Back to jobs</a>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <p class="job-detail-status job-detail-error" role="alert">@loadError</p>
+}
+else
+{
+    <nav class="job-detail-crumb" aria-label="Breadcrumb">
+        <a href="/it-jobs">← Back to jobs</a>
+    </nav>
+
+    <div class="job-detail-layout">
+        <article class="job-detail-main">
+            <header class="job-detail-header">
+                <div class="job-logo" aria-hidden="true">@CompanyInitial(job.CompanyName)</div>
+                <div>
+                    <h1>@job.Title</h1>
+                    <p class="job-company">@job.CompanyName@(string.IsNullOrWhiteSpace(job.CompanyLocation) ? string.Empty : $" · {job.CompanyLocation}")</p>
+                    <p class="job-meta">
+                        <span>@job.JobType</span>
+                        <span> · Posted @job.CreatedAt.ToString("MMM dd, yyyy")</span>
+                        @if (job.ExpiryDate.HasValue)
+                        {
+                            <span> · Expires @job.ExpiryDate.Value.ToString("MMM dd, yyyy")</span>
+                        }
+                        else
+                        {
+                            <span> · No deadline</span>
+                        }
+                        <span> · @(job.ExperienceRequired > 0 ? $"{job.ExperienceRequired} year{(job.ExperienceRequired == 1 ? string.Empty : "s")} experience" : "No experience required")</span>
+                    </p>
+                </div>
+            </header>
+
+            <p class="job-salary job-detail-salary">@FormatSalary(job.SalaryMin, job.SalaryMax)</p>
+
+            @if (job.Skills.Count > 0)
+            {
+                <section aria-label="Required skills">
+                    <h2>Skills</h2>
+                    <div class="job-tags">
+                        @foreach (var skill in job.Skills)
+                        {
+                            <span class="job-tag">@skill.SkillName@(skill.ImportanceWeight > 0 ? $" · {skill.ImportanceWeight:0.#}/10" : string.Empty)</span>
+                        }
+                    </div>
+                </section>
+            }
+
+            <section aria-label="Job description">
+                <h2>Description</h2>
+                <div class="job-detail-desc">@job.Description</div>
+            </section>
+
+            <section aria-label="Categories">
+                <h2>Categories</h2>
+                @if (job.Categories.Count > 0)
+                {
+                    <div class="job-tags">
+                        @foreach (var category in job.Categories)
+                        {
+                            <span class="job-tag">@category.Name</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="job-detail-muted">Uncategorized</p>
+                }
+            </section>
+        </article>
+
+        <aside class="job-detail-side">
+            <div class="job-detail-company">
+                <h2>@job.CompanyName</h2>
+                @if (!string.IsNullOrWhiteSpace(job.CompanyLocation))
+                {
+                    <p class="job-detail-muted">@job.CompanyLocation</p>
+                }
+            </div>
+            <div class="job-detail-auth">
+                <a class="jobs-search-button" href="/login">Sign in to apply</a>
+                <a class="jobs-clear" href="/register">Create account to save</a>
+            </div>
+        </aside>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private JobDetailResponse? job;
+    private bool isLoading = true;
+    private string? loadError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        job = null;
+
+        if (Id <= 0)
+        {
+            loadError = "not-found";
+            isLoading = false;
+            return;
+        }
+
+        try
+        {
+            var result = await JobService.GetPublishedAsync(Id);
+            if (result.Success && result.Data is not null)
+            {
+                job = result.Data;
+            }
+            else if (result.ErrorType == ServiceErrorType.NotFound)
+            {
+                loadError = "not-found";
+            }
+            else
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "We could not load this job right now.";
+            }
+        }
+        catch
+        {
+            loadError = "We could not load this job right now.";
+        }
+
+        isLoading = false;
+    }
+
+    private static string CompanyInitial(string companyName) =>
+        string.IsNullOrWhiteSpace(companyName) ? "?" : companyName.Trim().Substring(0, 1).ToUpperInvariant();
+
+    private static string FormatSalary(decimal? min, decimal? max)
+    {
+        if (min.HasValue && max.HasValue)
+        {
+            return $"${min.Value:N0} – ${max.Value:N0}";
+        }
+
+        if (min.HasValue)
+        {
+            return $"From ${min.Value:N0}";
+        }
+
+        if (max.HasValue)
+        {
+            return $"Up to ${max.Value:N0}";
+        }
+
+        return "Negotiable";
+    }
+}

@@ -1,8 +1,8 @@
 # HotJob — Database Design (ASP.NET Identity + ATS Job Board)
 
-7 bảng Identity (`AspNetUsers`...`AspNetRoleClaims` do `IdentityDbContext<ApplicationUser>` sinh) + 20 bảng domain = **27 bảng**.
+7 bảng Identity (`AspNetUsers`...`AspNetRoleClaims` do `IdentityDbContext<ApplicationUser>` sinh) + 21 bảng domain = **28 bảng**.
 
-## Entities (20 domain)
+## Entities (21 domain)
 
 | # | Entity | File | FK chính |
 |---|--------|------|----------|
@@ -18,7 +18,7 @@
 | 10 | `JobCategory` | Models/Job/JobCategory.cs | master |
 | 11 | `JobCategoryMapping` | Models/Job/JobCategoryMapping.cs | PK(JobPostingId, JobCategoryId), n-n |
 | 12 | `JobSkill` | Models/Job/JobSkill.cs | PK(JobPostingId, SkillId), ImportanceWeight |
-| 13 | `Application` | Models/Application/Application.cs | JobPostingId, ResumeId (Restrict), CandidateId, CurrentStatus, SnapshotFileUrl + SnapshotSummary (freeze), unique(JobPostingId, ResumeId) |
+| 13 | `Application` | Models/Application/Application.cs | JobPostingId, ResumeId (Restrict), CandidateId, CurrentStatus, SnapshotFileUrl + SnapshotSummary (freeze), unique(JobPostingId, CandidateId) |
 | 14 | `ApplicationStatusHistory` | Models/Application/ApplicationStatusHistory.cs | ApplicationId (cascade), ChangedByUserId → AspNetUsers (SetNull) — audit ATS |
 | 15 | `Interview` | Models/Application/Interview.cs | ApplicationId (cascade) |
 | 16 | `Review` | Models/Review.cs | CompanyProfileId, CandidateId, unique(Company, Candidate) |
@@ -26,14 +26,15 @@
 | 18 | `Notification` | Models/Notification.cs | UserId → AspNetUsers |
 | 19 | `MatchScore` | Models/ML/MatchScore.cs | PK(JobPostingId, ResumeId) |
 | 20 | `ModelTrainingLog` | Models/ML/ModelTrainingLog.cs | TrainedByUserId → AspNetUsers (SetNull) |
+| 21 | `RefreshToken` | Models/Users/RefreshToken.cs | UserId → AspNetUsers (cascade), TokenHash unique |
 
 ATS = Applicant Tracking System: hệ theo dõi tuyển dụng Job → Apply → Viewed → Shortlisted → Interview → Offer/Reject.
 
 ## Flows
 
-1. **Auth (Identity):** Register → roles Candidate/Employer/Admin. Login/logout Identity lo. `Candidates.UserId` / `Employers.UserId` FK string → AspNetUsers.Id.
-2. **Company verify:** Owner tạo CompanyProfiles(Status=Pending) → Admin Approve/Rejected(+RejectionReason) → chỉ Approved mới Post Job. Member xin join Employers(MembershipStatus=Pending) → Owner duyệt Active.
-3. **Apply:** check Job Published + ExpiryDate > Now → copy file CV → Applications.SnapshotFileUrl + SnapshotSummary (freeze, HR xem bản lúc nộp) → unique(Job, Resume) chống trùng.
+1. **Auth (Identity):** Register → role Candidate (tạo `Candidates`). Become Employer → tạo `Employers` + gán role Employer (1 user giữ cả 2 profile). Admin seed sẵn. `Candidates.UserId` / `Employers.UserId` FK string → AspNetUsers.Id.
+2. **Company verify:** Employer (từ Become Employer) tạo CompanyProfiles(Status=Pending) → Admin Approve/Rejected(+RejectionReason) → chỉ Approved mới Post Job. Member xin join Employers(MembershipStatus=Pending) → Owner duyệt Active.
+3. **Apply:** check Job Published + ExpiryDate > Now → copy file CV → Applications.SnapshotFileUrl + SnapshotSummary (freeze, HR xem bản lúc nộp) → unique(Job, Candidate) chống trùng (1 candidate 1 job 1 đơn).
 4. **ATS state machine:** Pending → Viewed → Shortlisted → Interviewing → Offered/Rejected; Candidate chỉ Withdrawn (khi chưa Offered); Employer chỉ Job thuộc Company mình; Admin all. Mỗi chuyển insert ApplicationStatusHistory.
-5. **Close/Expire:** Close hoặc ExpiryDate qua → apps đang Pending/Viewed/Shortlisted/Interviewing mass chuyển Rejected, Notes="Job closed". Hết hạn không cho apply mới.
+5. **Close/Expire:** Close chủ động → apps đang Pending/Viewed/Shortlisted/Interviewing mass chuyển Rejected, Notes="Job closed". ExpiryDate qua → Status Expired, ẩn khỏi list Candidate, apps dở giữ nguyên cho HR xử tiếp. Hết hạn không cho apply mới.
 6. **Ownership:** mọi query lọc theo CandidateId / CompanyProfileId. ML MatchScore tính từ ResumeSkills ↔ JobSkills.

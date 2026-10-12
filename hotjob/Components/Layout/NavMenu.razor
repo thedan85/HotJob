@@ -1,30 +1,102 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">hotjob</a>
+﻿@rendermode InteractiveServer
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject AuthSession AuthSession
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@using hotjob.Services.Authentication
+
+<header class="top-row">
+    <div class="nav-inner">
+        <a class="navbar-brand" href="" aria-label="HotJob home">
+            <span class="brand-hot">hot</span><span>job</span>
+        </a>
+
+        <input type="checkbox" title="Navigation menu" class="navbar-toggler" id="site-menu-toggle" />
+        <label class="menu-toggle" for="site-menu-toggle" aria-label="Toggle navigation">
+            <span></span><span></span><span></span>
+        </label>
+
+        <nav class="nav-scrollable" aria-label="Primary navigation">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
+            <NavLink class="nav-link" href="companies">Companies</NavLink>
+            <NavLink class="nav-link" href="it-jobs">Explore jobs</NavLink>
+     
+            <NavLink class="nav-link" href="register">For employers</NavLink>
+            <AuthorizeView Roles="Employer">
+                <Authorized>
+                    <NavLink class="nav-link" href="employer/jobs">My Jobs</NavLink>
+                    <NavLink class="nav-link" href="employer/interviews">Applicants</NavLink>
+                    <NavLink class="nav-link" href="employer/company">Company</NavLink>
+                </Authorized>
+            </AuthorizeView>
+        </nav>
+
+        <div class="nav-actions">
+            <a class="nav-language" href="">EN <span>/</span> VI</a>
+            <AuthorizeView>
+                <Authorized Context="authState">
+                    <a class="nav-user" href="/profile" title="View your profile">
+                        <span class="nav-avatar" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="8" r="3.5" />
+                                <path d="M5 19.2c1.2-3.3 3.9-5.2 7-5.2s5.8 1.9 7 5.2" />
+                            </svg>
+                        </span>
+                        @authState.User.Identity?.Name
+                    </a>
+                    <button class="nav-sign-out" type="button" @onclick="SignOutAsync">Sign out</button>
+                </Authorized>
+                <NotAuthorized>
+                    <a class="nav-sign-in" href="/login">Sign in</a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
     </div>
-</div>
+</header>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
+        // Session restore: the HttpOnly refresh cookie survives reloads, the scoped
+        // AuthSession does not — rehydrate the UI from GET /api/auth/me per circuit.
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
+            if (result.Ok && result.Data is not null)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+            }
+            else if (AuthSession.IsAuthenticated)
+            {
+                // Cookie gone (logout in another tab) — drop the stale in-memory session.
+                AuthStateProvider.SignOut();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // JS interop unavailable (prerender) — keep whatever state exists.
+        }
+    }
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
+    private async Task SignOutAsync()
+    {
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.logout");
+            if (result.Ok || result.Status == 401)
+            {
+                AuthStateProvider.SignOut();
+                NavigationManager.NavigateTo("/");
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // Network/JS failure: keep the session so the user can retry sign out.
+        }
+    }
+}

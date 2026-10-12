@@ -1,133 +1,79 @@
-# HotJob — DESIGN.md (itviec.com clone spec)
+# HotJob — DESIGN.md (as-built)
 
-Benchmark: https://itviec.com/. Approach A: page-by-page clone, mapped to HotJob Models (`hotjob/Models/`, `hotjob/Data/`).
-Blazor Server (.NET 10), EF Core + Identity, MySQL.
+Scope: reflects `hotjob/Components/**/*.razor` + `hotjob/wwwroot/css/*.css` as of 2026-10-09.
+Blazor components (`.razor`) only. No Razor Pages (`.cshtml`) in HotJob — zero `.cshtml` files; the `MyApp/` `.cshtml` sample is a separate project and out of scope.
+Old vision (Top Employers, `/it-jobs`, ATS boards, admin) is moved to §10 gaps — nothing below describes unbuilt pages as done.
 
-Non-goals: no social feed/likes/connections, no per-job admin approval, ML runs BEFORE Apply (not after).
+Stack: Blazor Server (.NET 10), `InteractiveServer` render mode on interactive pages, EF Core Identity + JWT Bearer, MySQL. Auth JS bridge `wwwroot/js/auth.js` (`hotjobAuth.login/me/logout`). Font Lexend (Google Fonts, App.razor).
 
-## 1. Global shell
+## 1. Shell
 
-Header (mirror itviec nav):
-- Logo → `/`. `IT Jobs` mega-menu: by Skill (`Skill.Name`), by Title (`JobPosting.Title` index), by Company (`CompanyProfile.CompanyName`), by City (`CompanyProfile.Location`).
-- `IT Companies` → Best IT Companies + Company Reviews. `Blog` → Salary Report stub. `For Employers` → `/employer`.
-- Icons: inbox + notifications (`[Authorize]`), `Sign In` → Identity, EN/VI toggle (vi default; `ponytail:` full resx later).
+`Components/App.razor`: Bootstrap + `app.css` + one CSS file per page/layout (`MainLayout/NavMenu/RegisterLayout/ReconnectModal/Home/RegisterPage/LoginPage/Profile`), Lexend, `CascadingAuthenticationState > Routes > ReconnectModal`, `js/auth.js` before `blazor.web.js`.
 
-Footer: About (Home/About/Contact/All Jobs/FAQ), Terms (Privacy/Operating/Complaints/Terms), contact block, tax-code line.
+`Components/Routes.razor`: `Router` + `AuthorizeRouteView DefaultLayout=MainLayout`. Not authorized → `RedirectToLogin` when anonymous, else "You do not have access". `FocusOnNavigate h1`.
 
-Blazor: `MainLayout` + `NavMenu` + `JobCard`/`CompanyCard` shared components.
+Two layouts, no shared UI components (`JobCard`/`SkillChip`/etc. do not exist):
+- `Layout/MainLayout.razor`: `.page > NavMenu + main > .content-shell > article.content`. CSS `MainLayout.css`: shell max 1340px, content pad 48/72 (32/48 mobile).
+- `Layout/RegisterLayout.razor`: `.register-shell > header.register-header + main.register-content + footer.register-footer`. Header gradient `269.85deg #1b262c→#0f4c75`, footer `177.12deg #0f4c75→#1b262c`. Header links (`/`, `/`, `/`, `/`) and footer links are `/` placeholders.
 
-## 2. Homepage (`/`)
+## 2. Routes (actual)
 
-Sections (itviec order):
-1. Hero search: keyword + city filter, trending skills chips (Java, ReactJS, .NET, Tester, PHP… from `Skills`).
-2. Campaign banner slot (static content, no model).
-3. Feature shortcuts: Passive Job Search (ML suggestions), IT CV Templates (`Resume`), Story Hub (static), Company Reviews, Salary Report.
-4. `Top Employers`: cards with logo (`LogoUrl`), skills (`JobSkills`), location, open-job count → `/companies/{id}`.
-5. `Featured articles`: static/blog stub.
+| Route | File | Layout | Mode | State |
+|---|---|---|---|---|
+| `/` | `Pages/Home.razor` | Main | static | Built, no DB query |
+| `/register` | `Pages/RegisterPage/RegisterPage.razor` | Register | InteractiveServer | Built, wired to `IAccountService.RegisterAsync` |
+| `/login` | `Pages/LoginPage.razor` | Register | InteractiveServer | Built, wired via JS `hotjobAuth.login` + `HotJobAuthStateProvider.SignIn` |
+| `/profile` | `Pages/Profile.razor` | Main | InteractiveServer | Built, profile fields wired; CV list is hardcoded mock |
+| `/counter`, `/weather` | template defaults | Main | mixed | Placeholders — linked from nav, replace when features land |
+| `/not-found`, `/Error` | `NotFound`/`Error` | Main/none | static | Built |
 
-Query: `JobPostings` where `Status == Published && (ExpiryDate == null || > Now)`, include Company + JobSkills.
+## 3. NavMenu (`Layout/NavMenu.razor`, `NavMenu.css`)
 
-## 3. Jobs
+Sticky `.top-row`, gradient `110deg #1b262c→#0f4c75`. Brand `hot` (#BBE1FA) + `job` (white).
+Links: Home `""`, Explore jobs → `/counter`, Companies → `/weather`, For employers → `/register` (all three are placeholders, see §10).
+Right side: static `EN / VI` (no-op), `AuthorizeView`: authorized → avatar + `User.Identity.Name` linking `/profile` + `Sign out` (`hotjobAuth.logout` → `SignOut`, goto `/`); anonymous → `Sign in` (`/login`).
+Per-circuit session restore in `OnAfterRenderAsync(firstRender)`: `hotjobAuth.me` → `SignIn`, cookie-gone → `SignOut`. Mobile: checkbox hamburger, dropdown panel at ≤720px.
 
-Routes:
-- `/it-jobs` + `/it-jobs/{skill}` + `/it-jobs/{company}` + `/it-jobs/{city}`: filter by keyword, city, skill, `SalaryMin/Max`, `JobType`.
-- `/jobs/{id}` job detail: title, company, description, skills + `ImportanceWeight`, salary, expiry, category mappings.
+## 4. Home (`Pages/Home.razor`, `Home.css`)
 
-Job card fields: `Title`, `Company.CompanyName`, skill names, salary range, `Location` (from Company), `ExpiryDate` badge.
-HotJob-only addition (not on itviec): `MatchPercentage` from `MatchScore` shown BEFORE Apply button.
-Actions: `Apply` (candidate, snapshot freeze to `Application`) / `Save` (`SavedJob`, PK CandidateId+JobPostingId).
+Hero `.home-hero` (gradient `#eaf4fb→#f9fcfd→#d8edf8`, radius 10): eyebrow, `h1` "Find work that fits.", lede, `form.job-search` GET to `/it-jobs` (fields `keyword`, `city`), trending pills → `/it-jobs?keyword=Java|ReactJS|.NET|Tester`. Note: duplicate `<PageTitle>` (second wins); `/it-jobs` route does not exist yet so search 404s (§10).
+Second section: `.shortcut-grid` 3 cards → Get matched `/register`, Meet great teams `/companies` (missing route), Know your value `/register` (dark variant). No campaign banner, no Top Employers, no articles, no DB query.
 
-## 4. Company
+## 5. Register (`/register`)
 
-- `/companies/{id}`: logo, `CompanyName`, `Industry`, `Scale`, `Location`, `Description`, open jobs list.
-- Reviews: 1 review per (Company, Candidate) — unique index enforced; `RatingScore` 1–5, `ReviewText`.
-- `/companies/best`: Best IT Companies list (ordered by avg rating — computed query, no new model).
+Split `.register-card` 1fr/1fr (stacks ≤960px). Form panel: eyebrow "Candidate Account Creation", h1, intro; `EditForm RegisterAccountRequest` (`FullName`, `Email`, `Password`, `AccountType=Candidate` hardcoded — no employer toggle). Password Show/Hide toggle, hint (6+ chars, upper/lower/digit/special), consent checkbox gates submit, Terms/Privacy links → `/` placeholder. Submit → `AccountService.RegisterAsync`, success message + form reset, errors joined. Login prompt → `/login`.
+Benefits panel (dark gradient `#1b262c→#0f4c75`): "70,000+ Talents", 3 items (AI matching / confidential search / salary reports), 5-star quote block.
 
-Entities: `CompanyProfile` (+ `VerifiedBy` FK), `Review`, `JobPosting`.
+## 6. Login (`/login`)
 
-## 5. Candidate (`[Authorize(Roles=Candidate)]`)
+Split `.login-card` 1fr/1fr (stacks ≤860px). Form: "Welcome back" / "Sign in to HotJob"; `EditForm LoginRequest` (`Email`, `Password`), Forgot password? → `/` placeholder, Show/Hide toggle. Submit → browser fetch `hotjobAuth.login(email, password)` (HttpOnly refresh cookie lands on browser, never via server HttpClient) → `AuthStateProvider.SignIn(tokens)` → goto `/`. Failures show `.form-message.error`. Prompt → `/register`. Benefits panel: "Make work fit your life." + 3 numbered points. Styling note: `.submit-button/.eyebrow/.password-wrap/.form-message` reused from `RegisterPage.css` (all CSS is global via App.razor).
 
-- `/resumes`: multi-resume CRUD, upload `FileUrl`, `IsPrimary` flag, education/experience/skills entries.
-- Apply flow: pick resume → freeze `SnapshotFileUrl` + `SnapshotSummary` on `Application` → unique (JobPostingId, CandidateId).
-- `/my-applications`: ATS status timeline (`CurrentStatus` + `ApplicationStatusHistory`: who/when/notes), Withdraw (blocked when Offered).
-- `/saved-jobs`: bookmarked list, un-save.
-- Notifications: new application (to employer), status change, interview invite, company approval.
+## 7. Profile (`/profile`, `Profile.css`)
 
-## 6. Employer (`[Authorize(Roles=Employer)]`) + Admin (`[Authorize(Roles=Admin)]`)
+Header: eyebrow, h1 "Candidate Profile & CV Management", "Preview public profile" (`#personal-info` anchor), Save button → `SaveProfileAsync` (disabled while saving).
+Layout: sidebar 290px + content (`1300px` max, stacks on mobile): avatar initials (from FullName), Position/"Candidate", JobSeekingStatus, anchor nav (personal / CVs(count) / preferences).
+Boxes: (a) Personal details — `FullName/Email/Address/Location/Position/LinkedInUrl/Summary`; (b) CV management — badge `n/5`, static upload dropzone (`Browse files` no-op), list from hardcoded `List<CvItem>` (3 `Alex_Nguyen_*` entries, Default badge; Set-default/Download/Delete no-ops); (c) Career preferences — `JobSeekingStatus/PreferredWorkModel/PreferredLocation`. Loading + error states (`Please sign in…`).
+Code: userId from `NameIdentifier ?? "sub"`; `GetProfileAsync` on init, `UpdateProfileAsync` + `RefreshIdentity` on save; `Initials` = first letters of 2 name parts.
 
-Employer:
-- `/employer/jobs`: CRUD job (category via `JobCategoryMapping`, skills via `JobSkill` + weights); Close → mass-reject open applications (Notes="Job closed").
-- `/employer/applications`: ATS board Pending → Viewed → Shortlisted → Interviewing → Offered/Rejected; every transition inserts `ApplicationStatusHistory`.
-- `/employer/interviews`: N interviews per application (`InterviewDate`, `LocationOrLink`, `InterviewType`, `Notes`), notify candidate.
+## 8. Profile ↔ backend map (`DTOs/Authentication/AccountDtos.cs`, `Models/Users/Candidate.cs`)
 
-Admin:
-- `/admin/companies`: Approve/Reject + `RejectionReason`, `VerifiedAt`, `VerifiedByAdminId`.
-- `/admin/users`: lock/unlock (`IsActive`).
-- `/admin/ml-logs`: `ModelTrainingLog` list (RecordCount, AccuracyScore, ModelFilePath, TrainedBy, TrainedAt).
+Rendered: `FullName, Email, Address, LinkedInUrl, Position, Summary, JobSeekingStatus, PreferredWorkModel, PreferredLocation`. Not rendered (supported by DTO, add inputs when needed): `DateOfBirth, Gender, AvatarUrl, GithubUrl`. `UpdateProfileRequest`: null = no change, empty = clear (nullable); email change → `SetEmail/SetUserName`, `EmailConfirmed=false`, 409 on duplicate. `POST change-password` exists backend-only, no UI. CV section maps to nothing — wire to `Resume` model/service when built (`ponytail:` upload + default-flag endpoints, then delete `CvItem` mock).
 
-## 7. Shared components
-
-`JobCard`, `CompanyCard`, `SkillChip`, `SearchBar`, `StatusTimeline`, `RatingStars`, `Pagination`. Forms use DataAnnotations validation from Models.
-
-## 9. UI system (itviec tokens, verbatim)
-
-Source: `application.css` (:root + Style Guide Figma link in comment).
-
-### 9.1 Colors
+## 9. UI tokens (as-built, `app.css`)
 
 ```css
---i-red: #ED1B2F;          /* primary brand */
---i-dark-red: #C82222;     /* primary hover */
---i-white-red: #FFF5F5;    /* secondary hover bg */
---i-light-red: #FFDFDF;    /* selected chip bg, search focus ring */
---i-black: #121212;        /* body text, header/footer gradient base (#54151C → #121212) */
---i-rich-grey: #414042;    /* secondary text */
---i-dark-grey: #A6A6A6;    /* muted, disabled */
---i-silver-grey: #DEDEDE;  /* borders */
---i-light-grey: #F7F7F7;   /* tertiary hover, code bg */
---i-hyperlink: #0E2EED;
---i-success-color: #0AB305; --i-light-success-color: #EAF9E9;
---i-info-color: #085BDD;    --i-light-info-color: #EAF0FA;
---i-error-color: #F60D00;   --i-light-error-color: #FEEEED;
---i-warning-color: #FF9119; --i-light-warning-color: #FFF4E9;
+--hj-ink:#1B262C; --hj-primary:#0F4C75; --hj-primary-light:#BBE1FA; --hj-accent:#3282B8;
+--hj-page-bg:#F5F8FA; --hj-surface:#FFF; --hj-border:#DCE5EA; --hj-muted:#5B6C75;
+--hj-radius-sm:6px; --hj-radius-md:10px;
+--hj-shadow-sm:0 2px 10px rgba(27,38,44,.07); --hj-shadow-lg:0 16px 40px rgba(27,38,44,.16);
 ```
 
-Header nav: `linear-gradient(269.85deg, #54151C 0%, #121212 54.89%)`. Footer: `linear-gradient(177.12deg, #121212 48.81%, #54151C 98.26%)`.
+Buttons are page-scoped, not shared: `.search-button` (Home, 54px, primary→ink hover), `.submit-button` (Register 50px, primary→ink hover), `.profile-btn-primary/secondary/small` (Profile). Focus rings `rgba(50,130,184,.24–.35)`. Old doc's `--i-*` tokens and `.ibtn/.itag/.icontainer/HjButton` do not exist — do not reference them.
 
-### 9.2 Typography
+## 10. Known gaps (fix when features land)
 
-Font: `"Lexend", sans-serif` (Google Fonts, weights 400–900, Vietnamese subset). Body 16px, line-height 1.5, color `#121212`.
-Scale: h1 28/700, h2 22/700, h3 18/700, h4 16/600, `.lg-text` 36/700, `.small-text` 14, `.tiny-text` 12, list marker red (`ul>li::marker #ED1B2F`).
-`hotjob/wwwroot/app.css` hiện dùng Helvetica + `#1b6ec2` — thay bằng Lexend + tokens trên.
+1. `/it-jobs`, `/companies`, `/companies/best` routes missing — Home form/trending/cards link into 404. 2. Nav Explore-jobs→`/counter`, Companies→`/weather` placeholders. 3. Register is candidate-only; `/become-employer` flow not built. 4. Forgot-password, Terms/Privacy, EN/VI, avatar edit, CV upload/actions are no-ops. 5. Candidate `Position` MaxLength drift: model 200 vs `UpdateProfileRequest` 100 — align to 200 when touching DTOs. 6. Home duplicate `<PageTitle>`.
 
-### 9.3 Buttons (`.ibtn`)
+## 11. Rules for new pages
 
-Primary `#ED1B2F` → hover `#C82222`; secondary outline red → hover bg `#FFF5F5`; tertiary white/grey; disabled grey `#A6A6A6`. Sizes sm/md/lg/xs, `border-radius: 4px`. Blazor: `HjButton` (Variant Primary/Secondary/Tertiary, Size Sm/Md/Lg).
-
-### 9.4 Skill tags (`.itag`)
-
-Pill `border-radius: 20px`; light variant border `#DEDEDE` → selected red text/border + `#FFDFDF` bg. Blazor: `SkillChip` (Selected state).
-
-### 9.5 Job cards
-
-Default transparent border; hover `border #DEDEDE + box-shadow 0 4px 24px #0000001F`; selected: red `::before` bar + `border #ED1B2F`; `super-hot` border `#FFDFDF`; logo 48px. Blazor: `JobCard` (Selected/SuperHot flags).
-
-### 9.6 Search
-
-Height var `--search-input-height: 56px` (48px compact); keyword input square-left, red focus ring `0 0 2px 2px #FFDFDF`; desktop search button 240px. Blazor: `SearchBar`.
-
-### 9.7 Layout
-
-`.icontainer` max 1340px; `-sm` 884px; `-xs` 656px; search form 1220px; header full-bleed max 1860px. Radius: 4px buttons/cards, 20px pills, 50% dots/avatars.
-
-## 10. Model ↔ page map
-
-| Page | Models |
-|---|---|
-| Homepage, jobs | `JobPosting`, `JobCategory`, `JobSkill`, `Skill`, `CompanyProfile` |
-| Job detail + match | + `MatchScore`, `SavedJob`, `Application` |
-| Company + reviews | `CompanyProfile`, `Review`, `JobPosting` |
-| Resumes | `Resume`, `Education`, `WorkExperience`, `ResumeSkill` |
-| ATS | `Application`, `ApplicationStatusHistory`, `Interview` |
-| Notify | `Notification` |
-| Admin ML | `ModelTrainingLog` |
+One Blazor component (`.razor`, `@page` + `@rendermode` — never `.cshtml`) + one `css/<Name>.css` linked in `App.razor`; `InteractiveServer` only when calling services/JS; `EditForm + DataAnnotationsValidator` for forms; userId from `NameIdentifier ?? "sub"`; server-side paging (`AsNoTracking`, 10–20/page, no `<Virtualize>`); reuse `--hj-*` tokens, no new palette.

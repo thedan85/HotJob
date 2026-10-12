@@ -5,7 +5,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <DefaultItemExcludesInProjectFolder>$(DefaultItemExcludesInProjectFolder);Tests\**</DefaultItemExcludesInProjectFolder>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Exclude xUnit test project embedded under Tests/ from the main app build -->
+    <Compile Remove="Tests/**/*.cs" />
+    <EmbeddedResource Remove="Tests/**/*" />
+    <None Remove="Tests/**/*" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">

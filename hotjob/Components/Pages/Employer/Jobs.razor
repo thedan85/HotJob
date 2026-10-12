@@ -1,0 +1,387 @@
+@page "/employer/jobs"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using hotjob.DTOs.Job
+@using hotjob.Models.Job
+@using hotjob.Services.Api
+@inject EmployerJobsApiClient JobsApi
+
+<PageTitle>Jobs &amp; Postings | HotJob</PageTitle>
+
+<AuthorizeView Roles="Employer">
+    <Authorized Context="auth">
+        <div class="ej-page">
+            <section class="ej-header">
+                <div>
+                    <p class="ej-eyebrow">Employer workspace</p>
+                    <h1>Jobs &amp; Postings Management</h1>
+                    <p>Create, edit, publish and track company-wide job openings. Draft jobs delete permanently; closing a Published job mass-rejects open applications.</p>
+                </div>
+                <div class="ej-actions">
+                    <button class="ej-btn ej-btn-primary" type="button" @onclick="OpenCreateForm">+ Post New Job</button>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <div class="ej-loading" role="status">Loading your job postings...</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="ej-alert" role="alert">@loadError</div>
+            }
+            else
+            {
+                <section class="ej-metrics" aria-label="Posting metrics">
+                    <div class="ej-metric"><p>Active Postings</p><strong>@publishedCount</strong><span>Receiving candidate CVs</span></div>
+                    <div class="ej-metric"><p>Draft Postings</p><strong>@draftCount</strong><span>Editable &amp; safe to remove</span></div>
+                    <div class="ej-metric"><p>Applications (this page)</p><strong>@jobs.Sum(j => j.ApplicationsCount)</strong><span>Across listed roles</span></div>
+                    <div class="ej-metric"><p>Closed / Expired</p><strong>@(closedCount + expiredCount)</strong><span>Archived</span></div>
+                </section>
+
+                <div class="ej-banner" role="note"><strong>Posting rules:</strong> salary min must not exceed max, expiry must be in the future, and skill/category ids must exist. Closing a Published job moves it to Closed and writes a “Job closed” history row on every open application.</div>
+
+                @if (!string.IsNullOrWhiteSpace(actionMessage))
+                {
+                    <div class="ej-notice" role="status">@actionMessage</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(actionError))
+                {
+                    <div class="ej-alert" role="alert">@actionError</div>
+                }
+
+                <section class="ej-filters" aria-label="Job filters">
+                    <label class="ej-field ej-field-grow">Search <InputText @bind-Value="search" placeholder="Title, skill or category" /></label>
+                    <label class="ej-field">Status
+                        <InputSelect @bind-Value="statusFilter">
+                            <option value="">All statuses</option>
+                            @foreach (var s in Enum.GetValues<JobStatus>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <button class="ej-btn ej-btn-secondary" type="button" @onclick="SearchAsync">Search</button>
+                </section>
+
+                @if (showForm)
+                {
+                    <section class="ej-panel" aria-label="@(editingId is null ? "Post a new job" : "Edit job")">
+                        <h2>@(editingId is null ? "Post a new job" : $"Edit job #{editingId}")</h2>
+                        <p class="ej-sub">Status may only be Draft or Published — close via the table action.</p>
+                        <EditForm Model="jobForm" OnValidSubmit="SaveAsync">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary />
+                            <div class="ej-form-grid">
+                                <label class="ej-wide">Title <InputText @bind-Value="jobForm.Title" placeholder="e.g. Senior .NET Developer" /></label>
+                                <label class="ej-wide">Description <InputTextArea @bind-Value="jobForm.Description" rows="4" /></label>
+                                <label>Salary min <InputNumber @bind-Value="jobForm.SalaryMin" /></label>
+                                <label>Salary max <InputNumber @bind-Value="jobForm.SalaryMax" /></label>
+                                <label>Experience required (years) <InputNumber @bind-Value="jobForm.ExperienceRequired" /></label>
+                                <label>Job type
+                                    <InputSelect @bind-Value="jobForm.JobType">
+                                        @foreach (var t in Enum.GetValues<JobType>())
+                                        {
+                                            <option value="@t">@t</option>
+                                        }
+                                    </InputSelect>
+                                </label>
+                                <label>Expiry date <InputDate @bind-Value="jobForm.ExpiryDate" /></label>
+                                <label>Status
+                                    <InputSelect @bind-Value="jobForm.Status">
+                                        <option value="@JobStatus.Draft">Draft</option>
+                                        <option value="@JobStatus.Published">Published</option>
+                                    </InputSelect>
+                                </label>
+                                <label class="ej-wide">Category ids (comma-separated) <InputText @bind-Value="categoryText" placeholder="e.g. 1, 2" /></label>
+                                <label class="ej-wide">Skills as id:weight (comma-separated, weight 0–10) <InputText @bind-Value="skillText" placeholder="e.g. 3:8, 5:6" /></label>
+                            </div>
+                            <div class="ej-actions" style="margin-top:12px">
+                                <button class="ej-btn ej-btn-primary" type="submit" disabled="@isSaving">@(isSaving ? "Saving..." : editingId is null ? "Post job" : "Save changes")</button>
+                                <button class="ej-btn ej-btn-secondary" type="button" @onclick="CloseForm">Cancel</button>
+                            </div>
+                        </EditForm>
+                    </section>
+                }
+
+                <section class="ej-table-wrap" aria-label="Job postings">
+                    <table class="ej-table">
+                        <thead><tr><th>Title</th><th>Status</th><th>Salary</th><th>Categories</th><th>Applications</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            @foreach (var job in jobs)
+                            {
+                                <tr>
+                                    <td><strong>@job.Title</strong><br /><small style="color:var(--hj-muted)">@job.JobType · @job.ExperienceRequired yr · exp @(job.ExpiryDate?.ToString("dd MMM yyyy") ?? "—")</small></td>
+                                    <td><span class="ej-badge ej-@job.Status.ToString().ToLowerInvariant()">@job.Status</span></td>
+                                    <td>@SalaryRange(job)</td>
+                                    <td>@(job.CategoryNames.Count == 0 ? "—" : string.Join(", ", job.CategoryNames))</td>
+                                    <td>@job.ApplicationsCount</td>
+                                    <td>
+                                        <div class="ej-row-actions">
+                                            <button class="ej-btn ej-btn-secondary ej-btn-small" type="button" @onclick="() => ViewDetailAsync(job.Id)">View</button>
+                                            <button class="ej-btn ej-btn-secondary ej-btn-small" type="button" @onclick="() => OpenEditFormAsync(job.Id)">Edit</button>
+                                            @if (job.Status == JobStatus.Draft || job.Status == JobStatus.Published)
+                                            {
+                                                <button class="ej-btn ej-btn-danger ej-btn-small" type="button" @onclick="() => DeleteOrCloseAsync(job.Id, job.Title, job.Status)">@(pendingDeleteId == job.Id ? "Confirm " + (job.Status == JobStatus.Draft ? "delete?" : "close?") : job.Status == JobStatus.Draft ? "Delete" : "Close")</button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                            @if (jobs.Count == 0)
+                            {
+                                <tr><td colspan="6">No postings match this filter.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+
+                <div class="ej-pagination">
+                    <button class="ej-btn ej-btn-secondary ej-btn-small" type="button" disabled="@(page <= 1)" @onclick="() => ChangePageAsync(page - 1)">← Prev</button>
+                    <span>Page @(page) of @(Math.Max(totalPages, 1)) (@(totalCount) total)</span>
+                    <button class="ej-btn ej-btn-secondary ej-btn-small" type="button" disabled="@(page >= totalPages)" @onclick="() => ChangePageAsync(page + 1)">Next →</button>
+                </div>
+
+                @if (selected is not null)
+                {
+                    <section class="ej-panel" aria-label="Job detail">
+                        <h2>@selected.Title</h2>
+                        <p class="ej-sub">@selected.CompanyName · @selected.Status · @selected.ApplicationsCount applications · @SalaryDetail(selected)</p>
+                        <div class="ej-chip-row">
+                            @foreach (var c in selected.Categories)
+                            {
+                                <span class="ej-chip">@c.Name</span>
+                            }
+                            @foreach (var s in selected.Skills)
+                            {
+                                <span class="ej-chip">★ @s.SkillName (@s.ImportanceWeight)</span>
+                            }
+                        </div>
+                        <p class="ej-detail-desc">@selected.Description</p>
+                        <div class="ej-actions"><button class="ej-btn ej-btn-secondary ej-btn-small" type="button" @onclick="() => selected = null">Close detail</button></div>
+                    </section>
+                }
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private bool isSaving;
+    private string? loadError;
+    private string? actionMessage;
+    private string? actionError;
+    private string? search;
+    private JobStatus? statusFilter;
+    private int page = 1;
+    private const int PageSize = 10;
+    private int totalCount;
+    private int totalPages;
+    private int draftCount, publishedCount, closedCount, expiredCount;
+    private List<JobListItemResponse> jobs = new();
+    private JobDetailResponse? selected;
+    private bool showForm;
+    private int? editingId;
+    private int? pendingDeleteId;
+    private CreateJobRequest jobForm = new();
+    private string categoryText = string.Empty;
+    private string skillText = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        // Blazor calls LoadAsync from several event handlers; a second load while one is
+        // in flight must not overlap it: HttpClient calls sharing circuit state kill the circuit.
+        if (isLoading && hasLoadedOnce)
+        {
+            return;
+        }
+        isLoading = true;
+        hasLoadedOnce = true;
+        loadError = null;
+        try
+        {
+            var main = await JobsApi.ListAsync(statusFilter, search, page, PageSize);
+            if (!main.Success || main.Data is null)
+            {
+                loadError = main.Errors.FirstOrDefault() ?? "We could not load your job postings.";
+                return;
+            }
+            jobs = main.Data.Items.ToList();
+            totalCount = main.Data.TotalCount;
+            totalPages = main.Data.TotalPages;
+            // Sequential awaits: never Task.WhenAll calls sharing circuit state.
+            // ponytail: 4 round-trips for status counts; collapse to one GROUP BY query when this gets slow.
+            var draft = await JobsApi.ListAsync(JobStatus.Draft, null, 1, 1);
+            var published = await JobsApi.ListAsync(JobStatus.Published, null, 1, 1);
+            var closed = await JobsApi.ListAsync(JobStatus.Closed, null, 1, 1);
+            var expired = await JobsApi.ListAsync(JobStatus.Expired, null, 1, 1);
+            draftCount = draft.Data?.TotalCount ?? 0;
+            publishedCount = published.Data?.TotalCount ?? 0;
+            closedCount = closed.Data?.TotalCount ?? 0;
+            expiredCount = expired.Data?.TotalCount ?? 0;
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        page = 1;
+        await LoadAsync();
+    }
+
+    private async Task ChangePageAsync(int next)
+    {
+        page = next;
+        await LoadAsync();
+    }
+
+    private void OpenCreateForm()
+    {
+        editingId = null;
+        jobForm = new CreateJobRequest();
+        categoryText = skillText = string.Empty;
+        actionMessage = actionError = null;
+        showForm = true;
+    }
+
+    private async Task OpenEditFormAsync(int id)
+    {
+        actionMessage = actionError = null;
+        var result = await JobsApi.GetAsync(id);
+        if (!result.Success || result.Data is null)
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "Could not load this job.";
+            return;
+        }
+        var d = result.Data;
+        editingId = d.Id;
+        jobForm = new UpdateJobRequest
+        {
+            Title = d.Title,
+            Description = d.Description,
+            SalaryMin = d.SalaryMin,
+            SalaryMax = d.SalaryMax,
+            ExperienceRequired = d.ExperienceRequired,
+            JobType = d.JobType,
+            ExpiryDate = d.ExpiryDate,
+            Status = d.Status,
+            CategoryIds = d.Categories.Select(c => c.Id).ToList(),
+            Skills = d.Skills.Select(s => new JobSkillInput { SkillId = s.SkillId, ImportanceWeight = s.ImportanceWeight }).ToList()
+        };
+        categoryText = string.Join(", ", jobForm.CategoryIds);
+        skillText = string.Join(", ", jobForm.Skills.Select(s => $"{s.SkillId}:{s.ImportanceWeight}"));
+        showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        showForm = false;
+        editingId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        actionMessage = actionError = null;
+        if (!TryParseTaxonomy(out var error))
+        {
+            actionError = error;
+            return;
+        }
+        isSaving = true;
+        if (editingId is null)
+        {
+            var created = await JobsApi.CreateAsync(jobForm);
+            actionMessage = created.Success ? $"Job \"{created.Data!.Title}\" posted as {created.Data.Status}." : null;
+            actionError = created.Success ? null : created.Errors.FirstOrDefault() ?? "Could not post this job.";
+            if (created.Success) showForm = false;
+        }
+        else
+        {
+            var updated = await JobsApi.UpdateAsync(editingId.Value, (UpdateJobRequest)jobForm);
+            actionMessage = updated.Success ? $"Job \"{updated.Data!.Title}\" updated." : null;
+            actionError = updated.Success ? null : updated.Errors.FirstOrDefault() ?? "Could not update this job.";
+            if (updated.Success) showForm = false;
+        }
+        isSaving = false;
+        await LoadAsync();
+    }
+
+    private bool TryParseTaxonomy(out string? error)
+    {
+        error = null;
+        try
+        {
+            jobForm.CategoryIds = categoryText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(int.Parse).ToList();
+            jobForm.Skills = skillText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(part =>
+                {
+                    var pieces = part.Split(':');
+                    return new JobSkillInput { SkillId = int.Parse(pieces[0]), ImportanceWeight = pieces.Length > 1 ? double.Parse(pieces[1]) : 1.0 };
+                }).ToList();
+            return true;
+        }
+        catch
+        {
+            error = "Category ids must be numbers (e.g. 1, 2); skills must look like id:weight (e.g. 3:8, 5:6).";
+            return false;
+        }
+    }
+
+    private async Task ViewDetailAsync(int id)
+    {
+        actionError = null;
+        var result = await JobsApi.GetAsync(id);
+        selected = result.Success ? result.Data : null;
+        if (!result.Success) actionError = result.Errors.FirstOrDefault() ?? "Could not load this job.";
+    }
+
+    private async Task DeleteOrCloseAsync(int id, string title, JobStatus status)
+    {
+        actionMessage = actionError = null;
+        if (pendingDeleteId != id)
+        {
+            pendingDeleteId = id;
+            return;
+        }
+        pendingDeleteId = null;
+        var result = await JobsApi.DeleteOrCloseAsync(id);
+        if (result.Success && result.Data is not null)
+            actionMessage = result.Data.Closed ? $"Job \"{title}\" closed — open applications mass-rejected." : $"Draft \"{title}\" permanently deleted.";
+        else
+            actionError = result.Errors.FirstOrDefault() ?? "Could not remove this job.";
+        if (selected?.Id == id) selected = null;
+        await LoadAsync();
+    }
+
+    private static string SalaryRange(JobListItemResponse j) =>
+        (j.SalaryMin, j.SalaryMax) switch
+        {
+            (null, null) => "Negotiable",
+            (not null, null) => $"From {j.SalaryMin:N0}",
+            (null, not null) => $"Up to {j.SalaryMax:N0}",
+            _ => $"{j.SalaryMin:N0} – {j.SalaryMax:N0}"
+        };
+
+    private static string SalaryDetail(JobDetailResponse d) =>
+        (d.SalaryMin, d.SalaryMax) switch
+        {
+            (null, null) => "Negotiable",
+            (not null, null) => $"From {d.SalaryMin:N0}",
+            (null, not null) => $"Up to {d.SalaryMax:N0}",
+            _ => $"{d.SalaryMin:N0} – {d.SalaryMax:N0}"
+        };
+}

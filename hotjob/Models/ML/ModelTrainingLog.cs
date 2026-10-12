@@ -16,6 +16,7 @@ public class ModelTrainingLog
     [MaxLength(500)]
     public string? ModelFilePath { get; set; }
 
+    [MaxLength(255)]
     public string? TrainedByUserId { get; set; }
 
     public DateTime TrainedAt { get; set; } = DateTime.UtcNow;

@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HotJob — Top IT Jobs (itviec style preview)</title>
+<title>HotJob — Top Jobs (preview)</title>
 <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --red:#ED1B2F; --dark-red:#C82222; --white-red:#FFF5F5; --light-red:#FFDFDF;
-  --black:#121212; --rich:#414042; --muted:#A6A6A6; --line:#DEDEDE; --bg:#F7F7F7;
-  --green:#0AB305; --green-bg:#EAF9E9; --grad-head:linear-gradient(269.85deg,#54151C 0%,#121212 54.89%);
-  --grad-foot:linear-gradient(177.12deg,#121212 48.81%,#54151C 98.26%);
+  --red:#0F4C75; --dark-red:#1B262C; --white-red:#EAF4FB; --light-red:#BBE1FA;
+  --black:#1B262C; --rich:#414042; --muted:#A6A6A6; --line:#DEDEDE; --bg:#F7F7F7;
+  --green:#0AB305; --green-bg:#EAF9E9; --accent:#3282B8;
+  --grad-head:linear-gradient(269.85deg,#1B262C 0%,#0F4C75 54.89%);
+  --grad-foot:linear-gradient(177.12deg,#0F4C75 48.81%,#1B262C 98.26%);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Lexend",sans-serif;font-size:16px;line-height:1.5;color:var(--black);background:#fff;-webkit-font-smoothing:antialiased}
@@ -19,9 +20,9 @@ a{color:inherit;text-decoration:none}
 /* header */
 header{background:var(--grad-head);color:#fff;position:sticky;top:0;z-index:50}
 .hbar{display:flex;align-items:center;gap:28px;height:64px}
-.logo{font-weight:800;font-size:22px}.logo span{color:var(--red)}
+.logo{font-weight:800;font-size:22px;color:#fff}.logo span{color:var(--light-red)}
 nav.main{display:flex;gap:22px;font-size:15px;font-weight:500}
-nav.main a{opacity:.92}nav.main a:hover{color:#ffb3b8}
+nav.main a{opacity:.92}nav.main a:hover{color:var(--light-red)}
 .hright{margin-left:auto;display:flex;gap:12px;align-items:center;font-size:14px}
 .btn{display:inline-flex;align-items:center;justify-content:center;font-weight:600;border-radius:4px;cursor:pointer;border:1px solid transparent;padding:11px 24px;font-size:15px}
 .btn-p{background:var(--red);border-color:var(--red);color:#fff}.btn-p:hover{background:var(--dark-red);border-color:var(--dark-red)}
@@ -44,11 +45,9 @@ nav.main a{opacity:.92}nav.main a:hover{color:#ffb3b8}
 /* sections */
 .sec{padding:48px 0}.sec h2{font-size:22px;font-weight:700;margin-bottom:4px}.sec .sub{color:var(--rich);font-size:14px;margin-bottom:24px}
 /* shortcut row */
-.feats{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+.feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .feat{background:var(--bg);border-radius:4px;padding:22px 16px;text-align:center;font-size:14px;font-weight:500}
-.feat b{display:block;font-size:22px;margin-bottom:8px}
-.feat.hot{border:1px solid var(--light-red)}
-.feat .pill{display:inline-block;background:var(--red);color:#fff;font-size:11px;font-weight:700;border-radius:20px;padding:2px 10px;margin-top:8px}
+.feat b{display:block;font-size:22px;margin-bottom:8px;color:var(--accent)}
 /* employers */
 .emp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .emp{border:1px solid var(--line);border-radius:4px;padding:20px;position:relative}
@@ -65,7 +64,7 @@ nav.main a{opacity:.92}nav.main a:hover{color:#ffb3b8}
 .job:hover{border:1px solid var(--line);box-shadow:0 4px 24px #0000001f;border-radius:4px}
 .job.sel{border:1px solid var(--red);border-radius:4px;box-shadow:0 4px 20px #0000000f;position:relative}
 .job.sel::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:6px;border-top-right-radius:8px;border-bottom-right-radius:8px;background:var(--red)}
-.job .logo-ph{width:48px;height:48px;box-sizing:content-box;border-radius:4px;background:#222;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+.job .logo-ph{width:48px;height:48px;box-sizing:content-box;border-radius:4px;background:var(--black);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
 .job h3{font-size:16px;font-weight:600}
 .job h3:hover{color:var(--red)}
 .job .co{font-size:14px;color:var(--rich)}
@@ -83,54 +82,52 @@ footer a{display:block;padding-bottom:10px}footer a:hover{color:#fff}
 </head>
 <body>
 <header><div class="wrap hbar">
-  <a class="logo" href="#">hot<span>job</span></a>
-  <nav class="main"><a href="#">IT Jobs</a><a href="#">IT Companies</a><a href="#">Blog</a><a href="#">Salary Report</a><a href="#">For Employers</a></nav>
+  <a class="logo" href="#"><span>hot</span>job</a>
+  <nav class="main"><a href="#">Jobs</a><a href="#">Companies</a><a href="#">Salary Report</a><a href="#">For Employers</a></nav>
   <div class="hright"><a href="#">EN | VI</a><a class="btn btn-s" href="#" style="padding:7px 20px">Sign In</a></div>
 </div></header>
 <section class="hero"><div class="wrap">
-  <h1>732 IT Jobs For "Chất" Developers</h1>
-  <p>Top IT jobs, top companies, reviewed by real engineers.</p>
+  <h1>732 Jobs For Talented People</h1>
+  <p>Top jobs, top companies, reviewed by real employees.</p>
   <div class="search"><input placeholder="Keyword, job title, company..."><select><option>All Cities</option><option>Ho Chi Minh</option><option>Ha Noi</option><option>Da Nang</option></select><button>Search</button></div>
   <div class="trending">Trending now:
-    <span class="itag">Java</span><span class="itag on">ReactJS</span><span class="itag">.NET</span><span class="itag">Tester</span><span class="itag">PHP</span><span class="itag">NodeJS</span>
+    <span class="itag">Marketing</span><span class="itag on">Sales</span><span class="itag">Accountant</span><span class="itag">Designer</span><span class="itag">Engineer</span><span class="itag">Customer Service</span>
   </div>
 </div></section>
 <div class="wrap">
 <section class="sec">
   <h2>Explore</h2><div class="sub">Shortcuts — HotJob adds ML match + CV before Apply</div>
   <div class="feats">
-    <div class="feat hot"><b>◎</b>Passive Job Search<span class="pill">HOT</span></div>
-    <div class="feat"><b>▤</b>IT CV Templates</div>
-    <div class="feat"><b>✎</b>Story Hub</div>
+    <div class="feat"><b>▤</b>CV Templates</div>
     <div class="feat"><b>★</b>Company Reviews</div>
-    <div class="feat"><b>$</b>IT Salary Report</div>
+    <div class="feat"><b>$</b>Salary Report</div>
   </div>
 </section>
 <section class="sec" style="padding-top:0">
   <h2>Top Employers</h2><div class="sub">Companies hiring now</div>
   <div class="emp-grid">
-    <div class="emp super"><span class="jobs">8 jobs</span><div class="logo-ph">M</div><h3>MiTek Vietnam</h3><div class="tags"><span class="itag">.NET</span><span class="itag">C#</span><span class="itag">Azure</span></div><div class="loc">Ho Chi Minh</div></div>
-    <div class="emp"><span class="jobs">25 jobs</span><div class="logo-ph">MB</div><h3>MB Bank</h3><div class="tags"><span class="itag">Java</span><span class="itag">ReactJS</span><span class="itag">Python</span></div><div class="loc">Ha Noi</div></div>
-    <div class="emp"><span class="jobs">6 jobs</span><div class="logo-ph">OL</div><h3>OL Vietnam</h3><div class="tags"><span class="itag">C#</span><span class="itag">SQL</span><span class="itag">Agile</span></div><div class="loc">Ho Chi Minh · Ha Noi</div></div>
+    <div class="emp super"><span class="jobs">8 jobs</span><div class="logo-ph">N</div><h3>Nova Retail</h3><div class="tags"><span class="itag">Marketing</span><span class="itag">Sales</span><span class="itag">E-commerce</span></div><div class="loc">Ho Chi Minh</div></div>
+    <div class="emp"><span class="jobs">25 jobs</span><div class="logo-ph">MB</div><h3>MB Bank</h3><div class="tags"><span class="itag">Finance</span><span class="itag">Accounting</span><span class="itag">Customer Service</span></div><div class="loc">Ha Noi</div></div>
+    <div class="emp"><span class="jobs">6 jobs</span><div class="logo-ph">LH</div><h3>Lotus Hospitality</h3><div class="tags"><span class="itag">Operations</span><span class="itag">HR</span><span class="itag">English</span></div><div class="loc">Ho Chi Minh · Ha Noi</div></div>
   </div>
 </section>
 <section class="sec" style="padding-top:0">
-  <div class="jobs-head"><div><h2>Featured IT Jobs</h2><div class="sub">Match % = HotJob ML, shown before Apply</div></div><a class="btn btn-s" href="#" style="border-color:var(--red);color:var(--red)">View all</a></div>
+  <div class="jobs-head"><div><h2>Featured Jobs</h2><div class="sub">Match % = HotJob ML, shown before Apply</div></div><a class="btn btn-s" href="#" style="border-color:var(--red);color:var(--red)">View all</a></div>
   <div>
-    <div class="job sel"><div class="logo-ph">M</div><div><h3>Senior .NET Developer (C#, Azure)</h3><div class="co">MiTek Vietnam · Ho Chi Minh</div><div class="meta"><span class="itag">.NET</span><span class="itag">C#</span><span class="itag">Azure</span></div></div><div class="right">$1500–$3000<br><span class="match">92% match</span></div></div>
-    <div class="job"><div class="logo-ph">MB</div><div><h3>Backend Developer (Java, Oracle)</h3><div class="co">MB Bank · Ha Noi</div><div class="meta"><span class="itag">Java</span><span class="itag">Oracle</span><span class="itag">AngularJS</span></div></div><div class="right">$1200–$2500<br><span class="match">78% match</span></div></div>
-    <div class="job"><div class="logo-ph">OL</div><div><h3>Fullstack Developer (React, SQL)</h3><div class="co">OL Vietnam · Da Nang</div><div class="meta"><span class="itag">ReactJS</span><span class="itag">NodeJS</span><span class="itag">SQL</span></div></div><div class="right">$1000–$2000<br><span class="match">64% match</span></div></div>
+    <div class="job sel"><div class="logo-ph">N</div><div><h3>Senior Marketing Specialist (SEO, Content)</h3><div class="co">Nova Retail · Ho Chi Minh</div><div class="meta"><span class="itag">Marketing</span><span class="itag">SEO</span><span class="itag">Content</span></div></div><div class="right">$1000–$2000<br><span class="match">92% match</span></div></div>
+    <div class="job"><div class="logo-ph">MB</div><div><h3>Transaction Officer (Finance, Accounting)</h3><div class="co">MB Bank · Ha Noi</div><div class="meta"><span class="itag">Finance</span><span class="itag">Accounting</span><span class="itag">Excel</span></div></div><div class="right">$800–$1500<br><span class="match">78% match</span></div></div>
+    <div class="job"><div class="logo-ph">LH</div><div><h3>HR Generalist (Recruitment, Operations)</h3><div class="co">Lotus Hospitality · Da Nang</div><div class="meta"><span class="itag">HR</span><span class="itag">Operations</span><span class="itag">English</span></div></div><div class="right">$700–$1200<br><span class="match">64% match</span></div></div>
   </div>
 </section>
 </div>
 <footer><div class="wrap">
   <div class="fgrid">
-    <div><h4>hot<span style="color:var(--red)">job</span></h4><a href="#">About Us</a><a href="#">Contact Us</a><a href="#">All Jobs</a></div>
-    <div><h4>Campaign</h4><a href="#">Best IT Companies</a><a href="#">Company Reviews</a></div>
+    <div><h4><span style="color:var(--light-red)">hot</span>job</h4><a href="#">About Us</a><a href="#">Contact Us</a><a href="#">All Jobs</a></div>
+    <div><h4>Campaign</h4><a href="#">Best Companies</a><a href="#">Company Reviews</a></div>
     <div><h4>Terms</h4><a href="#">Privacy Policy</a><a href="#">Terms &amp; Conditions</a></div>
     <div><h4>Contact</h4><a href="#">Ho Chi Minh: (+84) 977 460 519</a><a href="#">love@hotjob.local</a></div>
   </div>
-  <div class="copy">Copyright © HotJob — itviec-style preview. Tokens: Lexend, #ED1B2F, dark gradient header/footer.</div>
+  <div class="copy">Copyright © HotJob — preview. Tokens: Lexend, #1B262C, #0F4C75, #3282B8, #BBE1FA.</div>
 </div></footer>
 </body>
 </html>

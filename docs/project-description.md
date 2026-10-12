@@ -9,7 +9,7 @@ Không phải mạng xã hội kiểu LinkedIn. Chỉ làm 1 việc: **kết n�
 - **Employer (HR):** tạo công ty mới (chờ Admin duyệt) hoặc xin join công ty có sẵn (chờ Owner duyệt). Đăng job (chọn ngành + kỹ năng + trọng số), duyệt CV theo quy trình Pending → Viewed → Shortlisted → Interviewing → Offered/Rejected, lên lịch phỏng vấn, đóng job.
 - **Admin:** duyệt công ty (Approve/Reject + lý do), khóa/mở tài khoản, xem log train model ML.
 
-Đăng ký chỉ có Candidate/Employer. Admin seed sẵn.
+Đăng ký chỉ Candidate. Candidate bấm Become Employer để thêm vai Employer (1 user giữ cả 2 profile). Admin seed sẵn.
 
 ## 3. Có gì? (tính năng chính)
 1. **Auth Identity:** đăng nhập/đăng ký, phân quyền 3 roles, 7 bảng AspNet*.
@@ -20,7 +20,7 @@ Không phải mạng xã hội kiểu LinkedIn. Chỉ làm 1 việc: **kết n�
 6. **ML.NET MatchScore:** chấm % hợp Resume↔Job (0–100) để gợi ý trước nút Apply + giúp HR lọc đơn. Log mỗi lần train vào ModelTrainingLogs.
 7. **Tiện ích:** SavedJobs, Reviews công ty, Notifications theo event (có đơn mới, đổi status, có lịch PV, duyệt công ty).
 
-## 4. Không có gì (đừng code nhầm)
+## 4. Không có gì
 Không có Posts/Feed/Like/Connection kiểu mạng xã hội. Không có Admin duyệt từng Job. Không chấm điểm sau khi nộp — ML chạy **trước** nút Apply.
 
 ## 5. Kỹ thuật
@@ -29,9 +29,3 @@ Không có Posts/Feed/Like/Connection kiểu mạng xã hội. Không có Admin 
 - Docs: `docs/idea.md` (flow chi tiết theo actor), `docs/database-design.md` (bảng + FK).
 - Chạy: `dotnet build` trong `source/hotjob`. Connection string `Default` trong appsettings.json.
 
-## 6. Chia việc gợi ý
-- Auth + layout + phân quyền trang.
-- Candidate: CRUD Resume + Apply + SavedJobs + Reviews.
-- Employer: Company join/duyệt + CRUD Job + duyệt Application + Interview.
-- Admin: duyệt Company + quản lý Users + xem TrainingLogs.
-- ML: tính MatchScore + trang gợi ý + retrain.
