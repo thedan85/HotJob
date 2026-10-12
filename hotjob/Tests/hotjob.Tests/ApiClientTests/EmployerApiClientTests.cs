@@ -39,7 +39,7 @@ public sealed class EmployerJobsApiClientTests
         var handler = new QueueHandler();
         handler.EnqueueJson(HttpStatusCode.Created, ApiStubs.Envelope(
             new JobDetailResponse(1, 1, "Dev", "d", null, null, 0, JobType.FullTime, null,
-                JobStatus.Draft, "Co", [], [], 0, DateTime.UtcNow)));
+                JobStatus.Draft, "Co", [], [], 0, DateTime.UtcNow, null)));
         var scope = ApiStubs.Scope(handler);
 
         var result = await scope.Jobs().CreateAsync(new CreateJobRequest { Title = "Dev", Description = "d" });
@@ -56,7 +56,7 @@ public sealed class EmployerJobsApiClientTests
         var handler = new QueueHandler();
         handler.EnqueueJson(HttpStatusCode.OK, ApiStubs.Envelope(
             new JobDetailResponse(7, 1, "Dev", "d", null, null, 0, JobType.FullTime, null,
-                JobStatus.Published, "Co", [], [], 0, DateTime.UtcNow)));
+                JobStatus.Published, "Co", [], [], 0, DateTime.UtcNow, null)));
         var scope = ApiStubs.Scope(handler);
 
         var result = await scope.Jobs().UpdateAsync(7, new UpdateJobRequest { Title = "Dev", Description = "d" });
@@ -88,7 +88,7 @@ public sealed class EmployerJobsApiClientTests
         var handler = new QueueHandler();
         handler.EnqueueJson(HttpStatusCode.OK, ApiStubs.Envelope(
             new JobDetailResponse(3, 1, "Dev", "d", null, null, 0, JobType.FullTime, null,
-                JobStatus.Draft, "Co", [], [], 0, DateTime.UtcNow)));
+                JobStatus.Draft, "Co", [], [], 0, DateTime.UtcNow, null)));
         var scope = ApiStubs.Scope(handler);
 
         var result = await scope.Jobs().GetAsync(3);
