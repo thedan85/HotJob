@@ -1,10 +1,13 @@
 @page "/employer/jobs"
 @rendermode InteractiveServer
+@using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using hotjob.DTOs.Job
 @using hotjob.Models.Job
-@using hotjob.Services.Api
-@inject EmployerJobsApiClient JobsApi
+@using hotjob.Services.Job
+@inject IJobService JobService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Jobs &amp; Postings | HotJob</PageTitle>
 
@@ -194,6 +197,12 @@
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
+    private async Task<string> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub") ?? string.Empty;
+    }
+
     private async Task LoadAsync()
     {
         // Blazor calls LoadAsync from several event handlers; a second load while one is
@@ -207,7 +216,8 @@
         loadError = null;
         try
         {
-            var main = await JobsApi.ListAsync(statusFilter, search, page, PageSize);
+            var userId = await GetUserIdAsync();
+            var main = await JobService.ListAsync(userId, statusFilter, search, page, PageSize);
             if (!main.Success || main.Data is null)
             {
                 loadError = main.Errors.FirstOrDefault() ?? "We could not load your job postings.";
@@ -218,10 +228,10 @@
             totalPages = main.Data.TotalPages;
             // Sequential awaits: never Task.WhenAll calls sharing circuit state.
             // ponytail: 4 round-trips for status counts; collapse to one GROUP BY query when this gets slow.
-            var draft = await JobsApi.ListAsync(JobStatus.Draft, null, 1, 1);
-            var published = await JobsApi.ListAsync(JobStatus.Published, null, 1, 1);
-            var closed = await JobsApi.ListAsync(JobStatus.Closed, null, 1, 1);
-            var expired = await JobsApi.ListAsync(JobStatus.Expired, null, 1, 1);
+            var draft = await JobService.ListAsync(userId, JobStatus.Draft, null, 1, 1);
+            var published = await JobService.ListAsync(userId, JobStatus.Published, null, 1, 1);
+            var closed = await JobService.ListAsync(userId, JobStatus.Closed, null, 1, 1);
+            var expired = await JobService.ListAsync(userId, JobStatus.Expired, null, 1, 1);
             draftCount = draft.Data?.TotalCount ?? 0;
             publishedCount = published.Data?.TotalCount ?? 0;
             closedCount = closed.Data?.TotalCount ?? 0;
@@ -261,7 +271,7 @@
     private async Task OpenEditFormAsync(int id)
     {
         actionMessage = actionError = null;
-        var result = await JobsApi.GetAsync(id);
+        var result = await JobService.GetAsync(await GetUserIdAsync(), id);
         if (!result.Success || result.Data is null)
         {
             actionError = result.Errors.FirstOrDefault() ?? "Could not load this job.";
@@ -302,16 +312,17 @@
             return;
         }
         isSaving = true;
+        var userId = await GetUserIdAsync();
         if (editingId is null)
         {
-            var created = await JobsApi.CreateAsync(jobForm);
+            var created = await JobService.CreateAsync(userId, jobForm);
             actionMessage = created.Success ? $"Job \"{created.Data!.Title}\" posted as {created.Data.Status}." : null;
             actionError = created.Success ? null : created.Errors.FirstOrDefault() ?? "Could not post this job.";
             if (created.Success) showForm = false;
         }
         else
         {
-            var updated = await JobsApi.UpdateAsync(editingId.Value, (UpdateJobRequest)jobForm);
+            var updated = await JobService.UpdateAsync(userId, editingId.Value, (UpdateJobRequest)jobForm);
             actionMessage = updated.Success ? $"Job \"{updated.Data!.Title}\" updated." : null;
             actionError = updated.Success ? null : updated.Errors.FirstOrDefault() ?? "Could not update this job.";
             if (updated.Success) showForm = false;
@@ -344,7 +355,7 @@
     private async Task ViewDetailAsync(int id)
     {
         actionError = null;
-        var result = await JobsApi.GetAsync(id);
+        var result = await JobService.GetAsync(await GetUserIdAsync(), id);
         selected = result.Success ? result.Data : null;
         if (!result.Success) actionError = result.Errors.FirstOrDefault() ?? "Could not load this job.";
     }
@@ -358,7 +369,7 @@
             return;
         }
         pendingDeleteId = null;
-        var result = await JobsApi.DeleteOrCloseAsync(id);
+        var result = await JobService.DeleteOrCloseAsync(await GetUserIdAsync(), id);
         if (result.Success && result.Data is not null)
             actionMessage = result.Data.Closed ? $"Job \"{title}\" closed — open applications mass-rejected." : $"Draft \"{title}\" permanently deleted.";
         else
