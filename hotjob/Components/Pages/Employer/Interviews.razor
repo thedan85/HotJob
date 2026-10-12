@@ -1,11 +1,15 @@
 @page "/employer/interviews"
 @rendermode InteractiveServer
+@using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using hotjob.DTOs.Employer
 @using hotjob.Models.Application
-@using hotjob.Services.Api
-@inject EmployerApplicantsApiClient ApplicantsApi
-@inject EmployerInterviewsApiClient InterviewsApi
+@using hotjob.Services.Employer
+@inject IApplicantService ApplicantService
+@inject IInterviewService InterviewService
+@inject INotificationService NotificationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Interviews &amp; Applicants | HotJob</PageTitle>
 
@@ -229,6 +233,12 @@
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
     private async Task LoadAsync()
     {
         // Same guard as Jobs: overlapping loads sharing circuit state kill the circuit.
@@ -244,7 +254,7 @@
             query.Page = page;
             query.PageSize = PageSize;
             query.Status = statusFilter;
-            var result = await ApplicantsApi.ListAsync(query);
+            var result = await ApplicantService.ListAsync(await GetUserIdAsync(), query);
             if (!result.Success || result.Data is null)
             {
                 loadError = result.Errors.FirstOrDefault() ?? "We could not load applicants.";
@@ -279,14 +289,15 @@
     private async Task SelectAsync(int applicationId)
     {
         actionMessage = actionError = null;
-        var detail = await ApplicantsApi.GetDetailAsync(applicationId);
+        var userId = await GetUserIdAsync();
+        var detail = await ApplicantService.GetDetailAsync(userId, applicationId);
         if (!detail.Success || detail.Data is null)
         {
             actionError = detail.Errors.FirstOrDefault() ?? "Could not load this application.";
             return;
         }
         selected = detail.Data;
-        var list = await ApplicantsApi.ListInterviewsAsync(applicationId);
+        var list = await InterviewService.ListAsync(userId, applicationId);
         interviews = list.Success && list.Data is not null ? list.Data.ToList() : new();
     }
 
@@ -295,7 +306,7 @@
         if (selected is null) return;
         actionMessage = actionError = null;
         isActing = true;
-        var result = await ApplicantsApi.UpdateStatusAsync(selected.ApplicationId, statusForm);
+        var result = await ApplicantService.UpdateStatusAsync(await GetUserIdAsync(), selected.ApplicationId, statusForm);
         isActing = false;
         if (result.Success && result.Data is not null)
         {
@@ -314,7 +325,7 @@
         if (selected is null) return;
         actionMessage = actionError = null;
         isActing = true;
-        var result = await ApplicantsApi.CreateInterviewAsync(selected.ApplicationId, interviewForm);
+        var result = await InterviewService.CreateAsync(await GetUserIdAsync(), selected.ApplicationId, interviewForm);
         isActing = false;
         if (result.Success && result.Data is not null)
         {
@@ -331,7 +342,7 @@
     private async Task CompleteAsync(int interviewId)
     {
         actionMessage = actionError = null;
-        var result = await InterviewsApi.UpdateAsync(interviewId, new UpdateInterviewRequest { Status = InterviewStatus.Completed });
+        var result = await InterviewService.UpdateAsync(await GetUserIdAsync(), interviewId, new UpdateInterviewRequest { Status = InterviewStatus.Completed });
         if (result.Success && result.Data is not null)
         {
             var index = interviews.FindIndex(i => i.Id == interviewId);
@@ -347,7 +358,7 @@
     private async Task CancelAsync(int interviewId)
     {
         actionMessage = actionError = null;
-        var result = await InterviewsApi.CancelAsync(interviewId);
+        var result = await InterviewService.CancelAsync(await GetUserIdAsync(), interviewId);
         if (result.Success && result.Data is not null)
         {
             var index = interviews.FindIndex(i => i.Id == interviewId);
@@ -365,7 +376,7 @@
         if (selected is null) return;
         actionMessage = actionError = null;
         isActing = true;
-        var result = await ApplicantsApi.NotifyAsync(selected.ApplicationId, notifyForm);
+        var result = await NotificationService.NotifyAsync(await GetUserIdAsync(), selected.ApplicationId, notifyForm);
         isActing = false;
         if (result.Success)
         {
