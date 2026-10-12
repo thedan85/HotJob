@@ -1,10 +1,13 @@
 @page "/employer/company"
 @rendermode InteractiveServer
+@using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @using hotjob.DTOs.Employer
 @using hotjob.Models.Users
-@using hotjob.Services.Api
-@inject CompanyApiClient CompanyApi
+@using hotjob.Services.Employer
+@inject ICompanyService CompanyService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Company Profile &amp; Team | HotJob</PageTitle>
 
@@ -185,6 +188,12 @@
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
     private async Task LoadAsync()
     {
         if (isLoading && hasLoadedOnce)
@@ -196,7 +205,7 @@
         loadError = null;
         try
         {
-            var result = await CompanyApi.GetPageAsync();
+            var result = await CompanyService.GetPageAsync(await GetUserIdAsync());
             if (!result.Success || result.Data is null)
             {
                 loadError = result.Errors.FirstOrDefault() ?? "We could not load your company.";
@@ -226,7 +235,7 @@
         isActing = true;
         try
         {
-            var result = await CompanyApi.UpdateAsync(companyForm);
+            var result = await CompanyService.UpdateAsync(await GetUserIdAsync(), companyForm);
             if (result.Success && result.Data is not null)
             {
                 editing = false;
@@ -250,7 +259,7 @@
         isActing = true;
         try
         {
-            var result = await CompanyApi.ApproveMemberAsync(memberId);
+            var result = await CompanyService.ApproveMemberAsync(await GetUserIdAsync(), memberId);
             notice = result.Success ? $"Approved {fullName}." : result.Errors.FirstOrDefault() ?? "Could not approve this member.";
             if (result.Success) await LoadAsync();
         }
@@ -266,7 +275,7 @@
         isActing = true;
         try
         {
-            var result = await CompanyApi.RejectMemberAsync(memberId);
+            var result = await CompanyService.RejectMemberAsync(await GetUserIdAsync(), memberId);
             notice = result.Success ? $"Rejected {fullName}." : result.Errors.FirstOrDefault() ?? "Could not reject this member.";
             if (result.Success) await LoadAsync();
         }
