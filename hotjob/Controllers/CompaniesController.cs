@@ -1,10 +1,9 @@
 using HotJob.Dtos;
 using hotjob.DTOs.Company;
 using hotjob.DTOs.Job;
-using hotjob.Services.Common;
-using hotjob.Services.Company;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using hotjob.Services.Company;
 
 namespace hotjob.Controllers;
 
@@ -12,7 +11,7 @@ namespace hotjob.Controllers;
 [ApiController]
 [Route("api/companies")]
 [AllowAnonymous]
-public sealed class CompaniesController(ICompanyService companyService) : ControllerBase
+public sealed class CompaniesController(ICompanyService companyService) : ApiControllerBase
 {
     /// <summary>List approved companies (name search, multi-select industry/location filters; fixed 20 per page).</summary>
     /// <response code="200">Paged company list.</response>
@@ -34,7 +33,7 @@ public sealed class CompaniesController(ICompanyService companyService) : Contro
             Page = page
         }, cancellationToken);
 
-        return result.Success ? Ok(ToResponse(result.Data!)) : MapError(result);
+        return FromResult(result);
     }
 
     /// <summary>Distinct industry/location options from approved companies (for filter dropdown).</summary>
@@ -45,20 +44,6 @@ public sealed class CompaniesController(ICompanyService companyService) : Contro
     public async Task<IActionResult> Filters(CancellationToken cancellationToken)
     {
         var result = await companyService.GetFilterOptionsAsync(cancellationToken);
-        return result.Success ? Ok(ToResponse(result.Data!)) : MapError(result);
-    }
-
-    private static ApiResponse<T> ToResponse<T>(T data) => new() { Success = true, Data = data };
-
-    private static IActionResult MapError(ServiceResult result)
-    {
-        ApiResponse<object> payload = new() { Success = false, Errors = result.Errors.ToList() };
-        return result.ErrorType switch
-        {
-            ServiceErrorType.Conflict => new ConflictObjectResult(payload),
-            ServiceErrorType.NotFound => new NotFoundObjectResult(payload),
-            ServiceErrorType.Unauthorized => new UnauthorizedObjectResult(payload),
-            _ => new BadRequestObjectResult(payload)
-        };
+        return FromResult(result);
     }
 }

@@ -1,11 +1,10 @@
 using System.Security.Claims;
 using HotJob.Dtos;
 using hotjob.DTOs.Employer;
-using hotjob.Services.Common;
-using hotjob.Services.Employer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using hotjob.Services.Employer;
 
 namespace hotjob.Controllers;
 
@@ -13,7 +12,7 @@ namespace hotjob.Controllers;
 [ApiController]
 [Route("api/employer/company")]
 [Authorize(Roles = "Employer", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-public sealed class EmployerCompanyController(ICompanyService companyService) : ControllerBase
+public sealed class EmployerCompanyController(ICompanyService companyService) : ApiControllerBase
 {
     /// <summary>Company profile with members and the caller's owner flag.</summary>
     /// <response code="200">Company page.</response>
@@ -24,7 +23,7 @@ public sealed class EmployerCompanyController(ICompanyService companyService) : 
     public async Task<IActionResult> GetPage(CancellationToken cancellationToken)
     {
         var result = await companyService.GetPageAsync(CurrentUserId(), cancellationToken);
-        return result.Success ? Ok(ToResponse(result.Data!)) : MapError(result);
+        return FromResult(result);
     }
 
     /// <summary>Update own-company profile fields (owner only).</summary>
@@ -40,7 +39,7 @@ public sealed class EmployerCompanyController(ICompanyService companyService) : 
         CancellationToken cancellationToken)
     {
         var result = await companyService.UpdateAsync(CurrentUserId(), request, cancellationToken);
-        return result.Success ? Ok(ToResponse(result.Data!)) : MapError(result);
+        return FromResult(result);
     }
 
     /// <summary>Approve a pending join request (owner only).</summary>
@@ -56,7 +55,7 @@ public sealed class EmployerCompanyController(ICompanyService companyService) : 
     public async Task<IActionResult> Approve(int id, CancellationToken cancellationToken)
     {
         var result = await companyService.ApproveMemberAsync(CurrentUserId(), id, cancellationToken);
-        return result.Success ? Ok(ToResponse(result.Data!)) : MapError(result);
+        return FromResult(result);
     }
 
     /// <summary>Reject a pending join request (owner only).</summary>
@@ -72,20 +71,9 @@ public sealed class EmployerCompanyController(ICompanyService companyService) : 
     public async Task<IActionResult> Reject(int id, CancellationToken cancellationToken)
     {
         var result = await companyService.RejectMemberAsync(CurrentUserId(), id, cancellationToken);
-        return result.Success ? Ok(ToResponse(result.Data!)) : MapError(result);
+        return FromResult(result);
     }
 
     private string? CurrentUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-
-    private static ApiResponse<T> ToResponse<T>(T data) => new() { Success = true, Data = data };
-
-    private static IActionResult MapError(ServiceResult result) =>
-        result.ErrorType switch
-        {
-            ServiceErrorType.Conflict => new ConflictObjectResult(new ApiResponse<object> { Success = false, Errors = result.Errors.ToList() }),
-            ServiceErrorType.NotFound => new NotFoundObjectResult(new ApiResponse<object> { Success = false, Errors = result.Errors.ToList() }),
-            ServiceErrorType.Unauthorized => new UnauthorizedObjectResult(new ApiResponse<object> { Success = false, Errors = result.Errors.ToList() }),
-            _ => new BadRequestObjectResult(new ApiResponse<object> { Success = false, Errors = result.Errors.ToList() })
-        };
 }

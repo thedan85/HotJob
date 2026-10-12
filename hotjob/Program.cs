@@ -1,6 +1,7 @@
 using System.Text;
 using hotjob.Components;
 using hotjob.Data;
+using hotjob.Middleware;
 using hotjob.Models.Users;
 using hotjob.Repositories.Company;
 using hotjob.Repositories.Employer;
@@ -102,6 +103,8 @@ builder.Services.AddOptions<JwtOptions>()
         "Jwt:SecretKey must be at least 32 characters.")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
 var jwtSecret = jwtSection["SecretKey"]
@@ -158,7 +161,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(o =>
 builder.Services.AddScoped<IJobPostingRepository, JobPostingRepository>();
 builder.Services.AddScoped<IApplicantRepository, ApplicantRepository>();
 builder.Services.AddScoped<ICompanyRepository, CompanyRepository>();
-builder.Services.AddScoped<ICompanyService, CompanyService>();
+builder.Services.AddScoped<hotjob.Services.Company.ICompanyService, hotjob.Services.Company.CompanyService>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IApplicantService, ApplicantService>();
 builder.Services.AddScoped<IInterviewService, InterviewService>();
@@ -222,6 +225,8 @@ app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/api"),
     branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 app.UseHttpsRedirection();
+
+app.UseExceptionHandler();
 
 app.UseCors("Frontend");
 app.UseAuthentication();

@@ -2,11 +2,10 @@ using System.Security.Claims;
 using HotJob.Dtos;
 using hotjob.DTOs.Job;
 using hotjob.Models.Job;
-using hotjob.Services.Common;
-using hotjob.Services.Job;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using hotjob.Services.Job;
 
 namespace hotjob.Controllers;
 
@@ -14,7 +13,7 @@ namespace hotjob.Controllers;
 [ApiController]
 [Route("api/employer/jobs")]
 [Authorize(Roles = "Employer", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-public sealed class EmployerJobsController(IJobService jobService) : ControllerBase
+public sealed class EmployerJobsController(IJobService jobService) : ApiControllerBase
 {
     /// <summary>2.2.1 Create a job posting (Draft default, or Published). Skills/categories validated inline.</summary>
     /// <response code="201">Created. Returns the new job detail.</response>
@@ -29,12 +28,7 @@ public sealed class EmployerJobsController(IJobService jobService) : ControllerB
         CancellationToken cancellationToken)
     {
         var result = await jobService.CreateAsync(CurrentUserId(), request, cancellationToken);
-        if (!result.Success)
-        {
-            return MapError(result);
-        }
-
-        return StatusCode(StatusCodes.Status201Created, OkPayload(result.Data!));
+        return FromResultCreated(result);
     }
 
     /// <summary>List own-company jobs with optional status/search filter (server-paginated).</summary>
@@ -51,12 +45,7 @@ public sealed class EmployerJobsController(IJobService jobService) : ControllerB
         CancellationToken cancellationToken = default)
     {
         var result = await jobService.ListAsync(CurrentUserId(), status, search, page, pageSize, cancellationToken);
-        if (!result.Success)
-        {
-            return MapError(result);
-        }
-
-        return Ok(OkPayload(result.Data!));
+        return FromResult(result);
     }
 
     /// <summary>Get one own-company job with skills, categories, application count.</summary>
@@ -70,12 +59,7 @@ public sealed class EmployerJobsController(IJobService jobService) : ControllerB
     public async Task<IActionResult> Get(int id, CancellationToken cancellationToken)
     {
         var result = await jobService.GetAsync(CurrentUserId(), id, cancellationToken);
-        if (!result.Success)
-        {
-            return MapError(result);
-        }
-
-        return Ok(OkPayload(result.Data!));
+        return FromResult(result);
     }
 
     /// <summary>2.2.2 Update a job (scalar fields + atomic replace of skills/categories).</summary>
@@ -94,12 +78,7 @@ public sealed class EmployerJobsController(IJobService jobService) : ControllerB
         CancellationToken cancellationToken)
     {
         var result = await jobService.UpdateAsync(CurrentUserId(), id, request, cancellationToken);
-        if (!result.Success)
-        {
-            return MapError(result);
-        }
-
-        return Ok(OkPayload(result.Data!));
+        return FromResult(result);
     }
 
     /// <summary>2.2.3 Delete a Draft job (hard delete) or close a Published job (soft close + mass-reject open applications).</summary>
@@ -113,12 +92,7 @@ public sealed class EmployerJobsController(IJobService jobService) : ControllerB
     public async Task<IActionResult> DeleteOrClose(int id, CancellationToken cancellationToken)
     {
         var result = await jobService.DeleteOrCloseAsync(CurrentUserId(), id, cancellationToken);
-        if (!result.Success)
-        {
-            return MapError(result);
-        }
-
-        return Ok(OkPayload(result.Data!));
+        return FromResult(result);
     }
 
     /// <summary>2.2.4 Replace the category set of a job.</summary>
@@ -137,12 +111,7 @@ public sealed class EmployerJobsController(IJobService jobService) : ControllerB
         CancellationToken cancellationToken)
     {
         var result = await jobService.AssignCategoriesAsync(CurrentUserId(), id, request, cancellationToken);
-        if (!result.Success)
-        {
-            return MapError(result);
-        }
-
-        return Ok(OkPayload(result.Data!));
+        return FromResult(result);
     }
 
     /// <summary>2.2.4 Replace the skill set (+ importance weights 0-10) of a job.</summary>
@@ -161,28 +130,9 @@ public sealed class EmployerJobsController(IJobService jobService) : ControllerB
         CancellationToken cancellationToken)
     {
         var result = await jobService.AssignSkillsAsync(CurrentUserId(), id, request, cancellationToken);
-        if (!result.Success)
-        {
-            return MapError(result);
-        }
-
-        return Ok(OkPayload(result.Data!));
+        return FromResult(result);
     }
 
     private string CurrentUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? string.Empty;
-
-    private static ApiResponse<T> OkPayload<T>(T data) => new() { Success = true, Data = data };
-
-    private static IActionResult MapError(ServiceResult result)
-    {
-        ApiResponse<object> payload = new() { Success = false, Errors = result.Errors.ToList() };
-        return result.ErrorType switch
-        {
-            ServiceErrorType.Conflict => new ConflictObjectResult(payload),
-            ServiceErrorType.NotFound => new NotFoundObjectResult(payload),
-            ServiceErrorType.Unauthorized => new UnauthorizedObjectResult(payload),
-            _ => new BadRequestObjectResult(payload)
-        };
-    }
 }

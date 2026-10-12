@@ -1,11 +1,10 @@
 using System.Security.Claims;
 using HotJob.Dtos;
 using hotjob.DTOs.Employer;
-using hotjob.Services.Common;
-using hotjob.Services.Employer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using hotjob.Services.Employer;
 
 namespace hotjob.Controllers;
 
@@ -13,7 +12,7 @@ namespace hotjob.Controllers;
 [ApiController]
 [Route("api/employer/interviews")]
 [Authorize(Roles = "Employer", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-public sealed class EmployerInterviewsController(IInterviewService interviewService) : ControllerBase
+public sealed class EmployerInterviewsController(IInterviewService interviewService) : ApiControllerBase
 {
     /// <summary>Reschedule / edit notes / change status of an interview.</summary>
     /// <response code="200">Updated interview.</response>
@@ -31,7 +30,7 @@ public sealed class EmployerInterviewsController(IInterviewService interviewServ
         CancellationToken cancellationToken)
     {
         var result = await interviewService.UpdateAsync(CurrentUserId(), id, request, cancellationToken);
-        return result.Success ? Ok(ToResponse(result.Data!)) : MapError(result);
+        return FromResult(result);
     }
 
     /// <summary>Cancel an interview (soft-cancel: Status=Cancelled, row kept).</summary>
@@ -45,20 +44,9 @@ public sealed class EmployerInterviewsController(IInterviewService interviewServ
     public async Task<IActionResult> Cancel(int id, CancellationToken cancellationToken)
     {
         var result = await interviewService.CancelAsync(CurrentUserId(), id, cancellationToken);
-        return result.Success ? Ok(ToResponse(result.Data!)) : MapError(result);
+        return FromResult(result);
     }
 
     private string? CurrentUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-
-    private static ApiResponse<T> ToResponse<T>(T data) => new() { Success = true, Data = data };
-
-    private static IActionResult MapError(ServiceResult result) =>
-        result.ErrorType switch
-        {
-            ServiceErrorType.Conflict => new ConflictObjectResult(new ApiResponse<object> { Success = false, Errors = result.Errors.ToList() }),
-            ServiceErrorType.NotFound => new NotFoundObjectResult(new ApiResponse<object> { Success = false, Errors = result.Errors.ToList() }),
-            ServiceErrorType.Unauthorized => new UnauthorizedObjectResult(new ApiResponse<object> { Success = false, Errors = result.Errors.ToList() }),
-            _ => new BadRequestObjectResult(new ApiResponse<object> { Success = false, Errors = result.Errors.ToList() })
-        };
 }
