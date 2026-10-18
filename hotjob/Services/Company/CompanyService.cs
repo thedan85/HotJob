@@ -11,6 +11,7 @@ public sealed class CompanyService(
     ILogger<CompanyService> logger) : ICompanyService
 {
     public const int PageSize = 20;
+    public const int ReviewPageSize = 5;
 
     public async Task<ServiceResult<PagedResponse<CompanyListItemDto>>> ListAsync(
         CompanyListQuery query,
@@ -59,6 +60,8 @@ public sealed class CompanyService(
         if (company is null)
             return ServiceResult<CompanyDetailDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
 
+        var ownerName = await repository.GetOwnerNameAsync(id, cancellationToken);
+
         return ServiceResult<CompanyDetailDto>.Ok(new CompanyDetailDto(
             company.Id,
             company.CompanyName,
@@ -67,6 +70,29 @@ public sealed class CompanyService(
             company.Scale,
             company.LogoUrl,
             company.Description,
-            company.Website));
+            company.Website,
+            ownerName));
+    }
+
+    public async Task<ServiceResult<PagedResponse<CompanyReviewDto>>> GetReviewsAsync(
+        int companyId,
+        int page,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        var (items, total) = await repository.ListReviewsAsync(companyId, page, ReviewPageSize, cancellationToken);
+
+        return ServiceResult<PagedResponse<CompanyReviewDto>>.Ok(new PagedResponse<CompanyReviewDto>
+        {
+            Items = items.Select(review => new CompanyReviewDto(
+                review.Id,
+                review.RatingScore,
+                review.ReviewText,
+                review.Candidate?.FullName ?? "Anonymous",
+                review.CreatedAt)).ToList(),
+            TotalCount = total,
+            Page = page,
+            PageSize = ReviewPageSize
+        });
     }
 }

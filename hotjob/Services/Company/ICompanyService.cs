@@ -16,4 +16,9 @@ public interface ICompanyService
     Task<ServiceResult<CompanyDetailDto>> GetDetailAsync(
         int id,
         CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<PagedResponse<CompanyReviewDto>>> GetReviewsAsync(
+        int companyId,
+        int page,
+        CancellationToken cancellationToken = default);
 }

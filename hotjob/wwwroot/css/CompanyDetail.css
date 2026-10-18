@@ -62,10 +62,53 @@
     letter-spacing: -.03em;
 }
 
-.company-detail-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+.company-detail-overview {
+    margin-top: 28px;
+}
+
+.company-detail-overview h2 {
+    margin: 0 0 12px;
+    font-size: 1.05rem;
+}
+
+.company-detail-facts {
+    margin: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.company-detail-fact {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 12px;
+    align-items: baseline;
+}
+
+.company-detail-fact dt {
+    color: var(--hj-muted);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.company-detail-fact dd {
+    margin: 0;
+    min-width: 0;
+    color: var(--hj-ink);
+    font-size: 15px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+
+.company-detail-fact dd a {
+    color: var(--hj-primary);
+    font-weight: 600;
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.company-detail-fact dd a:hover {
+    color: var(--hj-accent);
+    text-decoration: underline;
 }
 
 .company-detail-about {
@@ -102,8 +145,7 @@
     border-top: 1px solid var(--hj-border);
 }
 
-.company-detail-jobs,
-.company-detail-website {
+.company-detail-jobs {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -125,19 +167,7 @@
     background: var(--hj-ink);
 }
 
-.company-detail-website {
-    border: 1px solid var(--hj-border);
-    background: #fff;
-    color: var(--hj-ink);
-}
-
-.company-detail-website:hover {
-    border-color: var(--hj-accent);
-    color: var(--hj-primary);
-}
-
-.company-detail-jobs:focus-visible,
-.company-detail-website:focus-visible {
+.company-detail-jobs:focus-visible {
     outline: 3px solid rgba(50, 130, 184, .35);
     outline-offset: 2px;
 }
@@ -181,13 +211,141 @@
     color: var(--hj-accent);
 }
 
+.company-detail-owner {
+    margin: 12px 0 0;
+    color: var(--hj-muted);
+    font-size: 14px;
+}
+
+.company-detail-owner strong {
+    color: var(--hj-ink);
+}
+
+.company-detail-reviews {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--hj-border);
+}
+
+.company-detail-reviews-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.company-detail-reviews-head h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.company-detail-rating {
+    color: var(--hj-muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.review-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+}
+
+.review-card {
+    padding: 16px 18px;
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-sm);
+    background: #fbfdfe;
+}
+
+.review-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.review-avatar {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--hj-primary), var(--hj-accent));
+    color: #fff;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.review-author {
+    margin: 0;
+    color: var(--hj-ink);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.review-date {
+    margin: 0;
+    color: var(--hj-muted);
+    font-size: 12px;
+}
+
+.review-stars {
+    margin-left: auto;
+    color: #f5a623;
+    font-size: 15px;
+    letter-spacing: 2px;
+    white-space: nowrap;
+}
+
+.review-text {
+    margin: 12px 0 0;
+    color: var(--hj-ink);
+    font-size: 14.5px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.company-detail-reviews .pagination {
+    justify-content: flex-start;
+}
+
+.company-detail-reviews .page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.company-detail-reviews .page-btn.disabled {
+    opacity: .45;
+    pointer-events: none;
+}
+
+.company-detail-reviews .page-info {
+    width: auto;
+    text-align: left;
+}
+
+.review-list + .pagination {
+    margin-top: 16px;
+}
+
 @media (max-width: 640px) {
     .company-detail-header {
         flex-direction: column;
     }
 
-    .company-detail-jobs,
-    .company-detail-website {
+    .company-detail-jobs {
         width: 100%;
+    }
+
+    .company-detail-fact {
+        grid-template-columns: 1fr;
+        gap: 2px;
     }
 }

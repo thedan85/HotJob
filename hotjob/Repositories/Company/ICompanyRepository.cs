@@ -1,3 +1,4 @@
+using hotjob.Models;
 using hotjob.Models.Users;
 
 namespace hotjob.Repositories.Company;
@@ -17,5 +18,15 @@ public interface ICompanyRepository
 
     Task<CompanyProfile?> GetApprovedByIdAsync(
         int id,
+        CancellationToken cancellationToken = default);
+
+    Task<string?> GetOwnerNameAsync(
+        int companyId,
+        CancellationToken cancellationToken = default);
+
+    Task<(IReadOnlyList<Review> Items, int TotalCount)> ListReviewsAsync(
+        int companyId,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken = default);
 }

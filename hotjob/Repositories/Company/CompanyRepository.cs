@@ -1,4 +1,5 @@
 using hotjob.Data;
+using hotjob.Models;
 using hotjob.Models.Users;
 using Microsoft.EntityFrameworkCore;
 
@@ -71,6 +72,42 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
             .FirstOrDefaultAsync(
                 company => company.Id == id && company.Status == CompanyStatus.Approved,
                 cancellationToken);
+
+    public Task<string?> GetOwnerNameAsync(
+        int companyId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Employers
+            .AsNoTracking()
+            .Where(employer => employer.CompanyProfileId == companyId
+                && employer.IsOwner
+                && employer.MembershipStatus == MembershipStatus.Active)
+            .Select(employer => employer.FullName)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<(IReadOnlyList<Review> Items, int TotalCount)> ListReviewsAsync(
+        int companyId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = dbContext.Reviews
+            .AsNoTracking()
+            .Include(review => review.Candidate)
+            .Where(review => review.CompanyProfileId == companyId);
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(review => review.CreatedAt)
+            .ThenByDescending(review => review.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
 
     private static HashSet<string> NormalizeSet(IReadOnlyList<string>? values)
     {

@@ -25,7 +25,15 @@ public sealed record CompanyDetailDto(
     Models.Users.CompanyScale? Scale,
     string? LogoUrl,
     string? Description,
-    string? Website);
+    string? Website,
+    string? OwnerName);
+
+public sealed record CompanyReviewDto(
+    int Id,
+    int RatingScore,
+    string? ReviewText,
+    string ReviewerName,
+    DateTime CreatedAt);
 
 public sealed record CompanyFilterOptionsDto(
     IReadOnlyList<string> Industries,

@@ -105,6 +105,12 @@ public sealed class DemoSeederTests
             .Select(c => c.CompanyName)
             .ToListAsync();
         Assert.Empty(companiesWithoutOwner);
+
+        var companiesWithoutWebsite = await fx.Db.CompanyProfiles
+            .Where(c => c.Website == null || c.Website == string.Empty)
+            .Select(c => c.CompanyName)
+            .ToListAsync();
+        Assert.Empty(companiesWithoutWebsite);
     }
 
     [Fact]
@@ -134,5 +140,28 @@ public sealed class DemoSeederTests
 
         Assert.Equal(0, await fx.Db.CompanyProfiles.CountAsync());
         Assert.Equal(0, await fx.Db.JobPostings.CountAsync());
+    }
+
+    [Fact]
+    public async Task SeedAsync_SeedsReviewsForEveryCompany_Idempotent()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await DatabaseSeeder.SeedAsync(fx.Db, NullLogger.Instance);
+        var seed = DemoSeed();
+
+        await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, seed, NullLogger.Instance);
+
+        var companyIds = await fx.Db.CompanyProfiles.Select(c => c.Id).ToListAsync();
+        Assert.NotEmpty(companyIds);
+        foreach (var companyId in companyIds)
+        {
+            Assert.True(
+                await fx.Db.Reviews.AnyAsync(r => r.CompanyProfileId == companyId),
+                $"Expected a review for company {companyId}.");
+        }
+
+        var reviewCount = await fx.Db.Reviews.CountAsync();
+        await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, seed, NullLogger.Instance);
+        Assert.Equal(reviewCount, await fx.Db.Reviews.CountAsync());
     }
 }

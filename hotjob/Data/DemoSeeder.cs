@@ -1,3 +1,4 @@
+using hotjob.Models;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Models.Resume;
@@ -58,6 +59,7 @@ public static class DemoSeeder
             company = new CompanyProfile
             {
                 CompanyName = companyName,
+                Website = "https://demo.example.com",
                 Location = "Ho Chi Minh City",
                 Industry = "Software",
                 Scale = CompanyScale.From50To199,
@@ -232,6 +234,8 @@ public static class DemoSeeder
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Seeded demo application {ApplicationId}.", application.Id);
         }
+
+        await SeedReviewsAsync(db, userManager, logger, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Fixed catalog of Vietnamese tech companies so the public directory
@@ -265,6 +269,87 @@ public static class DemoSeeder
         ("Hybrid Labs", "SaaS", "Remote", CompanyScale.From10To49, "Remote-first product studio for startups."),
     ];
 
+    /// <summary>Reviewer candidates used to seed company reviews (one review per company each).</summary>
+    private static readonly (string Name, string Email)[] ReviewerCatalog =
+    [
+        ("Minh Tran", "reviewer.minh@example.com"),
+        ("Lan Pham", "reviewer.lan@example.com"),
+        ("Huy Nguyen", "reviewer.huy@example.com"),
+        ("Trang Le", "reviewer.trang@example.com"),
+        ("Duc Vo", "reviewer.duc@example.com"),
+        ("Mai Hoang", "reviewer.mai@example.com"),
+    ];
+
+    private static readonly (int Rating, string Text)[] ReviewTemplates =
+    [
+        (5, "Great place to grow — clear roadmap and supportive teammates."),
+        (4, "Solid engineering culture and competitive pay."),
+        (4, "Good work-life balance most of the time."),
+        (3, "Decent, but processes can be slow."),
+        (5, "Learned a lot here; mentoring is strong."),
+        (4, "Friendly colleagues and interesting projects."),
+    ];
+
+    /// <summary>Seeds reviews for every approved company so the public detail page's
+    /// review section has data. Idempotent per (company, reviewer candidate).</summary>
+    private static async Task SeedReviewsAsync(
+        ApplicationDbContext db,
+        UserManager<ApplicationUser> userManager,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        var companyIds = await db.CompanyProfiles
+            .Where(c => c.Status == CompanyStatus.Approved)
+            .OrderBy(c => c.Id)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        for (var r = 0; r < ReviewerCatalog.Length; r++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (name, email) = ReviewerCatalog[r];
+            var user = await EnsureUserAsync(
+                userManager, email, "Reviewer123!", AppRoles.Candidate, logger).ConfigureAwait(false);
+            var candidate = await db.Candidates
+                .FirstOrDefaultAsync(c => c.UserId == user.Id, cancellationToken)
+                .ConfigureAwait(false);
+            if (candidate is null)
+            {
+                candidate = new Candidate { UserId = user.Id, FullName = name };
+                db.Candidates.Add(candidate);
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else if (candidate.FullName != name)
+            {
+                candidate.FullName = name;
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            for (var i = 0; i < companyIds.Count; i++)
+            {
+                var companyId = companyIds[i];
+                var exists = await db.Reviews.AnyAsync(
+                    review => review.CompanyProfileId == companyId && review.CandidateId == candidate.Id,
+                    cancellationToken).ConfigureAwait(false);
+                if (exists)
+                    continue;
+
+                var template = ReviewTemplates[(i + r) % ReviewTemplates.Length];
+                db.Reviews.Add(new Review
+                {
+                    CompanyProfileId = companyId,
+                    CandidateId = candidate.Id,
+                    RatingScore = template.Rating,
+                    ReviewText = template.Text,
+                    CreatedAt = DateTime.UtcNow.AddDays(-(i + 1)),
+                });
+            }
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private static async Task SeedCompanyCatalogAsync(
         ApplicationDbContext db,
         UserManager<ApplicationUser> userManager,
@@ -277,11 +362,14 @@ public static class DemoSeeder
             var company = await db.CompanyProfiles
                 .FirstOrDefaultAsync(c => c.CompanyName == entry.Name, cancellationToken)
                 .ConfigureAwait(false);
+            var slug = new string(entry.Name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+            var website = $"https://{slug}.example.com";
             if (company is null)
             {
                 company = new CompanyProfile
                 {
                     CompanyName = entry.Name,
+                    Website = website,
                     Industry = entry.Industry,
                     Location = entry.Location,
                     Scale = entry.Scale,
@@ -293,14 +381,25 @@ public static class DemoSeeder
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 logger.LogInformation("Seeded catalog company {Name}.", entry.Name);
             }
-            else if (company.Status != CompanyStatus.Approved)
+            else
             {
-                company.Status = CompanyStatus.Approved;
-                company.VerifiedAt ??= DateTime.UtcNow;
-                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            }
+                var changed = false;
+                if (company.Status != CompanyStatus.Approved)
+                {
+                    company.Status = CompanyStatus.Approved;
+                    company.VerifiedAt ??= DateTime.UtcNow;
+                    changed = true;
+                }
 
-            var slug = new string(entry.Name.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+                if (string.IsNullOrWhiteSpace(company.Website))
+                {
+                    company.Website = website;
+                    changed = true;
+                }
+
+                if (changed)
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
             var ownerUser = await EnsureUserAsync(
                 userManager, $"owner.{slug}@example.com", "Owner123!", AppRoles.Employer, logger).ConfigureAwait(false);
             var employer = await db.Employers

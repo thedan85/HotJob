@@ -43,7 +43,7 @@ public sealed class CompaniesControllerTests
             int id, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(ServiceResult<CompanyDetailDto>.Ok(
-                new CompanyDetailDto(id, "Acme", "Software", "Hanoi", null, null, null, null)));
+                new CompanyDetailDto(id, "Acme", "Software", "Hanoi", null, null, null, null, null)));
         }
     }
 

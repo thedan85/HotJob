@@ -1,4 +1,5 @@
 using hotjob.DTOs.Company;
+using hotjob.Models;
 using hotjob.Models.Users;
 using hotjob.Repositories.Company;
 using hotjob.Services.Employer;
@@ -14,6 +15,15 @@ public sealed class CompanyServiceTests
 {
     private static Services.Company.CompanyService CreateService(TestFixture fx) =>
         new(new CompanyRepository(fx.Db), NullLogger<Services.Company.CompanyService>.Instance);
+
+    private static async Task<Candidate> SeedCandidateAsync(TestFixture fx, string email, string name)
+    {
+        var user = await fx.SeedUserAsync(email, "Str0ng!Pass", AppRoles.Candidate);
+        var candidate = new Candidate { UserId = user.Id, FullName = name };
+        fx.Db.Candidates.Add(candidate);
+        await fx.Db.SaveChangesAsync();
+        return candidate;
+    }
 
     private static async Task SeedCompanyAsync(
         TestFixture fx,
@@ -238,6 +248,78 @@ public sealed class CompanyServiceTests
         Assert.Equal(ServiceErrorType.NotFound, rejected.ErrorType);
         Assert.Equal(ServiceErrorType.NotFound, missing.ErrorType);
         Assert.Equal(ServiceErrorType.NotFound, zero.ErrorType);
+    }
+
+    [Fact]
+    public async Task GetDetail_Approved_ReturnsOwnerName()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var company = new CompanyProfile { CompanyName = "Acme", Status = CompanyStatus.Approved };
+        fx.Db.CompanyProfiles.Add(company);
+        await fx.Db.SaveChangesAsync();
+        var owner = await fx.SeedUserAsync("owner@example.com", "Str0ng!Pass", AppRoles.Employer);
+        fx.Db.Employers.Add(new Employer
+        {
+            UserId = owner.Id,
+            CompanyProfileId = company.Id,
+            FullName = "Acme HR",
+            IsOwner = true,
+            MembershipStatus = MembershipStatus.Active
+        });
+        await fx.Db.SaveChangesAsync();
+
+        var result = await CreateService(fx).GetDetailAsync(company.Id);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal("Acme HR", result.Data!.OwnerName);
+    }
+
+    [Fact]
+    public async Task GetReviews_Paged_OrderedNewestFirst()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var company = new CompanyProfile { CompanyName = "Acme", Status = CompanyStatus.Approved };
+        fx.Db.CompanyProfiles.Add(company);
+        await fx.Db.SaveChangesAsync();
+        var first = await SeedCandidateAsync(fx, "c1@example.com", "Cand One");
+        var second = await SeedCandidateAsync(fx, "c2@example.com", "Cand Two");
+        fx.Db.Reviews.Add(new Review
+        {
+            CompanyProfileId = company.Id,
+            CandidateId = first.Id,
+            RatingScore = 5,
+            ReviewText = "Great",
+            CreatedAt = DateTime.UtcNow.AddDays(-1)
+        });
+        fx.Db.Reviews.Add(new Review
+        {
+            CompanyProfileId = company.Id,
+            CandidateId = second.Id,
+            RatingScore = 3,
+            ReviewText = "Okay",
+            CreatedAt = DateTime.UtcNow
+        });
+        await fx.Db.SaveChangesAsync();
+
+        var result = await CreateService(fx).GetReviewsAsync(company.Id, page: 1);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(2, result.Data!.TotalCount);
+        Assert.Equal("Okay", result.Data.Items[0].ReviewText);
+        Assert.Equal("Cand Two", result.Data.Items[0].ReviewerName);
+        Assert.Equal(3, result.Data.Items[0].RatingScore);
+    }
+
+    [Fact]
+    public async Task GetReviews_UnknownCompany_Empty()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+
+        var result = await CreateService(fx).GetReviewsAsync(9999, page: 1);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Empty(result.Data!.Items);
+        Assert.Equal(0, result.Data.TotalCount);
     }
 }
 
