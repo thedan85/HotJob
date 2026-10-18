@@ -63,6 +63,15 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
         return (Dedupe(industries), Dedupe(locations));
     }
 
+    public Task<CompanyProfile?> GetApprovedByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default) =>
+        dbContext.CompanyProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                company => company.Id == id && company.Status == CompanyStatus.Approved,
+                cancellationToken);
+
     private static HashSet<string> NormalizeSet(IReadOnlyList<string>? values)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

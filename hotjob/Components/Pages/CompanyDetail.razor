@@ -1,0 +1,136 @@
+@page "/companies/{id:int}"
+@using Microsoft.AspNetCore.Authorization
+@using hotjob.DTOs.Company
+@using hotjob.Models.Users
+@using hotjob.Services.Common
+@using hotjob.Services.Company
+@inject ICompanyService CompanyService
+@attribute [AllowAnonymous]
+@attribute [StreamRendering]
+
+<PageTitle>@(company is null ? "Company" : $"{company.CompanyName} | HotJob")</PageTitle>
+
+@if (isLoading)
+{
+    <p class="company-detail-status" role="status">Loading company…</p>
+}
+else if (loadError == "not-found" || company is null)
+{
+    <div class="company-detail-empty">
+        <h1>Company not found</h1>
+        <p>This company is not available or is not yet approved.</p>
+        <a class="company-detail-back" href="/companies">← Back to companies</a>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <p class="company-detail-status company-detail-error" role="alert">@loadError</p>
+}
+else
+{
+    <nav class="company-detail-crumb" aria-label="Breadcrumb">
+        <a href="/companies">← Back to companies</a>
+    </nav>
+
+    <article class="company-detail">
+        <header class="company-detail-header">
+            @if (!string.IsNullOrWhiteSpace(company.LogoUrl))
+            {
+                <img class="company-detail-logo" src="@company.LogoUrl" alt="@company.CompanyName logo" />
+            }
+            else
+            {
+                <div class="company-detail-initials" aria-hidden="true">@Initials(company.CompanyName)</div>
+            }
+            <div class="company-detail-heading">
+                <h1>@company.CompanyName</h1>
+                <div class="company-detail-meta">
+                    @if (!string.IsNullOrWhiteSpace(company.Industry)) { <span class="meta-pill">@company.Industry</span> }
+                    @if (!string.IsNullOrWhiteSpace(company.Location)) { <span class="meta-pill">@company.Location</span> }
+                    @if (company.Scale.HasValue) { <span class="meta-pill">@ScaleLabel(company.Scale.Value)</span> }
+                </div>
+            </div>
+        </header>
+
+        <section class="company-detail-about" aria-label="About this company">
+            <h2>About</h2>
+            @if (!string.IsNullOrWhiteSpace(company.Description))
+            {
+                <p class="company-detail-desc">@company.Description</p>
+            }
+            else
+            {
+                <p class="company-detail-muted">This company has not added a description yet.</p>
+            }
+        </section>
+
+        <div class="company-detail-actions">
+            <a class="company-detail-jobs" href="@JobsUrl">Show jobs</a>
+            @if (!string.IsNullOrWhiteSpace(company.Website))
+            {
+                <a class="company-detail-website" href="@company.Website" target="_blank" rel="noopener noreferrer">Visit website</a>
+            }
+        </div>
+    </article>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private CompanyDetailDto? company;
+    private bool isLoading = true;
+    private string? loadError;
+
+    private string JobsUrl => $"/it-jobs?companyId={Id}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        company = null;
+
+        if (Id <= 0)
+        {
+            loadError = "not-found";
+            isLoading = false;
+            return;
+        }
+
+        try
+        {
+            var result = await CompanyService.GetDetailAsync(Id);
+            if (result.Success && result.Data is not null)
+            {
+                company = result.Data;
+            }
+            else if (result.ErrorType == ServiceErrorType.NotFound)
+            {
+                loadError = "not-found";
+            }
+            else
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "We could not load this company right now.";
+            }
+        }
+        catch
+        {
+            loadError = "We could not load this company right now.";
+        }
+
+        isLoading = false;
+    }
+
+    private static string Initials(string name) =>
+        string.Join("", name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
+
+    private static string ScaleLabel(CompanyScale scale) => scale switch
+    {
+        CompanyScale.LessThan10 => "1–10 employees",
+        CompanyScale.From10To49 => "10–49 employees",
+        CompanyScale.From50To199 => "50–199 employees",
+        CompanyScale.From200To499 => "200–499 employees",
+        CompanyScale.MoreThan500 => "500+ employees",
+        _ => scale.ToString()
+    };
+}

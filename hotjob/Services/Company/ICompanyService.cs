@@ -12,4 +12,8 @@ public interface ICompanyService
 
     Task<ServiceResult<CompanyFilterOptionsDto>> GetFilterOptionsAsync(
         CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<CompanyDetailDto>> GetDetailAsync(
+        int id,
+        CancellationToken cancellationToken = default);
 }

@@ -278,7 +278,7 @@ public sealed class JobService(
         string? keyword,
         string? city,
         string? skill,
-        string? company,
+        int? companyId,
         JobType? jobType,
         int page,
         int pageSize,
@@ -287,7 +287,7 @@ public sealed class JobService(
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var (items, total) = await jobRepository.BrowsePublishedAsync(keyword, city, skill, company, jobType, page, pageSize, cancellationToken);
+        var (items, total) = await jobRepository.BrowsePublishedAsync(keyword, city, skill, companyId, jobType, page, pageSize, cancellationToken);
 
         return ServiceResult<PagedResponse<PublicJobListItemResponse>>.Ok(new PagedResponse<PublicJobListItemResponse>
         {

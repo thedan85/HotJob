@@ -134,7 +134,7 @@
         <div class="company-grid">
             @foreach (var company in paged.Items)
             {
-                <article class="company-card">
+                <a class="company-card" href="@($"/companies/{company.Id}")">
                     <div class="company-logo-row">
                         @if (!string.IsNullOrWhiteSpace(company.LogoUrl))
                         {
@@ -152,7 +152,7 @@
                     </div>
                     @if (company.Scale.HasValue) { <p class="company-scale">@ScaleLabel(company.Scale.Value)</p> }
                     @if (!string.IsNullOrWhiteSpace(company.Description)) { <p class="company-desc">@company.Description</p> }
-                </article>
+                </a>
             }
         </div>
         @if (paged.TotalPages > 1)

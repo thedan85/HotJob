@@ -47,4 +47,26 @@ public sealed class CompanyService(
         var (industries, locations) = await repository.ListFilterOptionsAsync(cancellationToken);
         return ServiceResult<CompanyFilterOptionsDto>.Ok(new CompanyFilterOptionsDto(industries, locations));
     }
+
+    public async Task<ServiceResult<CompanyDetailDto>> GetDetailAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        if (id <= 0)
+            return ServiceResult<CompanyDetailDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
+
+        var company = await repository.GetApprovedByIdAsync(id, cancellationToken);
+        if (company is null)
+            return ServiceResult<CompanyDetailDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
+
+        return ServiceResult<CompanyDetailDto>.Ok(new CompanyDetailDto(
+            company.Id,
+            company.CompanyName,
+            company.Industry,
+            company.Location,
+            company.Scale,
+            company.LogoUrl,
+            company.Description,
+            company.Website));
+    }
 }

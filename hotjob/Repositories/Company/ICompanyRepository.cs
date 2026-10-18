@@ -14,4 +14,8 @@ public interface ICompanyRepository
 
     Task<(IReadOnlyList<string> Industries, IReadOnlyList<string> Locations)> ListFilterOptionsAsync(
         CancellationToken cancellationToken = default);
+
+    Task<CompanyProfile?> GetApprovedByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default);
 }

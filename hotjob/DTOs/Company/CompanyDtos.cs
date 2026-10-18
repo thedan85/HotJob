@@ -17,6 +17,16 @@ public sealed record CompanyListItemDto(
     string? LogoUrl,
     string? Description);
 
+public sealed record CompanyDetailDto(
+    int Id,
+    string CompanyName,
+    string? Industry,
+    string? Location,
+    Models.Users.CompanyScale? Scale,
+    string? LogoUrl,
+    string? Description,
+    string? Website);
+
 public sealed record CompanyFilterOptionsDto(
     IReadOnlyList<string> Industries,
     IReadOnlyList<string> Locations);

@@ -145,8 +145,8 @@
     [SupplyParameterFromQuery(Name = "skill")]
     public string? Skill { get; set; }
 
-    [SupplyParameterFromQuery(Name = "company")]
-    public string? Company { get; set; }
+    [SupplyParameterFromQuery(Name = "companyId")]
+    public int? CompanyId { get; set; }
 
     [SupplyParameterFromQuery(Name = "jobType")]
     public string? JobTypeFilter { get; set; }
@@ -172,7 +172,7 @@
             NullIfWhiteSpace(Keyword),
             NullIfWhiteSpace(City),
             NullIfWhiteSpace(Skill),
-            NullIfWhiteSpace(Company),
+            CompanyId is > 0 ? CompanyId : null,
             hasJobType ? parsedJobType : null,
             Page <= 0 ? 1 : Page,
             PageSize);
@@ -195,7 +195,7 @@
         AddQuery(parts, "keyword", Keyword);
         AddQuery(parts, "city", City);
         AddQuery(parts, "skill", Skill);
-        AddQuery(parts, "company", Company);
+        if (CompanyId is > 0) parts.Add($"companyId={CompanyId}");
         AddQuery(parts, "jobType", JobTypeFilter);
         if (page > 1)
         {

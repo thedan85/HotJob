@@ -51,7 +51,7 @@ public interface IJobService
         string? keyword,
         string? city,
         string? skill,
-        string? company,
+        int? companyId,
         JobType? jobType,
         int page,
         int pageSize,

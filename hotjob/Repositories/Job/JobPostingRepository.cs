@@ -75,7 +75,7 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         string? keyword,
         string? city,
         string? skill,
-        string? company,
+        int? companyId,
         JobType? jobType,
         int page,
         int pageSize,
@@ -113,10 +113,9 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
                 job.JobSkills.Any(jobSkill => EF.Functions.Like(jobSkill.Skill.Name, $"%{term}%")));
         }
 
-        if (!string.IsNullOrWhiteSpace(company))
+        if (companyId is > 0)
         {
-            var term = company.Trim();
-            query = query.Where(job => EF.Functions.Like(job.Company.CompanyName, $"%{term}%"));
+            query = query.Where(job => job.CompanyProfileId == companyId.Value);
         }
 
         if (jobType.HasValue)

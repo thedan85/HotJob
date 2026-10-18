@@ -38,6 +38,13 @@ public sealed class CompaniesControllerTests
             return Task.FromResult(ServiceResult<CompanyFilterOptionsDto>.Ok(
                 new CompanyFilterOptionsDto(["Software"], ["Hanoi"])));
         }
+
+        public Task<ServiceResult<CompanyDetailDto>> GetDetailAsync(
+            int id, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(ServiceResult<CompanyDetailDto>.Ok(
+                new CompanyDetailDto(id, "Acme", "Software", "Hanoi", null, null, null, null)));
+        }
     }
 
     [Fact]

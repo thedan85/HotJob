@@ -192,6 +192,53 @@ public sealed class CompanyServiceTests
         Assert.True(result.Success);
         Assert.Equal(["Hanoi"], result.Data!.Locations);
     }
+
+    [Fact]
+    public async Task GetDetail_Approved_ReturnsDetail()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        fx.Db.CompanyProfiles.Add(new CompanyProfile
+        {
+            CompanyName = "Acme",
+            Status = CompanyStatus.Approved,
+            Industry = "Software",
+            Location = "Hanoi",
+            Scale = CompanyScale.From10To49,
+            Website = "https://acme.example.com",
+            Description = "We build things."
+        });
+        await fx.Db.SaveChangesAsync();
+        var id = fx.Db.CompanyProfiles.Single().Id;
+
+        var result = await CreateService(fx).GetDetailAsync(id);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal("Acme", result.Data!.CompanyName);
+        Assert.Equal("Software", result.Data.Industry);
+        Assert.Equal(CompanyScale.From10To49, result.Data.Scale);
+        Assert.Equal("https://acme.example.com", result.Data.Website);
+    }
+
+    [Fact]
+    public async Task GetDetail_NonApprovedOrMissing_ReturnsNotFound()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await SeedCompanyAsync(fx, "Pending Co", CompanyStatus.Pending);
+        await SeedCompanyAsync(fx, "Rejected Co", CompanyStatus.Rejected);
+        var pendingId = fx.Db.CompanyProfiles.Single(c => c.Status == CompanyStatus.Pending).Id;
+        var rejectedId = fx.Db.CompanyProfiles.Single(c => c.Status == CompanyStatus.Rejected).Id;
+        var service = CreateService(fx);
+
+        var pending = await service.GetDetailAsync(pendingId);
+        var rejected = await service.GetDetailAsync(rejectedId);
+        var missing = await service.GetDetailAsync(9999);
+        var zero = await service.GetDetailAsync(0);
+
+        Assert.Equal(ServiceErrorType.NotFound, pending.ErrorType);
+        Assert.Equal(ServiceErrorType.NotFound, rejected.ErrorType);
+        Assert.Equal(ServiceErrorType.NotFound, missing.ErrorType);
+        Assert.Equal(ServiceErrorType.NotFound, zero.ErrorType);
+    }
 }
 
 public sealed class EmployerCompanyServiceTests
