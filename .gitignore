@@ -11,4 +11,6 @@ build.log
 node_modules/
 AGENTS.md
 
-.dll
+*.dll
+
+hotjob/appsettings.json
