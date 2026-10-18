@@ -9,7 +9,7 @@
         modelBuilder.Entity<IdentityRoleClaim<string>>().ToTable("RoleClaims");
 
 2. Bỏ bớt thuộc tính: chỉ bỏ được một phần.
-    - Thuộc tính bạn tự thêm (CreatedAt, IsActive): xóa khỏi class + migration là xong.
+    - Thuộc tính tự thêm (CreatedAt, IsActive): xóa khỏi class + migration là xong.
     - Thuộc tính kế thừa từ IdentityUser: không xóa trong class được, phải dùng Fluent API:
         modelBuilder.Entity<ApplicationUser>().Ignore(u => u.PhoneNumber);
 
