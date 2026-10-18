@@ -78,7 +78,10 @@ public sealed record JobDetailResponse(
     IReadOnlyList<JobCategoryDto> Categories,
     int ApplicationsCount,
     DateTime CreatedAt,
-    string? CompanyLocation);
+    string? CompanyLocation,
+    DateTime? SubmittedForApprovalAt,
+    DateTime? ReviewedAt,
+    string? RejectionReason);
 
 public sealed record JobListItemResponse(
     int Id,

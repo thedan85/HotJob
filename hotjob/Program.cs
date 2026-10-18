@@ -174,6 +174,7 @@ builder.Services.AddScoped<HotJobAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(services =>
     services.GetRequiredService<HotJobAuthStateProvider>());
 builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
+builder.Services.AddScoped<hotjob.Services.Employer.IReviewService, hotjob.Services.Employer.ReviewService>();
 
 var app = builder.Build();
 
