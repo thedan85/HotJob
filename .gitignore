@@ -10,5 +10,5 @@ build.log
 .env.local
 node_modules/
 AGENTS.md
-
+Directory.Build.props
 .dll
