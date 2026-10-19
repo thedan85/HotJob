@@ -1,0 +1,222 @@
+@page "/become-employer"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using hotjob.DTOs.Company
+@using hotjob.DTOs.Job
+@using hotjob.DTOs.Authentication
+@using hotjob.Services.Account
+@using hotjob.Services.Authentication
+@using hotjob.Services.Company
+@inject IAccountService AccountService
+@inject ICompanyService CompanyService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@inject ILogger<BecomeEmployerPage> Logger
+
+<PageTitle>Become an employer | HotJob</PageTitle>
+
+<AuthorizeView>
+    <Authorized Context="authorizedUser">
+        <section class="become-employer" aria-labelledby="be-title">
+            <p class="eyebrow">Employer account</p>
+            <h1 id="be-title">Become an employer</h1>
+            <p class="be-lede">Upgrade your candidate account to post jobs and manage applicants. Your candidate profile stays intact.</p>
+
+            @if (alreadyEmployer)
+            {
+                <div class="be-notice" role="status">
+                    You are already an employer. <a href="/employer/jobs">Go to My Jobs</a>.
+                </div>
+            }
+            else
+            {
+                <EditForm Model="form" OnValidSubmit="SubmitAsync" class="be-form">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="validation-summary" />
+
+                    <div class="field-group">
+                        <label for="be-name">Full name</label>
+                        <InputText id="be-name" @bind-Value="form.FullName" autocomplete="name" />
+                        <ValidationMessage For="@(() => form.FullName)" />
+                    </div>
+
+                    <div class="field-group">
+                        <label for="be-position">Your position</label>
+                        <InputText id="be-position" @bind-Value="form.Position" placeholder="e.g. HR Manager" />
+                        <ValidationMessage For="@(() => form.Position)" />
+                    </div>
+
+                    <fieldset class="be-company">
+                        <legend>Company</legend>
+
+                        <label class="be-choice">
+                            <input type="radio" name="company-mode" checked="@(!createNewCompany)" @onchange="@(() => createNewCompany = false)" />
+                            <span>Join an existing company</span>
+                        </label>
+                        <label class="be-choice">
+                            <input type="radio" name="company-mode" checked="@createNewCompany" @onchange="@(() => createNewCompany = true)" />
+                            <span>Create a new company</span>
+                        </label>
+
+                        @if (createNewCompany)
+                        {
+                            <div class="field-group">
+                                <label for="be-company-name">Company name</label>
+                                <InputText id="be-company-name" @bind-Value="form.CompanyName" placeholder="Acme Corp" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="field-group">
+                                <label for="be-company-id">Company</label>
+                                @if (isLoadingCompanies)
+                                {
+                                    <p class="be-hint">Loading companies…</p>
+                                }
+                                else if (companies.Count == 0)
+                                {
+                                    <p class="be-hint">No companies available to join yet. Create a new one instead.</p>
+                                }
+                                else
+                                {
+                                    <InputSelect id="be-company-id" @bind-Value="form.CompanyProfileId">
+                                        <option value="">Select a company…</option>
+                                        @foreach (var company in companies)
+                                        {
+                                            <option value="@company.Id">@company.CompanyName</option>
+                                        }
+                                    </InputSelect>
+                                }
+                            </div>
+                        }
+                    </fieldset>
+
+                    @if (!string.IsNullOrWhiteSpace(message))
+                    {
+                        <div class="form-message @(isSuccess ? "success" : "error")" role="alert">@message</div>
+                    }
+
+                    <button class="submit-button" type="submit" disabled="@isSubmitting">
+                        @(isSubmitting ? "Upgrading…" : "Become an employer")
+                        <span aria-hidden="true">→</span>
+                    </button>
+                </EditForm>
+            }
+        </section>
+    </Authorized>
+    <NotAuthorized>
+        <section class="become-employer">
+            <h1>Become an employer</h1>
+            <p class="be-lede">Please <a href="/login">sign in</a> to upgrade your account.</p>
+        </section>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private UpgradeToEmployerRequest form = new();
+    private IReadOnlyList<CompanyListItemDto> companies = Array.Empty<CompanyListItemDto>();
+    private bool createNewCompany;
+    private bool isLoadingCompanies = true;
+    private bool isSubmitting;
+    private bool isSuccess;
+    private bool alreadyEmployer;
+    private string? message;
+    private string? userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+        alreadyEmployer = state.User.IsInRole("Employer");
+        if (alreadyEmployer || userId is null)
+        {
+            isLoadingCompanies = false;
+            return;
+        }
+
+        var profile = await AccountService.GetProfileAsync(userId);
+        if (profile.Success)
+        {
+            form.FullName = profile.Data!.Candidate?.FullName ?? profile.Data.Employer?.FullName ?? state.User.Identity?.Name ?? string.Empty;
+            form.Position = profile.Data.Candidate?.Position;
+        }
+
+        var result = await CompanyService.ListAsync(new CompanyListQuery { Page = 1 });
+        if (result.Success)
+        {
+            companies = result.Data!.Items;
+        }
+
+        isLoadingCompanies = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (userId is null || isSubmitting)
+        {
+            return;
+        }
+
+        message = null;
+        isSuccess = false;
+
+        // The API accepts exactly one of the two company targets.
+        if (createNewCompany)
+        {
+            form.CompanyProfileId = null;
+        }
+        else
+        {
+            form.CompanyName = null;
+        }
+
+        isSubmitting = true;
+        try
+        {
+            var result = await AccountService.UpgradeToEmployerAsync(userId, form);
+            if (result.Success)
+            {
+                isSuccess = true;
+                await RefreshRolesAsync();
+                NavigationManager.NavigateTo("/employer/jobs");
+                return;
+            }
+
+            message = string.Join(" ", result.Errors);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Employer upgrade failed for {UserId}.", userId);
+            message = "We could not upgrade your account right now. Please try again.";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task RefreshRolesAsync()
+    {
+        try
+        {
+            // Re-read roles from the DB so the Employer nav items appear without re-login.
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
+            if (result.Ok && result.Data is not null)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // JS interop unavailable — the next page load restores the session anyway.
+        }
+    }
+}

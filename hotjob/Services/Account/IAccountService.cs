@@ -9,6 +9,12 @@ public interface IAccountService
         RegisterAccountRequest request,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Grants an already-signed-in user an Employer profile + role without re-registering.</summary>
+    Task<ServiceResult<ProfileResponse>> UpgradeToEmployerAsync(
+        string userId,
+        UpgradeToEmployerRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<ServiceResult<ProfileResponse>> GetProfileAsync(
         string userId,
         CancellationToken cancellationToken = default);

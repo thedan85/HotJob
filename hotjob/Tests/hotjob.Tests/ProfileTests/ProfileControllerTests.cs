@@ -85,6 +85,10 @@ public sealed class ProfileControllerTests
             RegisterAccountRequest request, CancellationToken cancellationToken = default) =>
             Task.FromResult(ServiceResult<RegisteredAccountResponse>.Fail(ServiceErrorType.NotFound));
 
+        public Task<ServiceResult<ProfileResponse>> UpgradeToEmployerAsync(
+            string userId, UpgradeToEmployerRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ServiceResult<ProfileResponse>.Fail(ServiceErrorType.NotFound));
+
         public Task<ServiceResult<ProfileResponse>> GetProfileAsync(
             string userId, CancellationToken cancellationToken = default)
         {

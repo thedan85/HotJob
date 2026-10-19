@@ -35,6 +35,21 @@ public enum AccountType
     Employer = 2
 }
 
+/// <summary>Candidate-to-employer upgrade. No email/password: the caller is already signed in.</summary>
+public sealed class UpgradeToEmployerRequest
+{
+    [Required, MaxLength(100)]
+    public string FullName { get; set; } = string.Empty;
+
+    [MaxLength(100)]
+    public string? Position { get; set; }
+
+    public int? CompanyProfileId { get; set; }
+
+    [MaxLength(200)]
+    public string? CompanyName { get; set; }
+}
+
 public sealed record RegisteredAccountResponse(
     string UserId,
     string Email,

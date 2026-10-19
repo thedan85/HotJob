@@ -45,6 +45,19 @@ public sealed class CompaniesControllerTests
             return Task.FromResult(ServiceResult<CompanyDetailDto>.Ok(
                 new CompanyDetailDto(id, "Acme", "Software", "Hanoi", null, null, null, null, null)));
         }
+
+        public Task<ServiceResult<PagedResponse<CompanyReviewDto>>> GetReviewsAsync(
+            int companyId, int page, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(ServiceResult<PagedResponse<CompanyReviewDto>>.Ok(
+                new PagedResponse<CompanyReviewDto>
+                {
+                    Items = [],
+                    TotalCount = 0,
+                    Page = page,
+                    PageSize = 20
+                }));
+        }
     }
 
     [Fact]

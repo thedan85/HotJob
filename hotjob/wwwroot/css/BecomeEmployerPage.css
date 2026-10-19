@@ -1,0 +1,73 @@
+.become-employer {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 48px 24px 72px;
+}
+
+.become-employer .eyebrow {
+    color: var(--hj-accent);
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    font-size: 12px;
+    margin: 0 0 8px;
+}
+
+.become-employer h1 {
+    margin: 0 0 12px;
+    font-size: 32px;
+    color: var(--hj-ink);
+}
+
+.be-lede {
+    color: var(--hj-muted);
+    margin: 0 0 28px;
+}
+
+.be-notice {
+    background: var(--hj-surface);
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-md);
+    box-shadow: var(--hj-shadow-sm);
+    padding: 18px 20px;
+    color: var(--hj-ink);
+}
+
+.be-form {
+    background: var(--hj-surface);
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-md);
+    box-shadow: var(--hj-shadow-sm);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.be-company {
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-sm);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.be-company legend {
+    font-weight: 600;
+    color: var(--hj-ink);
+    padding: 0 6px;
+}
+
+.be-choice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.be-hint {
+    color: var(--hj-muted);
+    margin: 0;
+    font-size: 14px;
+}

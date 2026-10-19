@@ -69,7 +69,9 @@ public sealed class AccountService(
             }
             else
             {
-                var employerResult = await AddEmployerProfileAsync(user, request, cancellationToken);
+                var employerResult = await AddEmployerProfileAsync(
+                    user, request.FullName, request.Position,
+                    request.CompanyProfileId, request.CompanyName, cancellationToken);
                 if (!employerResult.Success)
                 {
                     await transaction.RollbackAsync(CancellationToken.None);
@@ -245,6 +247,82 @@ public sealed class AccountService(
         return ServiceResult.Ok();
     }
 
+    public async Task<ServiceResult<ProfileResponse>> UpgradeToEmployerAsync(
+        string userId,
+        UpgradeToEmployerRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var validationErrors = ValidateUpgradeRequest(request);
+        if (validationErrors.Count > 0)
+            return ServiceResult<ProfileResponse>.Fail(ServiceErrorType.Validation, validationErrors);
+
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null)
+            return ServiceResult<ProfileResponse>.Fail(ServiceErrorType.NotFound, "User not found.");
+        if (!user.IsActive)
+            return ServiceResult<ProfileResponse>.Fail(ServiceErrorType.Unauthorized, "Account is disabled.");
+
+        if (await dbContext.Employers.AnyAsync(profile => profile.UserId == userId, cancellationToken))
+            return ServiceResult<ProfileResponse>.Fail(ServiceErrorType.Conflict, "You are already an employer.");
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var employerResult = await AddEmployerProfileAsync(
+                user, request.FullName, request.Position,
+                request.CompanyProfileId, request.CompanyName, cancellationToken);
+            if (!employerResult.Success)
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                return ServiceResult<ProfileResponse>.Fail(employerResult.ErrorType!.Value, employerResult.Errors);
+            }
+
+            var roleResult = await AddRoleAsync(user, AppRoles.Employer);
+            if (!roleResult.Succeeded)
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                return ProfileIdentityFailure(roleResult);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            logger.LogWarning(exception, "Employer upgrade database conflict for {UserId}.", userId);
+            return ServiceResult<ProfileResponse>.Fail(
+                IsUniqueConstraintViolation(exception) ? ServiceErrorType.Conflict : ServiceErrorType.Validation,
+                "The account could not be upgraded to an employer.");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            logger.LogError(exception, "Employer upgrade failed for {UserId}.", userId);
+            throw;
+        }
+
+        return await GetProfileAsync(userId, cancellationToken);
+    }
+
+    private static IReadOnlyList<string> ValidateUpgradeRequest(UpgradeToEmployerRequest? request)
+    {
+        if (request is null)
+            return ["Upgrade data is required."];
+
+        var results = new List<ValidationResult>();
+        Validator.TryValidateObject(request, new ValidationContext(request), results, true);
+        var errors = results.SelectMany(result => result.ErrorMessage is null ? [] : new[] { result.ErrorMessage }).ToList();
+
+        if (string.IsNullOrWhiteSpace(request.FullName))
+            errors.Add("Full name is required.");
+        if (!request.CompanyProfileId.HasValue && string.IsNullOrWhiteSpace(request.CompanyName))
+            errors.Add("Select an existing company or provide a company name.");
+        if (request.CompanyProfileId.HasValue && !string.IsNullOrWhiteSpace(request.CompanyName))
+            errors.Add("Provide either an existing company or a new company name, not both.");
+
+        return errors.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     private static IReadOnlyList<string> ValidateProfileRequest(UpdateProfileRequest? request)
     {
         if (request is null)
@@ -330,18 +408,21 @@ public sealed class AccountService(
 
     private async Task<ServiceResult<int>> AddEmployerProfileAsync(
         ApplicationUser user,
-        RegisterAccountRequest request,
+        string fullName,
+        string? position,
+        int? companyProfileId,
+        string? companyName,
         CancellationToken cancellationToken)
     {
         CompanyProfile? company = null;
         var isOwner = false;
         var membershipStatus = MembershipStatus.Pending;
 
-        if (request.CompanyProfileId.HasValue)
+        if (companyProfileId.HasValue)
         {
             company = await dbContext.CompanyProfiles
                 .FirstOrDefaultAsync(
-                    profile => profile.Id == request.CompanyProfileId.Value,
+                    profile => profile.Id == companyProfileId.Value,
                     cancellationToken);
 
             if (company is null)
@@ -356,9 +437,9 @@ public sealed class AccountService(
                     "You cannot join a rejected company.");
             }
         }
-        else if (!string.IsNullOrWhiteSpace(request.CompanyName))
+        else if (!string.IsNullOrWhiteSpace(companyName))
         {
-            var normalizedCompanyName = request.CompanyName.Trim();
+            var normalizedCompanyName = companyName.Trim();
             if (await dbContext.CompanyProfiles.AnyAsync(
                     profile => profile.CompanyName == normalizedCompanyName,
                     cancellationToken))
@@ -387,8 +468,8 @@ public sealed class AccountService(
         var employer = new global::hotjob.Models.Users.Employer
         {
             UserId = user.Id,
-            FullName = request.FullName.Trim(),
-            Position = string.IsNullOrWhiteSpace(request.Position) ? null : request.Position.Trim(),
+            FullName = fullName.Trim(),
+            Position = string.IsNullOrWhiteSpace(position) ? null : position.Trim(),
             Company = company,
             IsOwner = isOwner,
             MembershipStatus = membershipStatus

@@ -19,6 +19,10 @@ public sealed class AccountControllerTests
             RegisterAccountRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(Next);
 
+        public Task<ServiceResult<ProfileResponse>> UpgradeToEmployerAsync(
+            string userId, UpgradeToEmployerRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(ServiceResult<ProfileResponse>.Fail(ServiceErrorType.NotFound));
+
         public Task<ServiceResult<ProfileResponse>> GetProfileAsync(
             string userId, CancellationToken cancellationToken = default)
             => Task.FromResult(ServiceResult<ProfileResponse>.Fail(ServiceErrorType.NotFound));
@@ -96,6 +100,10 @@ public sealed class AccountControllerTests
             return Task.FromResult(ServiceResult<RegisteredAccountResponse>.Ok(
                 new RegisteredAccountResponse("u1", "a@b.com", true, false, null)));
         }
+
+        public Task<ServiceResult<ProfileResponse>> UpgradeToEmployerAsync(
+            string userId, UpgradeToEmployerRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult(ServiceResult<ProfileResponse>.Fail(ServiceErrorType.NotFound));
 
         public Task<ServiceResult<ProfileResponse>> GetProfileAsync(
             string userId, CancellationToken cancellationToken = default)

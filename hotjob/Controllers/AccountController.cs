@@ -86,9 +86,33 @@ public sealed class AccountController(IAccountService accountService) : Controll
         return MapError(result);
     }
 
+    /// <summary>Upgrade the signed-in user (candidate) to an employer without re-registering. Joins an existing company (CompanyProfileId) or creates one (CompanyName).</summary>
+    /// <response code="200">Upgraded. Returns the refreshed profile.</response>
+    /// <response code="400">Validation failed (company selection).</response>
+    /// <response code="401">Not authenticated, or account disabled.</response>
+    /// <response code="404">User or company not found.</response>
+    /// <response code="409">Already an employer, company name taken, or company rejected.</response>
+    [HttpPost("become-employer")]
+    [Authorize]
+    [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> BecomeEmployer(
+        [FromBody] UpgradeToEmployerRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+            return Unauthorized("Not authenticated.");
+
+        return MapProfileResult(
+            await accountService.UpgradeToEmployerAsync(userId, request, cancellationToken));
+    }
+
     private string? GetUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-
     private static IActionResult MapProfileResult(ServiceResult<ProfileResponse> result) =>
         result.Success ? new OkObjectResult(result.Data) : MapError(result);
 
