@@ -1,0 +1,323 @@
+@page "/admin"
+@layout AdminLayout
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using hotjob.Data
+@using hotjob.Models.Application
+@using hotjob.Models.Job
+@using hotjob.Models.Users
+@inject ApplicationDbContext Db
+
+<PageTitle>Admin dashboard | HotJob</PageTitle>
+
+<section class="admin-page" aria-labelledby="admin-title">
+    <div class="admin-breadcrumb"><span>Admin Console</span><span aria-hidden="true">›</span><strong>Dashboard / Overview</strong></div>
+    <header class="admin-heading">
+        <div>
+            <p class="admin-eyebrow">Platform health &amp; activity</p>
+            <div class="admin-title-row"><h1 id="admin-title">Dashboard / Overview</h1><span class="admin-heading-badge">LIVE OVERVIEW</span></div>
+            <p class="admin-subtitle">Your platform at a glance. Monitor accounts, company approvals and hiring activity.</p>
+        </div>
+        <div class="admin-heading-actions">
+            <span class="admin-date">@DateTime.Now.ToString("dddd, dd MMMM yyyy", CultureInfo.InvariantCulture)</span>
+            <button class="admin-refresh" type="button" @onclick="RefreshAsync" disabled="@isLoading" aria-label="Refresh dashboard">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                Refresh
+            </button>
+        </div>
+    </header>
+
+    @if (loadError is not null)
+    {
+        <div class="admin-error" role="alert">@loadError</div>
+    }
+
+    @if (isLoading && !hasLoaded)
+    {
+        <div class="admin-loading" role="status">Loading platform overview…</div>
+    }
+    else if (!hasLoaded)
+    {
+        <div class="admin-loading" role="status">Dashboard data is unavailable. Use Refresh to try again.</div>
+    }
+    else
+    {
+        <div class="admin-stat-grid">
+            <article class="admin-stat-card">
+                <div class="admin-stat-top"><span class="admin-stat-icon admin-icon-blue" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 11a4 4 0 0 0 0-7.7M17 14.5a4 4 0 0 1 4 4V20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                </span><span class="admin-stat-note">All accounts</span></div>
+                <strong class="admin-stat-number">@totalUsers.ToString("N0", CultureInfo.InvariantCulture)</strong>
+                <span class="admin-stat-label">Registered users</span>
+                <span class="admin-stat-detail">@activeUsers.ToString("N0", CultureInfo.InvariantCulture) active accounts</span>
+            </article>
+            <article class="admin-stat-card">
+                <div class="admin-stat-top"><span class="admin-stat-icon admin-icon-amber" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5M8 9h.01M12 9h.01M16 9h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                </span><span class="admin-stat-note admin-note-amber">Needs review</span></div>
+                <strong class="admin-stat-number">@pendingCompanyCount.ToString("N0", CultureInfo.InvariantCulture)</strong>
+                <span class="admin-stat-label">Companies pending</span>
+                <a class="admin-stat-link" href="#company-review">Go to review queue <span aria-hidden="true">→</span></a>
+            </article>
+            <article class="admin-stat-card">
+                <div class="admin-stat-top"><span class="admin-stat-icon admin-icon-green" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.8" /><path d="M16 3v4M8 3v4M3 10h18M8 15h3M8 18h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+                </span><span class="admin-stat-note">Currently live</span></div>
+                <strong class="admin-stat-number">@publishedJobs.ToString("N0", CultureInfo.InvariantCulture)</strong>
+                <span class="admin-stat-label">Published jobs</span>
+                <span class="admin-stat-detail">@totalCompanies.ToString("N0", CultureInfo.InvariantCulture) companies on HotJob</span>
+            </article>
+            <article class="admin-stat-card">
+                <div class="admin-stat-top"><span class="admin-stat-icon admin-icon-purple" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M7 3h10a2 2 0 0 1 2 2v16l-7-4-7 4V5a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" /><path d="M9 8h6M9 11h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+                </span><span class="admin-stat-note">Last 30 days</span></div>
+                <strong class="admin-stat-number">@recentApplications.ToString("N0", CultureInfo.InvariantCulture)</strong>
+                <span class="admin-stat-label">New applications</span>
+                <span class="admin-stat-detail">@newUsersLast30Days.ToString("N0", CultureInfo.InvariantCulture) new user accounts</span>
+            </article>
+        </div>
+
+        <div class="admin-main-grid">
+            <section class="admin-panel admin-trend-panel" aria-labelledby="trend-title">
+                <div class="admin-panel-heading">
+                    <div><p class="admin-section-kicker">The last seven days</p><h2 id="trend-title">Application activity</h2></div>
+                    <span class="admin-period-pill">Daily applications</span>
+                </div>
+                @if (applicationTrend.All(day => day.Count == 0))
+                {
+                    <div class="admin-empty-chart">Application activity will appear here as candidates apply to jobs.</div>
+                }
+                else
+                {
+                    <div class="admin-chart" role="img" aria-label="Daily application counts for the last seven days">
+                        @foreach (var day in applicationTrend)
+                        {
+                            <div class="admin-chart-column">
+                                <span class="admin-chart-value">@(day.Count == 0 ? "" : day.Count.ToString(CultureInfo.InvariantCulture))</span>
+                                <div class="admin-chart-track"><span class="admin-chart-bar" style="height: @BarHeight(day.Count)%"></span></div>
+                                <span class="admin-chart-label">@day.Date.ToString("ddd", CultureInfo.InvariantCulture)</span>
+                            </div>
+                        }
+                    </div>
+                }
+                <div class="admin-chart-summary"><span class="admin-chart-dot" aria-hidden="true"></span><span>@applicationsLastSevenDays.ToString("N0", CultureInfo.InvariantCulture) applications this week</span></div>
+            </section>
+
+            <section class="admin-panel admin-review-panel" id="company-review" aria-labelledby="review-title">
+                <div class="admin-panel-heading">
+                    <div><p class="admin-section-kicker">Verification queue</p><h2 id="review-title">Company review</h2></div>
+                    <span class="admin-count-pill">@pendingCompanyCount pending</span>
+                </div>
+                @if (pendingCompanies.Count == 0)
+                {
+                    <div class="admin-empty-state">
+                        <span class="admin-empty-check" aria-hidden="true">✓</span>
+                        <strong>You're all caught up</strong>
+                        <span>No companies are waiting for verification.</span>
+                    </div>
+                }
+                else
+                {
+                    <ul class="admin-company-list">
+                        @foreach (var company in pendingCompanies)
+                        {
+                            <li class="admin-company-row">
+                                <span class="admin-company-avatar">@Initials(company.Name)</span>
+                                <span class="admin-company-info"><strong>@company.Name</strong><span>@(string.IsNullOrWhiteSpace(company.Industry) ? "Industry not specified" : company.Industry)</span></span>
+                                <span class="admin-company-members">@company.EmployerCount <span>members</span></span>
+                            </li>
+                        }
+                    </ul>
+                    @if (pendingCompanyCount > pendingCompanies.Count)
+                    {
+                        <p class="admin-queue-note">Showing the latest @pendingCompanies.Count of @pendingCompanyCount pending companies.</p>
+                    }
+                }
+            </section>
+        </div>
+
+        <div class="admin-lower-grid">
+            <section class="admin-panel admin-applications-panel" aria-labelledby="applications-title">
+                <div class="admin-panel-heading">
+                    <div><p class="admin-section-kicker">Candidate activity</p><h2 id="applications-title">Recent applications</h2></div>
+                    <span class="admin-muted-count">@recentApplicationRows.Count latest</span>
+                </div>
+                @if (recentApplicationRows.Count == 0)
+                {
+                    <div class="admin-table-empty">Applications will show here once candidates start applying.</div>
+                }
+                else
+                {
+                    <div class="admin-table-scroll">
+                        <table class="admin-table">
+                            <thead><tr><th>Candidate</th><th>Position</th><th>Company</th><th>Status</th><th>Applied</th></tr></thead>
+                            <tbody>
+                                @foreach (var row in recentApplicationRows)
+                                {
+                                    <tr>
+                                        <td><span class="admin-candidate-cell"><span class="admin-candidate-avatar">@Initials(row.CandidateName)</span><strong>@row.CandidateName</strong></span></td>
+                                        <td class="admin-job-cell">@row.JobTitle</td>
+                                        <td>@row.CompanyName</td>
+                                        <td><span class="admin-status-badge admin-status-@row.Status.ToLowerInvariant()">@row.Status</span></td>
+                                        <td class="admin-time-cell">@row.AppliedAt.ToLocalTime().ToString("dd MMM, HH:mm", CultureInfo.InvariantCulture)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+
+            <section class="admin-panel admin-model-panel" id="model-activity" aria-labelledby="model-title">
+                <div class="admin-panel-heading">
+                    <div><p class="admin-section-kicker">Matching engine</p><h2 id="model-title">Model activity</h2></div>
+                    <span class="admin-model-mark" aria-hidden="true">AI</span>
+                </div>
+                @if (trainingLogs.Count == 0)
+                {
+                    <div class="admin-model-empty"><span class="admin-model-orb" aria-hidden="true">✦</span><strong>No training runs yet</strong><span>Training history will appear here when the matching model is run.</span></div>
+                }
+                else
+                {
+                    <ul class="admin-training-list">
+                        @foreach (var log in trainingLogs)
+                        {
+                            <li>
+                                <span class="admin-training-icon" aria-hidden="true">↗</span>
+                                <span class="admin-training-info"><strong>@(log.Trainer ?? "System")</strong><span>@log.RecordCount.ToString("N0", CultureInfo.InvariantCulture) records · @log.TrainedAt.ToLocalTime().ToString("dd MMM yyyy", CultureInfo.InvariantCulture)</span></span>
+                                <span class="admin-accuracy">@((log.AccuracyScore * 100).ToString("0.#", CultureInfo.InvariantCulture))<small>%</small></span>
+                            </li>
+                        }
+                    </ul>
+                    <p class="admin-model-footnote">Accuracy score from the latest recorded training runs.</p>
+                }
+            </section>
+        </div>
+    }
+</section>
+
+@code {
+    private bool isLoading = true;
+    private bool hasLoaded;
+    private string? loadError;
+    private int totalUsers;
+    private int activeUsers;
+    private int pendingCompanyCount;
+    private int totalCompanies;
+    private int publishedJobs;
+    private int recentApplications;
+    private int newUsersLast30Days;
+    private int applicationsLastSevenDays;
+    private List<TrendDay> applicationTrend = [];
+    private List<PendingCompany> pendingCompanies = [];
+    private List<RecentApplication> recentApplicationRows = [];
+    private List<TrainingRun> trainingLogs = [];
+
+    protected override Task OnInitializedAsync() => LoadDashboardAsync();
+
+    private async Task RefreshAsync() => await LoadDashboardAsync();
+
+    private async Task LoadDashboardAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            var now = DateTime.UtcNow;
+            var today = now.Date;
+            var thirtyDaysAgo = now.AddDays(-30);
+            var sevenDaysAgo = today.AddDays(-6);
+
+            totalUsers = await Db.Users.CountAsync();
+            activeUsers = await Db.Users.CountAsync(user => user.IsActive);
+            pendingCompanyCount = await Db.CompanyProfiles.CountAsync(company => company.Status == CompanyStatus.Pending);
+            totalCompanies = await Db.CompanyProfiles.CountAsync();
+            publishedJobs = await Db.JobPostings.CountAsync(job => job.Status == JobStatus.Published);
+            recentApplications = await Db.Applications.CountAsync(application => application.AppliedAt >= thirtyDaysAgo);
+            newUsersLast30Days = await Db.Users.CountAsync(user => user.CreatedAt >= thirtyDaysAgo);
+
+            var applicationCounts = await Db.Applications
+                .AsNoTracking()
+                .Where(application => application.AppliedAt >= sevenDaysAgo)
+                .GroupBy(application => application.AppliedAt.Date)
+                .Select(group => new TrendDay(group.Key, group.Count()))
+                .ToListAsync();
+            var countsByDate = applicationCounts.ToDictionary(day => day.Date.Date, day => day.Count);
+            applicationTrend = Enumerable.Range(0, 7)
+                .Select(offset => today.AddDays(offset - 6))
+                .Select(date => new TrendDay(date, countsByDate.GetValueOrDefault(date, 0)))
+                .ToList();
+            applicationsLastSevenDays = applicationTrend.Sum(day => day.Count);
+
+            pendingCompanies = await Db.CompanyProfiles
+                .AsNoTracking()
+                .Where(company => company.Status == CompanyStatus.Pending)
+                .OrderByDescending(company => company.Id)
+                .Take(5)
+                .Select(company => new PendingCompany(
+                    company.CompanyName,
+                    company.Industry,
+                    company.Employers.Count))
+                .ToListAsync();
+
+            recentApplicationRows = await Db.Applications
+                .AsNoTracking()
+                .OrderByDescending(application => application.AppliedAt)
+                .Take(6)
+                .Select(application => new RecentApplication(
+                    application.Candidate.FullName,
+                    application.JobPosting.Title,
+                    application.JobPosting.Company.CompanyName,
+                    application.CurrentStatus.ToString(),
+                    application.AppliedAt))
+                .ToListAsync();
+
+            trainingLogs = await Db.ModelTrainingLogs
+                .AsNoTracking()
+                .OrderByDescending(log => log.TrainedAt)
+                .Take(4)
+                .Select(log => new TrainingRun(
+                    log.TrainedBy == null ? null : log.TrainedBy.Email,
+                    log.RecordCount,
+                    log.AccuracyScore,
+                    log.TrainedAt))
+                .ToListAsync();
+
+            hasLoaded = true;
+        }
+        catch
+        {
+            loadError = "We couldn't load the dashboard data. Check the database connection and try again.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private int BarHeight(int count)
+    {
+        var maximum = Math.Max(1, applicationTrend.Max(day => day.Count));
+        return count == 0 ? 4 : Math.Max(12, (int)Math.Round((double)count / maximum * 100));
+    }
+
+    private static string Initials(string value)
+    {
+        var words = value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length == 0) return "?";
+        return words.Length == 1
+            ? words[0][..Math.Min(2, words[0].Length)].ToUpperInvariant()
+            : string.Concat(char.ToUpperInvariant(words[0][0]), char.ToUpperInvariant(words[^1][0]));
+    }
+
+    private sealed record TrendDay(DateTime Date, int Count);
+    private sealed record PendingCompany(string Name, string? Industry, int EmployerCount);
+    private sealed record RecentApplication(string CandidateName, string JobTitle, string CompanyName, string Status, DateTime AppliedAt);
+    private sealed record TrainingRun(string? Trainer, int RecordCount, double AccuracyScore, DateTime TrainedAt);
+}
+
+
+

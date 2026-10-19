@@ -1,0 +1,141 @@
+@inherits LayoutComponentBase
+@using Microsoft.JSInterop
+@using hotjob.Services.Authentication
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject AuthSession AuthSession
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+@inject IWebHostEnvironment Environment
+
+<div class="admin-console">
+    <aside class="admin-sidebar" aria-label="Admin console navigation">
+        <a class="admin-brand" href="/" aria-label="HotJob public site">
+            <span class="admin-brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 19v2m8-2v2M9 10h6m-3-3v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <span class="admin-brand-copy"><strong>HotJob</strong><small>ADMIN<br/>CONSOLE</small></span>
+        </a>
+
+        <nav class="admin-sidebar-nav">
+            <p class="admin-sidebar-label">Operations</p>
+            <NavLink class="admin-nav-link" href="/admin" Match="NavLinkMatch.All">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.8"/></svg>
+                <span>Dashboard / Overview</span>
+            </NavLink>
+            <div class="admin-nav-link admin-nav-link-muted" aria-disabled="true">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 20v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V20M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 11a4 4 0 0 0 0-7.7M17 14.5a4 4 0 0 1 4 4V20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <span>Account Management</span>
+            </div>
+            <div class="admin-nav-link admin-nav-link-muted" aria-disabled="true">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8 5V3m8 2V3M3 10h18m-13 4h3m-3 3h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <span>Employer Management</span>
+            </div>
+            <div class="admin-nav-link admin-nav-link-muted" aria-disabled="true">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h16v16H4zM8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Job Posting Management</span>
+            </div>
+            <div class="admin-nav-link admin-nav-link-muted" aria-disabled="true">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m4.5 7.8 7.5 4.4 7.5-4.4M12 12.2V21" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                <span>Job Type Management</span>
+            </div>
+
+            <p class="admin-sidebar-label admin-sidebar-label-spaced">Governance</p>
+            <div class="admin-nav-link admin-nav-link-muted" aria-disabled="true">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3.4 8.1-8 10-4.6-1.9-8-5-8-10V6l8-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>Settings / Audit Logs</span>
+            </div>
+        </nav>
+
+        <div class="admin-sidebar-footer">
+            <span class="admin-env-dot" aria-hidden="true"></span>
+            <span><strong>@Environment.EnvironmentName</strong><small>HotJob Admin workspace</small></span>
+        </div>
+    </aside>
+
+    <div class="admin-workspace">
+        <header class="admin-topbar">
+            <div class="admin-global-search" role="search">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <span>Search candidates, employers, job IDs (Ctrl + K)...</span>
+                <kbd>Ctrl K</kbd>
+            </div>
+            <div class="admin-topbar-actions">
+                <div class="admin-system-status"><span aria-hidden="true"></span>Admin Console</div>
+                <button class="admin-notifications" type="button" aria-label="Notifications">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="admin-notification-dot"></span>
+                </button>
+                <AuthorizeView Context="authState">
+                    <Authorized>
+                        <details class="admin-account-menu">
+                            <summary>
+                                <span class="admin-profile-avatar">@Initials(authState.User.Identity?.Name)</span>
+                                <span class="admin-profile-copy"><strong>@(authState.User.Identity?.Name ?? "System Admin")</strong><small>Administrator</small></span>
+                                <svg class="admin-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </summary>
+                            <div class="admin-account-popover">
+                                <span class="admin-account-email">@authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value</span>
+                                <button type="button" @onclick="SignOutAsync">Sign out</button>
+                            </div>
+                        </details>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </header>
+
+        <main class="admin-content">
+            <div class="admin-content-inner">
+                @Body
+            </div>
+        </main>
+    </div>
+</div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
+            if (result.Ok && result.Data is not null)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+            }
+            else if (AuthSession.IsAuthenticated)
+            {
+                AuthStateProvider.SignOut();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+        }
+    }
+
+    private async Task SignOutAsync()
+    {
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.logout");
+            if (result.Ok || result.Status == 401)
+            {
+                AuthStateProvider.SignOut();
+                NavigationManager.NavigateTo("/");
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+        }
+    }
+
+    private static string Initials(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "AD";
+        var words = value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return words.Length > 1
+            ? string.Concat(char.ToUpperInvariant(words[0][0]), char.ToUpperInvariant(words[^1][0]))
+            : words[0][..Math.Min(2, words[0].Length)].ToUpperInvariant();
+    }
+}
+
+

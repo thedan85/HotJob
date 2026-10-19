@@ -29,6 +29,11 @@
                     <NavLink class="nav-link" href="employer/company">Company</NavLink>
                 </Authorized>
             </AuthorizeView>
+            <AuthorizeView Roles="Admin">
+                <Authorized>
+                    <NavLink class="nav-link" href="admin">Admin dashboard</NavLink>
+                </Authorized>
+            </AuthorizeView>
         </nav>
 
         <div class="nav-actions">
