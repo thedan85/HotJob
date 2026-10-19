@@ -54,7 +54,7 @@ public sealed class AccountService(
             int? companyProfileId = null;
             if (request.AccountType == AccountType.Candidate)
             {
-                dbContext.Candidates.Add(new Candidate
+                dbContext.Candidates.Add(new global::hotjob.Models.Users.Candidate
                 {
                     UserId = user.Id,
                     FullName = request.FullName.Trim()
@@ -282,7 +282,7 @@ public sealed class AccountService(
     }
 
     private static ProfileResponse ToProfileResponse(
-        ApplicationUser user, Candidate? candidate, global::hotjob.Models.Users.Employer? employer) =>
+        ApplicationUser user, global::hotjob.Models.Users.Candidate? candidate, global::hotjob.Models.Users.Employer? employer) =>
         new(
             user.Id,
             user.Email ?? string.Empty,

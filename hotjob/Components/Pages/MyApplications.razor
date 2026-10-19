@@ -1,0 +1,182 @@
+@page "/my-applications"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Candidate
+@using hotjob.Services.Candidate
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ICandidateService CandidateService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>My Applications | HotJob</PageTitle>
+
+<AuthorizeView Roles="Candidate">
+    <Authorized Context="auth">
+        <div class="ei-page">
+            <section class="ei-header">
+                <div>
+                    <p class="ei-eyebrow">Candidate workspace</p>
+                    <h1>My Applications &amp; Notifications</h1>
+                    <p>Follow the review status of every job you applied to, and read the messages employers sent you.</p>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <div class="ei-loading" role="status">Loading your applications...</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="ei-alert" role="alert">@loadError</div>
+            }
+            else
+            {
+                @if (!string.IsNullOrWhiteSpace(actionMessage))
+                {
+                    <div class="ei-notice" role="status">@actionMessage</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(actionError))
+                {
+                    <div class="ei-alert" role="alert">@actionError</div>
+                }
+
+                <div class="ei-layout">
+                    <section class="ei-list" aria-label="My applications">
+                        <div class="ei-card">
+                            <h2>Applications</h2>
+                            <p class="ei-sub">@totalCount total</p>
+                            @foreach (var app in applications)
+                            {
+                                <article class="ei-applicant">
+                                    <div class="ei-applicant-head">
+                                        <strong>@app.JobTitle</strong>
+                                        <span class="ei-badge ei-@app.Status.ToString().ToLowerInvariant()">@app.Status</span>
+                                    </div>
+                                    <small>@app.CompanyName · applied @app.AppliedAt.ToString("dd MMM yyyy")</small>
+                                    <small>CV: @app.ResumeTitle</small>
+                                    @if (app.History.Count > 0)
+                                    {
+                                        <ul class="ei-timeline">
+                                            @foreach (var h in app.History.OrderByDescending(h => h.ChangedAt))
+                                            {
+                                                <li><strong>@h.Status</strong> — @(h.Notes ?? "no note")<br /><small>@h.ChangedAt.ToString("dd MMM yyyy HH:mm")</small></li>
+                                            }
+                                        </ul>
+                                    }
+                                </article>
+                            }
+                            @if (applications.Count == 0)
+                            {
+                                <p class="ei-sub">You have not applied to any jobs yet.</p>
+                            }
+                        </div>
+                    </section>
+
+                    <section class="ei-detail" aria-label="Notifications">
+                        <div class="ei-section">
+                            <h3>Notifications @(unreadCount > 0 ? $"({unreadCount} unread)" : string.Empty)</h3>
+                            @foreach (var note in notifications)
+                            {
+                                <div class="ei-interview">
+                                    <div class="ei-applicant-head">
+                                        <strong>@note.Title</strong>
+                                        @if (!note.IsRead)
+                                        {
+                                            <span class="ei-badge ei-pending">Unread</span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(note.Content))
+                                    {
+                                        <span>@note.Content</span><br />
+                                    }
+                                    <small>@note.CreatedAt.ToString("dd MMM yyyy HH:mm")</small>
+                                    @if (!note.IsRead)
+                                    {
+                                        <div style="margin-top:6px">
+                                            <button class="ei-btn ei-btn-secondary ei-btn-small" type="button" @onclick="() => MarkReadAsync(note.Id)">Mark read</button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            @if (notifications.Count == 0)
+                            {
+                                <p class="ei-sub">No messages yet.</p>
+                            }
+                        </div>
+                    </section>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool isLoading = true;
+    private string? loadError;
+    private string? actionMessage;
+    private string? actionError;
+    private List<MyApplicationDto> applications = new();
+    private List<MyNotificationDto> notifications = new();
+    private int totalCount;
+    private int unreadCount;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            var apps = await CandidateService.GetMyApplicationsAsync(userId);
+            if (!apps.Success || apps.Data is null)
+            {
+                loadError = apps.Errors.FirstOrDefault() ?? "We could not load your applications.";
+                return;
+            }
+            applications = apps.Data.ToList();
+            totalCount = applications.Count;
+
+            var notes = await CandidateService.GetMyNotificationsAsync(userId);
+            notifications = notes.Success && notes.Data is not null ? notes.Data.ToList() : new();
+            unreadCount = notifications.Count(note => !note.IsRead);
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task MarkReadAsync(int notificationId)
+    {
+        actionMessage = actionError = null;
+        var result = await CandidateService.MarkNotificationReadAsync(await GetUserIdAsync(), notificationId);
+        if (result.Success && result.Data is not null)
+        {
+            var index = notifications.FindIndex(note => note.Id == notificationId);
+            if (index >= 0)
+            {
+                notifications[index] = result.Data;
+            }
+            unreadCount = notifications.Count(note => !note.IsRead);
+            actionMessage = "Notification marked read.";
+        }
+        else
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "Could not update this notification.";
+        }
+    }
+}

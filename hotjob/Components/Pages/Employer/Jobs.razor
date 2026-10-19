@@ -318,7 +318,17 @@
             var created = await JobService.CreateAsync(userId, jobForm);
             actionMessage = created.Success ? $"Job \"{created.Data!.Title}\" posted as {created.Data.Status}." : null;
             actionError = created.Success ? null : created.Errors.FirstOrDefault() ?? "Could not post this job.";
-            if (created.Success) showForm = false;
+            if (created.Success)
+            {
+                showForm = false;
+                // A newly created Draft is hidden whenever a Status/Search filter is
+                // active, so the reload below would look like the post "didn't work"
+                // until a manual refresh. Drop the filter/paging so the new posting is
+                // visible immediately (newest first, page 1).
+                search = null;
+                statusFilter = null;
+                page = 1;
+            }
         }
         else
         {
