@@ -13,3 +13,5 @@ AGENTS.md
 
 .dll
 hotjob/appsettings.json
+Directory.Build.props
+
