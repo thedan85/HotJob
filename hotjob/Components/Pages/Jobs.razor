@@ -3,7 +3,9 @@
 @using hotjob.Models.Job
 @using hotjob.Services.Job
 @inject IJobService JobService
-@attribute [StreamRendering]
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject IJSRuntime JS
+@rendermode InteractiveServer
 
 <PageTitle>Explore jobs | HotJob</PageTitle>
 
@@ -100,7 +102,10 @@
                         </p>
                     </div>
                     <div class="job-side">
-                        <span class="job-salary">@FormatSalary(job.SalaryMin, job.SalaryMax)</span>
+                        <AuthorizeView>
+                            <Authorized>@FormatSalary(job.SalaryMin, job.SalaryMax)</Authorized>
+                            <NotAuthorized><a class="job-salary job-salary-locked" href="/login">Log in to view salary</a></NotAuthorized>
+                        </AuthorizeView>
                     </div>
                 </a>
             }
@@ -157,6 +162,25 @@
     private PagedResponse<PublicJobListItemResponse>? paged;
     private bool isLoading = true;
     private string? loadError;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Restore the circuit session so salary visibility matches the signed-in user.
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
+            if (result.Ok && result.Data is not null)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // JS interop unavailable during prerender — guests keep seeing the login prompt.
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
