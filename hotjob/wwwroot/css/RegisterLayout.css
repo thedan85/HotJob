@@ -66,6 +66,12 @@ body {
     gap: 15px;
 }
 
+.language {
+    color: rgba(255, 255, 255, .8);
+    font-size: .68rem;
+    font-weight: 700;
+}
+
 .sign-in {
     padding: 9px 17px;
     border: 1px solid rgba(255, 255, 255, .52);
@@ -144,6 +150,10 @@ body {
 }
 
 @media (max-width: 420px) {
+    .language {
+        display: none;
+    }
+
     .register-footer {
         grid-template-columns: 1fr;
     }

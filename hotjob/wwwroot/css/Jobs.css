@@ -202,14 +202,6 @@
     white-space: nowrap;
 }
 
-.job-salary-locked {
-    color: var(--hj-primary);
-    font-weight: 600;
-    font-size: 14px;
-    white-space: nowrap;
-    text-decoration: underline;
-}
-
 .jobs-pager {
     display: flex;
     flex-wrap: wrap;
