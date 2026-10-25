@@ -10,7 +10,7 @@
 }
 
 .company-detail-crumb a:hover {
-    color: var(--hj-accent);
+    color: var(--hj-accent-text);
 }
 
 .company-detail {
@@ -107,7 +107,7 @@
 }
 
 .company-detail-fact dd a:hover {
-    color: var(--hj-accent);
+    color: var(--hj-accent-text);
     text-decoration: underline;
 }
 
@@ -168,7 +168,7 @@
 }
 
 .company-detail-jobs:focus-visible {
-    outline: 3px solid rgba(50, 130, 184, .35);
+    outline: 3px solid rgba(14, 165, 233, .35);
     outline-offset: 2px;
 }
 
@@ -178,7 +178,7 @@
 }
 
 .company-detail-error {
-    color: #b3261e;
+    color: var(--hj-danger);
 }
 
 .company-detail-empty {
@@ -208,7 +208,7 @@
 }
 
 .company-detail-back:hover {
-    color: var(--hj-accent);
+    color: var(--hj-accent-text);
 }
 
 .company-detail-owner {
@@ -258,7 +258,7 @@
     padding: 16px 18px;
     border: 1px solid var(--hj-border);
     border-radius: var(--hj-radius-sm);
-    background: #fbfdfe;
+    background: #FFFFFF;
 }
 
 .review-head {
@@ -295,7 +295,7 @@
 
 .review-stars {
     margin-left: auto;
-    color: #f5a623;
+    color: #F59E0B;
     font-size: 15px;
     letter-spacing: 2px;
     white-space: nowrap;

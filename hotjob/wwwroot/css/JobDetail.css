@@ -10,7 +10,7 @@
 }
 
 .job-detail-crumb a:hover {
-    color: var(--hj-accent);
+    color: var(--hj-accent-text);
 }
 
 .job-detail-layout {
@@ -22,9 +22,9 @@
 
 .job-detail-main {
     min-width: 0;
-    padding: 28px;
+    padding: 30px;
     border: 1px solid var(--hj-border);
-    border-radius: var(--hj-radius-md);
+    border-radius: var(--hj-radius-lg);
     background: var(--hj-surface);
     box-shadow: var(--hj-shadow-sm);
 }
@@ -51,8 +51,19 @@
 }
 
 .job-detail-salary {
+    display: inline-flex;
     margin: 16px 0 0;
-    font-size: 1.15rem;
+    padding: 8px 16px;
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface-tint);
+    color: var(--hj-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.job-detail-salary:has(.job-salary-locked) {
+    padding: 0;
+    background: transparent;
 }
 
 .job-detail-desc {
@@ -78,7 +89,7 @@
 .job-detail-auth {
     padding: 20px;
     border: 1px solid var(--hj-border);
-    border-radius: var(--hj-radius-md);
+    border-radius: var(--hj-radius-lg);
     background: var(--hj-surface);
     box-shadow: var(--hj-shadow-sm);
 }
@@ -107,7 +118,7 @@
 }
 
 .job-detail-error {
-    color: #b3261e;
+    color: var(--hj-danger);
 }
 
 .job-detail-empty {

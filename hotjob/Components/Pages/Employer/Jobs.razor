@@ -1,4 +1,5 @@
 @page "/employer/jobs"
+@implements IDisposable
 @rendermode InteractiveServer
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
@@ -8,54 +9,97 @@
 @using hotjob.Services.Job
 @inject IJobService JobService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
 
 <PageTitle>Jobs &amp; Postings | HotJob</PageTitle>
 
 <AuthorizeView Roles="Employer">
     <Authorized Context="auth">
-        <div class="ej-page">
-            <section class="ej-header">
-                <div>
-                    <p class="ej-eyebrow">Employer workspace</p>
-                    <h1>Jobs &amp; Postings Management</h1>
-                    <p>Create, edit, publish and track company-wide job openings. Draft jobs delete permanently; closing a Published job mass-rejects open applications.</p>
+        <div class="ej-page workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Employer workspace</p>
+                    <h1>Jobs &amp; postings</h1>
+                    <p class="workspace-lede">Create roles, publish them, and keep every applicant moving. Drafts delete permanently; closing a published role rejects open applications and records it on each one.</p>
                 </div>
-                <div class="ej-actions">
-                    <button class="ej-btn ej-btn-primary" type="button" @onclick="OpenCreateForm">+ Post New Job</button>
+                <div class="workspace-actions">
+                    <button class="workspace-btn workspace-btn-primary" type="button" @onclick="OpenCreateForm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                        Post a job
+                    </button>
                 </div>
             </section>
 
             @if (isLoading)
             {
-                <div class="ej-loading" role="status">Loading your job postings...</div>
+                <section class="workspace-card" aria-busy="true" aria-label="Loading job postings">
+                    <div class="ej-skeleton-grid">
+                        <div class="workspace-skeleton" style="height:110px"></div>
+                        <div class="workspace-skeleton" style="height:110px"></div>
+                        <div class="workspace-skeleton" style="height:110px"></div>
+                        <div class="workspace-skeleton" style="height:110px"></div>
+                    </div>
+                    <div class="workspace-skeleton" style="height:260px;margin-top:16px"></div>
+                    <p class="visually-hidden" role="status">Loading your job postings…</p>
+                </section>
             }
             else if (!string.IsNullOrWhiteSpace(loadError))
             {
-                <div class="ej-alert" role="alert">@loadError</div>
+                <div class="workspace-alert" role="alert">@loadError</div>
             }
             else
             {
-                <section class="ej-metrics" aria-label="Posting metrics">
-                    <div class="ej-metric"><p>Active Postings</p><strong>@publishedCount</strong><span>Receiving candidate CVs</span></div>
-                    <div class="ej-metric"><p>Draft Postings</p><strong>@draftCount</strong><span>Editable &amp; safe to remove</span></div>
-                    <div class="ej-metric"><p>Applications (this page)</p><strong>@jobs.Sum(j => j.ApplicationsCount)</strong><span>Across listed roles</span></div>
-                    <div class="ej-metric"><p>Closed / Expired</p><strong>@(closedCount + expiredCount)</strong><span>Archived</span></div>
+                <section class="workspace-metrics" aria-label="Posting overview">
+                    <button class="workspace-stat @(statusFilter == JobStatus.Published ? "is-active" : string.Empty)" type="button" aria-pressed="@(statusFilter == JobStatus.Published ? "true" : "false")" @onclick="() => FilterByStatusAsync(JobStatus.Published)">
+                        <span class="workspace-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12l4 4L19 6" /></svg></span>
+                        <span class="workspace-stat-label">Active</span>
+                        <span class="workspace-stat-value">@publishedCount</span>
+                        <span class="workspace-stat-hint">Accepting applications</span>
+                    </button>
+                    <button class="workspace-stat @(statusFilter == JobStatus.Draft ? "is-active" : string.Empty)" type="button" aria-pressed="@(statusFilter == JobStatus.Draft ? "true" : "false")" @onclick="() => FilterByStatusAsync(JobStatus.Draft)">
+                        <span class="workspace-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="M13 5l4 4" /></svg></span>
+                        <span class="workspace-stat-label">Drafts</span>
+                        <span class="workspace-stat-value">@draftCount</span>
+                        <span class="workspace-stat-hint">Editable and safe to remove</span>
+                    </button>
+                    <a class="workspace-stat" href="/employer/interviews">
+                        <span class="workspace-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3 19c.8-3 3.1-4.5 6-4.5s5.2 1.5 6 4.5" /><path d="M16 8h5M18.5 5.5v5" /></svg></span>
+                        <span class="workspace-stat-label">Applicants</span>
+                        <span class="workspace-stat-value">@jobs.Sum(j => j.ApplicationsCount)</span>
+                        <span class="workspace-stat-hint">Across the roles on this page</span>
+                    </a>
+                    <button class="workspace-stat @(statusFilter == JobStatus.Closed || statusFilter == JobStatus.Expired ? "is-active" : string.Empty)" type="button" aria-pressed="@(statusFilter == JobStatus.Closed || statusFilter == JobStatus.Expired ? "true" : "false")" @onclick="() => FilterByStatusAsync(JobStatus.Closed)">
+                        <span class="workspace-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8" /><path d="M9 12h6" /></svg></span>
+                        <span class="workspace-stat-label">Closed / expired</span>
+                        <span class="workspace-stat-value">@(closedCount + expiredCount)</span>
+                        <span class="workspace-stat-hint">Archived from the job board</span>
+                    </button>
                 </section>
 
-                <div class="ej-banner" role="note"><strong>Posting rules:</strong> salary min must not exceed max, expiry must be in the future, and skill/category ids must exist. Closing a Published job moves it to Closed and writes a “Job closed” history row on every open application.</div>
+                <details class="workspace-details ej-rules">
+                    <summary>Posting rules &amp; guardrails</summary>
+                    <div class="workspace-details-body">
+                        <p><strong>Validation:</strong> salary min cannot exceed max, expiry must be in the future, and every skill or category id must exist.</p>
+                        <p><strong>Closing:</strong> a published role moves to Closed, mass-rejects open applications, and writes a “Job closed” history entry on each application. Drafts are deleted permanently.</p>
+                    </div>
+                </details>
 
                 @if (!string.IsNullOrWhiteSpace(actionMessage))
                 {
-                    <div class="ej-notice" role="status">@actionMessage</div>
+                    <div class="workspace-notice" role="status" aria-live="polite">@actionMessage</div>
                 }
                 @if (!string.IsNullOrWhiteSpace(actionError))
                 {
-                    <div class="ej-alert" role="alert">@actionError</div>
+                    <div class="workspace-alert" role="alert" aria-live="assertive">@actionError</div>
                 }
 
-                <section class="ej-filters" aria-label="Job filters">
-                    <label class="ej-field ej-field-grow">Search <InputText @bind-Value="search" placeholder="Title, skill or category" /></label>
-                    <label class="ej-field">Status
+                <section class="workspace-toolbar" aria-label="Job filters">
+                    <label class="workspace-field workspace-field-grow">
+                        <span>Search</span>
+                        <InputText @bind-Value="search" placeholder="Title, skill or category" />
+                    </label>
+                    <label class="workspace-field">
+                        <span>Status</span>
                         <InputSelect @bind-Value="statusFilter">
                             <option value="">All statuses</option>
                             @foreach (var s in Enum.GetValues<JobStatus>())
@@ -64,24 +108,55 @@
                             }
                         </InputSelect>
                     </label>
-                    <button class="ej-btn ej-btn-secondary" type="button" @onclick="SearchAsync">Search</button>
+                    <div class="workspace-toolbar-actions">
+                        <button class="workspace-btn workspace-btn-primary" type="button" @onclick="SearchAsync">Apply filters</button>
+                        @if (HasFilters)
+                        {
+                            <button class="workspace-btn workspace-btn-ghost" type="button" @onclick="ClearFiltersAsync">Clear</button>
+                        }
+                    </div>
                 </section>
 
                 @if (showForm)
                 {
-                    <section class="ej-panel" aria-label="@(editingId is null ? "Post a new job" : "Edit job")">
-                        <h2>@(editingId is null ? "Post a new job" : $"Edit job #{editingId}")</h2>
-                        <p class="ej-sub">Status may only be Draft or Published — close via the table action.</p>
+                    <section class="workspace-card" aria-label="@(editingId is null ? "Post a new job" : "Edit job")">
+                        <div class="workspace-section-head">
+                            <div>
+                                <h2>@(editingId is null ? "Post a new job" : $"Edit job #{editingId}")</h2>
+                                <p class="workspace-sub">Status may only be Draft or Published. Close a live role from the table.</p>
+                            </div>
+                            <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" @onclick="CloseForm">Close</button>
+                        </div>
                         <EditForm Model="jobForm" OnValidSubmit="SaveAsync">
                             <DataAnnotationsValidator />
                             <ValidationSummary />
-                            <div class="ej-form-grid">
-                                <label class="ej-wide">Title <InputText @bind-Value="jobForm.Title" placeholder="e.g. Senior .NET Developer" /></label>
-                                <label class="ej-wide">Description <InputTextArea @bind-Value="jobForm.Description" rows="4" /></label>
-                                <label>Salary min <InputNumber @bind-Value="jobForm.SalaryMin" /></label>
-                                <label>Salary max <InputNumber @bind-Value="jobForm.SalaryMax" /></label>
-                                <label>Experience required (years) <InputNumber @bind-Value="jobForm.ExperienceRequired" /></label>
-                                <label>Job type
+                            <fieldset class="workspace-fieldset">
+                                <legend>Role basics</legend>
+                                <label class="workspace-field workspace-wide">
+                                    <span>Title</span>
+                                    <InputText @bind-Value="jobForm.Title" placeholder="e.g. Senior .NET Developer" />
+                                </label>
+                                <label class="workspace-field workspace-wide">
+                                    <span>Description</span>
+                                    <InputTextArea @bind-Value="jobForm.Description" rows="5" placeholder="What the role owns, the team, and the outcomes you expect." />
+                                </label>
+                            </fieldset>
+                            <fieldset class="workspace-fieldset">
+                                <legend>Compensation &amp; requirements</legend>
+                                <label class="workspace-field">
+                                    <span>Salary min</span>
+                                    <InputNumber @bind-Value="jobForm.SalaryMin" />
+                                </label>
+                                <label class="workspace-field">
+                                    <span>Salary max</span>
+                                    <InputNumber @bind-Value="jobForm.SalaryMax" />
+                                </label>
+                                <label class="workspace-field">
+                                    <span>Experience required (years)</span>
+                                    <InputNumber @bind-Value="jobForm.ExperienceRequired" />
+                                </label>
+                                <label class="workspace-field">
+                                    <span>Job type</span>
                                     <InputSelect @bind-Value="jobForm.JobType">
                                         @foreach (var t in Enum.GetValues<JobType>())
                                         {
@@ -89,79 +164,166 @@
                                         }
                                     </InputSelect>
                                 </label>
-                                <label>Expiry date <InputDate @bind-Value="jobForm.ExpiryDate" /></label>
-                                <label>Status
+                            </fieldset>
+                            <fieldset class="workspace-fieldset">
+                                <legend>Timeline &amp; visibility</legend>
+                                <label class="workspace-field">
+                                    <span>Expiry date</span>
+                                    <InputDate @bind-Value="jobForm.ExpiryDate" />
+                                </label>
+                                <label class="workspace-field">
+                                    <span>Status</span>
                                     <InputSelect @bind-Value="jobForm.Status">
                                         <option value="@JobStatus.Draft">Draft</option>
                                         <option value="@JobStatus.Published">Published</option>
                                     </InputSelect>
                                 </label>
-                                <label class="ej-wide">Category ids (comma-separated) <InputText @bind-Value="categoryText" placeholder="e.g. 1, 2" /></label>
-                                <label class="ej-wide">Skills as id:weight (comma-separated, weight 0–10) <InputText @bind-Value="skillText" placeholder="e.g. 3:8, 5:6" /></label>
-                            </div>
-                            <div class="ej-actions" style="margin-top:12px">
-                                <button class="ej-btn ej-btn-primary" type="submit" disabled="@isSaving">@(isSaving ? "Saving..." : editingId is null ? "Post job" : "Save changes")</button>
-                                <button class="ej-btn ej-btn-secondary" type="button" @onclick="CloseForm">Cancel</button>
+                            </fieldset>
+                            <fieldset class="workspace-fieldset">
+                                <legend>Matching taxonomy</legend>
+                                <label class="workspace-field workspace-wide">
+                                    <span>Category ids</span>
+                                    <InputText @bind-Value="categoryText" placeholder="e.g. 1, 2" />
+                                    <span class="workspace-hint">Numeric taxonomy ids separated by commas.</span>
+                                </label>
+                                <label class="workspace-field workspace-wide">
+                                    <span>Skills as id:weight</span>
+                                    <InputText @bind-Value="skillText" placeholder="e.g. 3:8, 5:6" />
+                                    <span class="workspace-hint">Comma-separated skill id and importance from 0–10. Example: 3:8 means skill 3 at weight 8.</span>
+                                </label>
+                            </fieldset>
+                            <div class="workspace-form-actions">
+                                <button class="workspace-btn workspace-btn-primary" type="submit" disabled="@isSaving">@(isSaving ? "Saving…" : editingId is null ? "Post job" : "Save changes")</button>
+                                <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="CloseForm">Cancel</button>
                             </div>
                         </EditForm>
                     </section>
                 }
 
-                <section class="ej-table-wrap" aria-label="Job postings">
-                    <table class="ej-table">
-                        <thead><tr><th>Title</th><th>Status</th><th>Salary</th><th>Categories</th><th>Applications</th><th>Actions</th></tr></thead>
-                        <tbody>
-                            @foreach (var job in jobs)
-                            {
-                                <tr>
-                                    <td><strong>@job.Title</strong><br /><small style="color:var(--hj-muted)">@job.JobType · @job.ExperienceRequired yr · exp @(job.ExpiryDate?.ToString("dd MMM yyyy") ?? "—")</small></td>
-                                    <td><span class="ej-badge ej-@job.Status.ToString().ToLowerInvariant()">@job.Status</span></td>
-                                    <td>@SalaryRange(job)</td>
-                                    <td>@(job.CategoryNames.Count == 0 ? "—" : string.Join(", ", job.CategoryNames))</td>
-                                    <td>@job.ApplicationsCount</td>
-                                    <td>
-                                        <div class="ej-row-actions">
-                                            <button class="ej-btn ej-btn-secondary ej-btn-small" type="button" @onclick="() => ViewDetailAsync(job.Id)">View</button>
-                                            <button class="ej-btn ej-btn-secondary ej-btn-small" type="button" @onclick="() => OpenEditFormAsync(job.Id)">Edit</button>
-                                            @if (job.Status == JobStatus.Draft || job.Status == JobStatus.Published)
+                <section class="workspace-card ej-table-card" aria-label="Job postings">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2>All postings</h2>
+                            <p class="workspace-sub">@totalCount role@(totalCount == 1 ? string.Empty : "s") match@(totalCount == 1 ? "es" : string.Empty) the current view.</p>
+                        </div>
+                    </div>
+                    <div class="ej-table-scroll">
+                        <table class="ej-table">
+                            <thead>
+                                <tr><th>Role</th><th>Status</th><th>Applicants</th><th>Salary</th><th>Expiry</th><th><span class="visually-hidden">Actions</span></th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var job in jobs)
+                                {
+                                    <tr class="@(selected?.Id == job.Id ? "is-selected" : string.Empty)">
+                                        <td data-label="Role">
+                                            <button class="ej-title-button" type="button" @onclick="() => ViewDetailAsync(job.Id)">@job.Title</button>
+                                            <p class="ej-job-meta">@job.JobType · @job.ExperienceRequired yr exp · posted @job.CreatedAt.ToString("dd MMM")</p>
+                                            @if (job.CategoryNames.Count > 0)
                                             {
-                                                <button class="ej-btn ej-btn-danger ej-btn-small" type="button" @onclick="() => DeleteOrCloseAsync(job.Id, job.Title, job.Status)">@(pendingDeleteId == job.Id ? "Confirm " + (job.Status == JobStatus.Draft ? "delete?" : "close?") : job.Status == JobStatus.Draft ? "Delete" : "Close")</button>
+                                                <div class="workspace-chip-row ej-job-chips">
+                                                    @foreach (var category in job.CategoryNames.Take(3))
+                                                    {
+                                                        <span class="workspace-chip">@category</span>
+                                                    }
+                                                    @if (job.CategoryNames.Count > 3)
+                                                    {
+                                                        <span class="workspace-chip">+@(job.CategoryNames.Count - 3)</span>
+                                                    }
+                                                </div>
                                             }
-                                        </div>
-                                    </td>
-                                </tr>
-                            }
-                            @if (jobs.Count == 0)
-                            {
-                                <tr><td colspan="6">No postings match this filter.</td></tr>
-                            }
-                        </tbody>
-                    </table>
+                                        </td>
+                                        <td data-label="Status"><span class="workspace-badge @StatusClass(job.Status)">@job.Status</span></td>
+                                        <td data-label="Applicants">
+                                            <a class="ej-applicant-link" href="/employer/interviews?jobId=@job.Id">
+                                                <strong>@job.ApplicationsCount</strong>
+                                                <span>@(job.ApplicationsCount == 1 ? "applicant" : "applicants")</span>
+                                            </a>
+                                        </td>
+                                        <td data-label="Salary">@SalaryRange(job)</td>
+                                        <td data-label="Expiry">@(job.ExpiryDate?.ToString("dd MMM yyyy") ?? "—")</td>
+                                        <td data-label="Actions">
+                                            <div class="ej-row-actions">
+                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => ViewDetailAsync(job.Id)">View</button>
+                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => OpenEditFormAsync(job.Id)">Edit</button>
+                                                @if (job.Status == JobStatus.Draft || job.Status == JobStatus.Published)
+                                                {
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => DeleteOrCloseAsync(job.Id, job.Title, job.Status)">
+                                                        @(pendingDeleteId == job.Id ? "Confirm " + (job.Status == JobStatus.Draft ? "delete?" : "close?") : job.Status == JobStatus.Draft ? "Delete" : "Close")
+                                                    </button>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                                @if (jobs.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="6">
+                                            <div class="workspace-empty">
+                                                <span class="workspace-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v13H4z" /><path d="M9 7V4h6v3" /></svg></span>
+                                                <h3>No postings match this view</h3>
+                                                <p>Clear the filters to see everything, or post a new role to start collecting applicants.</p>
+                                                @if (HasFilters)
+                                                {
+                                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="ClearFiltersAsync">Clear filters</button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" @onclick="OpenCreateForm">Post a job</button>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
 
-                <div class="ej-pagination">
-                    <button class="ej-btn ej-btn-secondary ej-btn-small" type="button" disabled="@(page <= 1)" @onclick="() => ChangePageAsync(page - 1)">← Prev</button>
-                    <span>Page @(page) of @(Math.Max(totalPages, 1)) (@(totalCount) total)</span>
-                    <button class="ej-btn ej-btn-secondary ej-btn-small" type="button" disabled="@(page >= totalPages)" @onclick="() => ChangePageAsync(page + 1)">Next →</button>
+                <div class="workspace-pagination">
+                    <span>@(totalCount == 0 ? "No postings" : $"Showing {FromResult}–{ToResult} of {totalCount}")</span>
+                    <div class="workspace-pagination-actions">
+                        <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" disabled="@(page <= 1)" @onclick="() => ChangePageAsync(page - 1)">← Previous</button>
+                        <span class="ej-page-count">Page @(page) of @(Math.Max(totalPages, 1))</span>
+                        <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" disabled="@(page >= totalPages)" @onclick="() => ChangePageAsync(page + 1)">Next →</button>
+                    </div>
                 </div>
 
                 @if (selected is not null)
                 {
-                    <section class="ej-panel" aria-label="Job detail">
-                        <h2>@selected.Title</h2>
-                        <p class="ej-sub">@selected.CompanyName · @selected.Status · @selected.ApplicationsCount applications · @SalaryDetail(selected)</p>
-                        <div class="ej-chip-row">
+                    <section class="workspace-card ej-detail" aria-label="Job detail">
+                        <div class="workspace-section-head">
+                            <div>
+                                <p class="workspace-eyebrow">Job #@selected.Id</p>
+                                <h2>@selected.Title</h2>
+                                <p class="workspace-sub">@selected.CompanyName · @selected.ApplicationsCount application@(selected.ApplicationsCount == 1 ? string.Empty : "s")</p>
+                            </div>
+                            <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" @onclick="() => selected = null">Close</button>
+                        </div>
+                        <dl class="workspace-meta ej-detail-meta">
+                            <div><dt>Status</dt><dd><span class="workspace-badge @StatusClass(selected.Status)">@selected.Status</span></dd></div>
+                            <div><dt>Salary</dt><dd>@SalaryDetail(selected)</dd></div>
+                            <div><dt>Job type</dt><dd>@selected.JobType</dd></div>
+                            <div><dt>Experience</dt><dd>@selected.ExperienceRequired year@(selected.ExperienceRequired == 1 ? string.Empty : "s")</dd></div>
+                            <div><dt>Expiry</dt><dd>@(selected.ExpiryDate?.ToString("dd MMM yyyy") ?? "No deadline")</dd></div>
+                            <div><dt>Posted</dt><dd>@selected.CreatedAt.ToString("dd MMM yyyy")</dd></div>
+                        </dl>
+                        <div class="workspace-chip-row ej-detail-chips">
                             @foreach (var c in selected.Categories)
                             {
-                                <span class="ej-chip">@c.Name</span>
+                                <span class="workspace-chip">@c.Name</span>
                             }
                             @foreach (var s in selected.Skills)
                             {
-                                <span class="ej-chip">★ @s.SkillName (@s.ImportanceWeight)</span>
+                                <span class="workspace-chip">@s.SkillName · @s.ImportanceWeight/10</span>
                             }
                         </div>
-                        <p class="ej-detail-desc">@selected.Description</p>
-                        <div class="ej-actions"><button class="ej-btn ej-btn-secondary ej-btn-small" type="button" @onclick="() => selected = null">Close detail</button></div>
+                        <div class="ej-detail-desc">@selected.Description</div>
+                        <div class="workspace-form-actions">
+                            <a class="workspace-btn workspace-btn-secondary" href="/employer/interviews?jobId=@selected.Id">View applicants</a>
+                            <button class="workspace-btn workspace-btn-ghost" type="button" @onclick="() => EditFromDetailAsync(selected.Id)">Edit job</button>
+                        </div>
                     </section>
                 }
             }
@@ -195,7 +357,30 @@
     private string categoryText = string.Empty;
     private string skillText = string.Empty;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override void OnInitialized()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            _ = LoadAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
 
     private async Task<string> GetUserIdAsync()
     {
@@ -257,6 +442,33 @@
     {
         page = next;
         await LoadAsync();
+    }
+
+    private bool HasFilters => !string.IsNullOrWhiteSpace(search) || statusFilter.HasValue;
+
+    private int FromResult => totalCount == 0 ? 0 : ((page - 1) * PageSize) + 1;
+
+    private int ToResult => Math.Min(page * PageSize, totalCount);
+
+    private async Task FilterByStatusAsync(JobStatus status)
+    {
+        statusFilter = statusFilter == status ? null : status;
+        page = 1;
+        await LoadAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        search = null;
+        statusFilter = null;
+        page = 1;
+        await LoadAsync();
+    }
+
+    private async Task EditFromDetailAsync(int id)
+    {
+        selected = null;
+        await OpenEditFormAsync(id);
     }
 
     private void OpenCreateForm()
@@ -387,6 +599,15 @@
         if (selected?.Id == id) selected = null;
         await LoadAsync();
     }
+
+    private static string StatusClass(JobStatus status) => status switch
+    {
+        JobStatus.Published => "is-published",
+        JobStatus.Draft => "is-draft",
+        JobStatus.Closed => "is-closed",
+        JobStatus.Expired => "is-expired",
+        _ => "is-muted"
+    };
 
     private static string SalaryRange(JobListItemResponse j) =>
         (j.SalaryMin, j.SalaryMax) switch

@@ -105,10 +105,20 @@ else
                 {
                     <p class="job-detail-muted">@job.CompanyLocation</p>
                 }
+                <a class="job-detail-company-link" href="/companies/@job.CompanyProfileId">View company profile <span aria-hidden="true">→</span></a>
             </div>
             <div class="job-detail-auth">
-                <a class="jobs-search-button" href="/login">Sign in to apply</a>
-                <a class="jobs-clear" href="/register">Create account to save</a>
+                <AuthorizeView>
+                    <Authorized>
+                        <p class="job-detail-auth-note">You are signed in. Keep exploring roles that match your experience.</p>
+                        <a class="jobs-search-button" href="/it-jobs">Browse more jobs</a>
+                    </Authorized>
+                    <NotAuthorized>
+                        <p class="job-detail-auth-note">Sign in to see salary details and keep track of the roles you like.</p>
+                        <a class="jobs-search-button" href="/login">Sign in</a>
+                        <a class="jobs-clear" href="/register">Create a free account</a>
+                    </NotAuthorized>
+                </AuthorizeView>
             </div>
         </aside>
     </div>

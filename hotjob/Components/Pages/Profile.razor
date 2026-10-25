@@ -10,7 +10,7 @@
 @inject HotJobAuthStateProvider AuthStateProvider
 @inject IAccountService AccountService
 
-<PageTitle>Candidate Profile & CV Management | HotJob</PageTitle>
+<PageTitle>Your profile | HotJob</PageTitle>
 
 @if (isLoading)
 {
@@ -24,12 +24,12 @@ else
 {
     <section class="profile-page-header">
         <div>
-            <p class="profile-eyebrow">Your career workspace</p>
-            <h1>Candidate Profile &amp; CV Management</h1>
-            <p>Manage your account settings, job seeking status, and uploaded resumes.</p>
+            <p class="profile-eyebrow">Candidate workspace</p>
+            <h1>Your profile</h1>
+            <p>Keep your details current so employers see the right experience, and choose the CV we share with them.</p>
         </div>
         <div class="profile-header-actions">
-            <a class="profile-btn profile-btn-secondary" href="#personal-info">Preview public profile</a>
+            <a class="profile-btn profile-btn-secondary" href="/my-applications">My applications</a>
             <button class="profile-btn profile-btn-primary" type="button" @onclick="SaveProfileAsync" disabled="@isSaving">
                 @(isSaving ? "Saving..." : "Save changes")
             </button>
@@ -44,7 +44,7 @@ else
                     <button class="profile-avatar-edit" type="button" title="Change photo" aria-label="Change photo">+</button>
                     <h2>@DisplayName</h2>
                     <p>@(string.IsNullOrWhiteSpace(profileForm.Position) ? "Candidate" : profileForm.Position)</p>
-                    <span class="profile-status"><span></span> @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "Update your career preferences" : profileForm.JobSeekingStatus)</span>
+                    <span class="profile-status @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "profile-status-empty" : string.Empty)"><span></span> @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "Add your job seeking status" : profileForm.JobSeekingStatus)</span>
                 </div>
                 <nav class="profile-nav" aria-label="Profile sections">
                     <a class="active" href="#personal-info">Personal details</a>
@@ -72,7 +72,7 @@ else
                 </EditForm>
                 @if (!string.IsNullOrWhiteSpace(saveMessage))
                 {
-                    <p class="profile-save-message" role="status">@saveMessage</p>
+                    <p class="profile-save-message @(saveIsError ? "is-error" : string.Empty)" role="@(saveIsError ? "alert" : "status")">@saveMessage</p>
                 }
             </section>
 
@@ -120,6 +120,7 @@ else
 @code {
     private bool isLoading = true;
     private bool isSaving;
+    private bool saveIsError;
     private string? errorMessage;
     private string? saveMessage;
     private ProfileForm profileForm = new();
@@ -177,6 +178,7 @@ else
 
         isSaving = true;
         saveMessage = null;
+        saveIsError = false;
         var result = await AccountService.UpdateProfileAsync(userId, new UpdateProfileRequest
         {
             FullName = profileForm.FullName,
@@ -204,6 +206,7 @@ else
             profileForm.PreferredLocation = result.Data.Candidate.PreferredLocation;
         }
         saveMessage = result.Success ? "Profile changes saved successfully." : result.Errors.FirstOrDefault() ?? "Unable to save your changes.";
+        saveIsError = !result.Success;
     }
 
     private sealed class ProfileForm

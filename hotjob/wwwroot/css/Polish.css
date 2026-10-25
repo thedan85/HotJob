@@ -1,0 +1,329 @@
+/* Final consistency pass. Loaded last, after page styles. */
+
+/* ---------- Shared hero surfaces ---------- */
+
+.home-hero,
+.jobs-hero,
+.companies-hero {
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-lg);
+    background: var(--hj-gradient-hero);
+    box-shadow: var(--hj-shadow-sm);
+}
+
+/* ---------- Shared empty / error pages ---------- */
+
+.state-page {
+    max-width: 720px;
+    margin: clamp(20px, 5vw, 64px) auto;
+    padding: clamp(32px, 5vw, 52px);
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-lg);
+    background: var(--hj-gradient-hero);
+    box-shadow: var(--hj-shadow-sm);
+    text-align: center;
+}
+
+.state-page-compact { margin-top: 8px; }
+
+.state-kicker {
+    margin: 0 0 10px;
+    color: var(--hj-accent-text);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.state-page h1 {
+    margin: 0;
+    color: var(--hj-ink);
+    font-size: clamp(1.65rem, 3.5vw, 2.25rem);
+    line-height: 1.15;
+    letter-spacing: -.025em;
+}
+
+.state-lede {
+    max-width: 520px;
+    margin: 12px auto 0;
+    color: var(--hj-muted);
+    font-size: 15px;
+    line-height: 1.65;
+}
+
+.state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 26px;
+}
+
+.state-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 20px;
+    border: 1px solid transparent;
+    border-radius: var(--hj-radius-pill);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background var(--hj-transition), border-color var(--hj-transition), color var(--hj-transition);
+}
+
+.state-btn-primary {
+    background: var(--hj-primary);
+    color: #fff;
+    box-shadow: 0 8px 18px -14px rgba(3, 105, 161, .9);
+}
+
+.state-btn-primary:hover { background: var(--hj-primary-hover); color: #fff; }
+
+.state-btn-secondary {
+    border-color: var(--hj-border-strong);
+    background: #fff;
+    color: var(--hj-ink);
+}
+
+.state-btn-secondary:hover {
+    border-color: var(--hj-accent-text);
+    background: var(--hj-surface-tint);
+    color: var(--hj-primary);
+}
+
+.state-details {
+    max-width: 540px;
+    margin: 26px auto 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--hj-border);
+    color: var(--hj-muted);
+    font-size: 13px;
+    line-height: 1.6;
+    text-align: left;
+}
+
+.state-details summary { color: var(--hj-primary); font-weight: 600; }
+.state-details p { margin: 10px 0 0; }
+.state-details code {
+    padding: 2px 6px;
+    border: 1px solid var(--hj-border);
+    border-radius: 5px;
+    background: #fff;
+    overflow-wrap: anywhere;
+}
+
+/* ---------- Home ---------- */
+
+.hero-copy h1 { text-wrap: balance; }
+.hero-lede { text-wrap: pretty; }
+.shortcut-grid { gap: 20px; }
+.shortcut-card { border-radius: var(--hj-radius-lg); }
+.section-link { display: inline-flex; align-items: center; gap: 8px; }
+
+/* ---------- Jobs ---------- */
+
+.jobs-skeleton-card { pointer-events: none; }
+.jobs-skeleton-card .job-logo { background: #DBEAFE; color: transparent; }
+.job-salary-locked {
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+}
+
+/* ---------- Companies ---------- */
+
+.company-card { border-radius: var(--hj-radius-lg); }
+.companies-empty { border-radius: var(--hj-radius-lg); }
+
+/* ---------- Company detail ---------- */
+
+.company-detail { border-radius: var(--hj-radius-lg); }
+
+.company-detail-header {
+    align-items: center;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--hj-border);
+}
+
+.company-detail-owner {
+    display: inline-flex;
+    width: fit-content;
+    margin: 0;
+    padding: 4px 11px;
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface-muted);
+    font-size: 12px;
+}
+
+.company-detail-overview { margin-top: 26px; }
+
+.company-detail-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.company-detail-fact {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 16px;
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-sm);
+    background: var(--hj-surface-muted);
+}
+
+.company-detail-fact dt {
+    color: var(--hj-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.company-detail-fact dd { margin: 0; font-size: 14px; font-weight: 600; }
+.company-detail-desc { max-width: 78ch; }
+.company-detail-actions { margin-top: 26px; }
+.review-card { background: var(--hj-surface-muted); }
+
+/* ---------- Job detail ---------- */
+
+.job-detail-side { position: sticky; top: 92px; }
+
+.job-detail-company-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    color: var(--hj-primary);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.job-detail-company-link:hover {
+    color: var(--hj-primary-hover);
+    text-decoration: underline;
+}
+
+.job-detail-auth-note {
+    margin: 0;
+    color: var(--hj-muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.job-detail-salary {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: 1px solid #BAE6FD;
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface-tint);
+    color: var(--hj-primary);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.job-detail-salary .job-salary-locked { color: var(--hj-primary); }
+
+/* ---------- Become employer ---------- */
+
+.become-employer { max-width: 680px; padding: 0 0 24px; }
+.become-employer h1 { letter-spacing: -.025em; }
+
+/* ---------- Profile ---------- */
+
+.profile-page-header {
+    margin-bottom: 24px;
+    padding: clamp(24px, 3.5vw, 34px);
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-lg);
+    background: var(--hj-gradient-hero);
+    box-shadow: var(--hj-shadow-sm);
+}
+
+.profile-page-header h1 {
+    margin: 0 0 6px;
+    font-size: clamp(1.5rem, 3vw, 1.95rem);
+    letter-spacing: -.025em;
+}
+
+.profile-page-header p:not(.profile-eyebrow) { max-width: 640px; line-height: 1.6; }
+.profile-layout { width: 100%; margin: 0 auto 40px; }
+.profile-content { min-width: 0; }
+.profile-card,
+.profile-box { border-radius: var(--hj-radius-lg); }
+.profile-box { padding: clamp(20px, 3vw, 26px); }
+
+.profile-loading,
+.profile-alert {
+    width: 100%;
+    margin: 0 0 20px;
+    padding: 16px 18px;
+    border-radius: var(--hj-radius-md);
+}
+
+.profile-loading {
+    border: 1px solid var(--hj-border);
+    background: var(--hj-surface);
+    color: var(--hj-muted);
+}
+
+.profile-alert {
+    border: 1px solid #FECACA;
+    background: var(--hj-danger-bg);
+    color: var(--hj-danger);
+}
+
+.profile-status-empty { background: var(--hj-surface-muted); color: var(--hj-muted); }
+.profile-status-empty span { background: var(--hj-muted); }
+.profile-save-message.is-error { color: var(--hj-danger); }
+.profile-upload { border-color: var(--hj-border-strong); background: var(--hj-surface-muted); }
+
+.profile-form-grid input:focus,
+.profile-form-grid textarea:focus {
+    border-color: var(--hj-accent-text);
+    box-shadow: var(--hj-focus);
+}
+
+.profile-nav a.active { box-shadow: inset 3px 0 var(--hj-accent); }
+
+/* ---------- Cross-page text rhythm ---------- */
+
+p.eyebrow,
+.section-kicker,
+.jobs-hero p.eyebrow,
+.companies-hero p.eyebrow {
+    color: var(--hj-accent-text);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.section-heading { margin-bottom: 26px; }
+.section-heading h2 { letter-spacing: -.025em; }
+
+@media (max-width: 900px) {
+    .job-detail-side { position: static; }
+}
+
+@media (max-width: 760px) {
+    .profile-layout { width: 100%; margin-top: 0; }
+    .state-page { margin: 8px auto; }
+}
+
+@media (max-width: 600px) {
+    .company-detail-facts { grid-template-columns: 1fr; }
+    .company-detail-header { align-items: flex-start; }
+    .profile-page-header { padding: 22px 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .job-detail-side { position: static; }
+}

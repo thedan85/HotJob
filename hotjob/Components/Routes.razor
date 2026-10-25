@@ -8,7 +8,17 @@
                 }
                 else
                 {
-                    <p>You do not have access to this page.</p>
+                    <LayoutView Layout="typeof(Layout.MainLayout)">
+                        <section class="state-page state-page-compact" role="alert" aria-labelledby="access-denied-title">
+                            <p class="state-kicker">Access denied</p>
+                            <h1 id="access-denied-title">You do not have access to this page</h1>
+                            <p class="state-lede">Sign in with an account that has the right role, or head back to the job board.</p>
+                            <div class="state-actions">
+                                <a class="state-btn state-btn-primary" href="/it-jobs">Browse jobs</a>
+                                <a class="state-btn state-btn-secondary" href="/">Go home</a>
+                            </div>
+                        </section>
+                    </LayoutView>
                 }
             </NotAuthorized>
         </AuthorizeRouteView>
