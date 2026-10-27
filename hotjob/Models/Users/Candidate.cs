@@ -53,6 +53,24 @@ public class Candidate
     [MaxLength(500)]
     public string? PreferredLocation { get; set; }
 
+    /// <summary>Premium plan last bought. Null if the candidate never subscribed.</summary>
+    public int? PremiumPlanId { get; set; }
+
+    /// <summary>When the current uninterrupted Premium period began.</summary>
+    public DateTime? PremiumStartedAt { get; set; }
+
+    /// <summary>Premium is active while this is in the future.</summary>
+    public DateTime? PremiumUntil { get; set; }
+
+    /// <summary>Profile is boosted in employer candidate search while this is in the future.</summary>
+    public DateTime? BoostUntil { get; set; }
+
+    /// <summary>When true, approved employers can find this candidate in candidate search.</summary>
+    public bool IsDiscoverable { get; set; }
+
+    /// <summary>Premium plan last bought.</summary>
+    public Billing.Plan? PremiumPlan { get; set; }
+
     /// <summary>Identity user owning this profile.</summary>
     public ApplicationUser User { get; set; } = default!;
 

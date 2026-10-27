@@ -1,0 +1,108 @@
+/* Candidate job alerts page. Shared primitives live in Workspace.css. */
+
+.ja-page {
+    width: min(1040px, calc(100% - 40px));
+    margin: 28px auto 64px;
+}
+
+.ja-card { padding: 20px; }
+
+.ja-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ja-alert {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 16px 0;
+    border-top: 1px solid var(--hj-border);
+}
+
+.ja-alert:first-child { padding-top: 2px; border-top: 0; }
+.ja-alert:last-child { padding-bottom: 0; }
+
+.ja-alert-main { min-width: 0; }
+
+.ja-alert h3 {
+    margin: 0;
+    color: var(--hj-ink);
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+.ja-alert.is-unread h3::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: var(--hj-accent-text);
+    vertical-align: middle;
+}
+
+.ja-alert p {
+    margin: 5px 0 0;
+    color: var(--hj-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.ja-alert-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    margin-top: 9px;
+    color: var(--hj-muted);
+    font-size: 12px;
+}
+
+.ja-alert-actions { flex: 0 0 auto; }
+
+.ja-upsell {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 24px;
+}
+
+.ja-upsell-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
+    border-radius: 14px;
+    background: var(--hj-surface-tint);
+    color: var(--hj-accent-text);
+}
+
+.ja-upsell-icon svg { width: 22px; height: 22px; }
+
+.ja-upsell h2 { margin: 0 0 6px; }
+
+.ja-upsell p {
+    margin: 0;
+    max-width: 640px;
+    color: var(--hj-muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.ja-upsell-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+@media (max-width: 720px) {
+    .ja-alert { flex-direction: column; }
+    .ja-upsell { flex-direction: column; }
+}

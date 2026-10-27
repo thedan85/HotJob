@@ -5,7 +5,9 @@ using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Models.Users;
 using hotjob.Repositories.Job;
+using hotjob.Services.Billing;
 using hotjob.Services.Common;
+using hotjob.Services.JobAlerts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -14,6 +16,8 @@ namespace hotjob.Services.Job;
 public sealed class JobService(
     ApplicationDbContext dbContext,
     IJobPostingRepository jobRepository,
+    IEntitlementService entitlementService,
+    IJobAlertService jobAlertService,
     ILogger<JobService> logger) : IJobService
 {
     private static readonly ApplicationStatus[] OpenStatuses =
@@ -47,6 +51,20 @@ public sealed class JobService(
             return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.Validation, errors);
         }
 
+        var entitlement = await entitlementService.GetForCompanyAsync(
+            employer.CompanyProfileId, employer.IsOwner, cancellationToken);
+        if (entitlement is null)
+        {
+            return ServiceResult<JobDetailResponse>.Fail(
+                ServiceErrorType.Unauthorized, "Employer membership is not active or the company is not approved.");
+        }
+
+        if (!entitlement.CanAddJob)
+        {
+            return ServiceResult<JobDetailResponse>.Fail(
+                ServiceErrorType.Conflict, JobSlotLimitMessage(entitlement));
+        }
+
         var job = new JobPosting
         {
             CompanyProfileId = employer.CompanyProfileId,
@@ -71,7 +89,13 @@ public sealed class JobService(
         await jobRepository.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Employer {EmployerId} created job {JobId}.", employer.Id, job.Id);
 
-        return await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
+        var detail = await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
+        if (job.Status == JobStatus.Published)
+        {
+            await TryNotifyPublishedAsync(job.Id, cancellationToken);
+        }
+
+        return detail;
     }
 
     public async Task<ServiceResult<JobDetailResponse>> UpdateAsync(
@@ -104,22 +128,55 @@ public sealed class JobService(
             return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.NotFound, "Job not found.");
         }
 
+        var wasPublished = job.Status == JobStatus.Published;
+        var targetStatus = request.Status ?? job.Status;
+        var reopening = job.Status is JobStatus.Closed or JobStatus.Expired
+            && targetStatus is JobStatus.Draft or JobStatus.Published;
+        if (reopening)
+        {
+            var entitlement = await entitlementService.GetForCompanyAsync(
+                employer.CompanyProfileId, employer.IsOwner, cancellationToken);
+            if (entitlement is null)
+            {
+                return ServiceResult<JobDetailResponse>.Fail(
+                    ServiceErrorType.Unauthorized, "Employer membership is not active or the company is not approved.");
+            }
+
+            if (!entitlement.CanAddJob)
+            {
+                return ServiceResult<JobDetailResponse>.Fail(
+                    ServiceErrorType.Conflict, JobSlotLimitMessage(entitlement));
+            }
+        }
+
         job.Title = request.Title.Trim();
         job.Description = request.Description.Trim();
         job.SalaryMin = request.SalaryMin;
         job.SalaryMax = request.SalaryMax;
+        var experienceChanged = job.ExperienceRequired != request.ExperienceRequired;
         job.ExperienceRequired = request.ExperienceRequired;
         job.JobType = request.JobType;
         job.ExpiryDate = request.ExpiryDate;
         job.Status = request.Status ?? job.Status;
 
-        ReplaceSkills(job, request.Skills);
+        var skillsChanged = ReplaceSkills(job, request.Skills);
         ReplaceCategories(job, request.CategoryIds);
 
         await jobRepository.SaveChangesAsync(cancellationToken);
+        if (skillsChanged || experienceChanged)
+        {
+            await InvalidateMatchScoresAsync(job.Id, cancellationToken);
+        }
+
         logger.LogInformation("Employer {EmployerId} updated job {JobId}.", employer.Id, job.Id);
 
-        return await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
+        var detail = await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
+        if (!wasPublished && job.Status == JobStatus.Published)
+        {
+            await TryNotifyPublishedAsync(job.Id, cancellationToken);
+        }
+
+        return detail;
     }
 
     public async Task<ServiceResult<JobDeleteResponse>> DeleteOrCloseAsync(
@@ -225,8 +282,12 @@ public sealed class JobService(
             return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.NotFound, "Job not found.");
         }
 
-        ReplaceSkills(job, skills);
+        var skillsChanged = ReplaceSkills(job, skills);
         await jobRepository.SaveChangesAsync(cancellationToken);
+        if (skillsChanged)
+        {
+            await InvalidateMatchScoresAsync(job.Id, cancellationToken);
+        }
 
         return await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
     }
@@ -330,6 +391,23 @@ public sealed class JobService(
 
         var count = await dbContext.Applications.CountAsync(application => application.JobPostingId == jobId, cancellationToken);
         return ServiceResult<JobDetailResponse>.Ok(ToDetail(job, count));
+    }
+
+    // Alerting is best-effort after the publish is saved: a failure must never roll back or
+    // hide a job that is already Published, but it is always logged with the job id.
+    private async Task TryNotifyPublishedAsync(int jobId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await jobAlertService.NotifyForPublishedJobAsync(jobId, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Job alert generation failed for published job {JobId}; the job remains published.",
+                jobId);
+        }
     }
 
     private Task<global::hotjob.Models.Users.Employer?> GetAuthorizedEmployerAsync(string userId, CancellationToken cancellationToken) =>
@@ -455,9 +533,13 @@ public sealed class JobService(
         }
     }
 
-    private static void ReplaceSkills(JobPosting job, List<JobSkillInput> skills)
+    private static bool ReplaceSkills(JobPosting job, List<JobSkillInput> skills)
     {
         var wanted = skills.ToDictionary(skill => skill.SkillId, skill => skill.ImportanceWeight);
+        var changed = job.JobSkills.Count != wanted.Count
+            || job.JobSkills.Any(jobSkill => !wanted.TryGetValue(jobSkill.SkillId, out var weight)
+                || weight != jobSkill.ImportanceWeight);
+
         foreach (var jobSkill in job.JobSkills.Where(jobSkill => !wanted.ContainsKey(jobSkill.SkillId)).ToList())
         {
             job.JobSkills.Remove(jobSkill);
@@ -473,6 +555,16 @@ public sealed class JobService(
         {
             job.JobSkills.Add(new JobSkill { JobPostingId = job.Id, SkillId = skillId, ImportanceWeight = weight });
         }
+
+        return changed;
+    }
+
+    private async Task InvalidateMatchScoresAsync(int jobId, CancellationToken cancellationToken)
+    {
+        // ponytail: delete instead of stamping — the next job view recomputes and upserts.
+        await dbContext.MatchScores
+            .Where(score => score.JobPostingId == jobId)
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     private async Task<Dictionary<int, int>> ApplicationCountsAsync(List<int> jobIds, CancellationToken cancellationToken)
@@ -488,6 +580,9 @@ public sealed class JobService(
             .Select(group => new { JobId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(row => row.JobId, row => row.Count, cancellationToken);
     }
+
+    private static string JobSlotLimitMessage(EmployerEntitlement entitlement) =>
+        $"You have used all {entitlement.ActiveJobCount}/{entitlement.JobQuota} job slots on your plan. Upgrade to post more.";
 
     private static JobDetailResponse ToDetail(JobPosting job, int applicationsCount) =>
         new(
@@ -506,7 +601,8 @@ public sealed class JobService(
             job.CategoryMappings.Select(mapping => new JobCategoryDto(mapping.JobCategoryId, mapping.Category?.Name ?? string.Empty)).ToList(),
             applicationsCount,
             job.CreatedAt,
-            job.Company?.Location);
+            job.Company?.Location,
+            job.FeaturedUntil);
 
     private static PublicJobListItemResponse ToPublicListItem(JobPosting job) =>
         new(
@@ -519,7 +615,8 @@ public sealed class JobService(
             job.JobType,
             job.ExpiryDate,
             job.CreatedAt,
-            job.JobSkills.Select(jobSkill => jobSkill.Skill?.Name ?? string.Empty).Where(name => name.Length > 0).ToList());
+            job.JobSkills.Select(jobSkill => jobSkill.Skill?.Name ?? string.Empty).Where(name => name.Length > 0).ToList(),
+            job.FeaturedUntil);
 
     private static JobListItemResponse ToListItem(JobPosting job, int applicationsCount) =>
         new(
@@ -535,5 +632,6 @@ public sealed class JobService(
             job.JobSkills.Count,
             job.CategoryMappings.Select(mapping => mapping.Category?.Name ?? string.Empty).ToList(),
             applicationsCount,
-            job.CreatedAt);
+            job.CreatedAt,
+            job.FeaturedUntil);
 }

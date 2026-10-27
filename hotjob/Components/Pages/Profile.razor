@@ -1,14 +1,19 @@
 @page "/profile"
+@implements IDisposable
 @rendermode InteractiveServer
 @using System.Security.Claims
 @using hotjob.DTOs.Authentication
+@using hotjob.DTOs.Candidate
 @using hotjob.Models.Users
 @using hotjob.Services.Account
 @using hotjob.Services.Authentication
+@using hotjob.Services.Candidate
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject HotJobAuthStateProvider AuthStateProvider
+@inject AuthSession AuthSession
 @inject IAccountService AccountService
+@inject IResumeService ResumeService
 
 <PageTitle>Your profile | HotJob</PageTitle>
 
@@ -48,7 +53,7 @@ else
                 </div>
                 <nav class="profile-nav" aria-label="Profile sections">
                     <a class="active" href="#personal-info">Personal details</a>
-                    <a href="#cv-management">Manage CVs <span>(@cvs.Count)</span></a>
+                    <a href="#cv-management">Manage CVs <span>(@resumes.Count)</span></a>
                     <a href="#preferences">Career preferences</a>
                 </nav>
             </div>
@@ -78,28 +83,192 @@ else
 
             <section id="cv-management" class="profile-box">
                 <div class="profile-box-heading">
-                    <div><h2>CV &amp; resume management</h2><p>Choose which CV to use as your default for HotJob AI matching.</p></div>
-                    <span class="profile-badge">@cvs.Count / 5 resumes uploaded</span>
+                    <div><h2>CV &amp; resume management</h2><p>Create a resume per role you target. Your primary CV is preselected when you apply.</p></div>
+                    <span class="profile-badge">@resumes.Count / 5 resumes</span>
                 </div>
-                <div class="profile-upload">
-                    <div class="profile-upload-icon">↑</div>
-                    <h3>Click to upload or drag &amp; drop your CV here</h3>
-                    <p>Supported formats: PDF, DOC, DOCX (max size: 5MB)</p>
-                    <button class="profile-btn profile-btn-primary profile-btn-small" type="button">Browse files</button>
-                </div>
-                <div class="cv-list">
-                    @foreach (var cv in cvs)
-                    {
-                        <div class="cv-item @(cv.IsDefault ? "cv-item-default" : string.Empty)">
-                            <div class="cv-file"><span class="cv-type">@cv.Type</span><div><h3>@cv.Name @if (cv.IsDefault) { <span class="profile-badge profile-badge-green">Default CV</span> }</h3><p>@cv.Updated · @cv.Size</p></div></div>
-                            <div class="cv-actions">
-                                @if (!cv.IsDefault) { <button class="profile-btn profile-btn-secondary profile-btn-small" type="button">Set as default</button> }
-                                <button class="cv-icon-button" type="button" title="Download @cv.Name">↓</button>
-                                <button class="cv-icon-button cv-delete" type="button" title="Delete @cv.Name">×</button>
+
+                @if (!string.IsNullOrWhiteSpace(resumeMessage))
+                {
+                    <p class="profile-save-message" role="status">@resumeMessage</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(resumeError))
+                {
+                    <div class="profile-resume-alert" role="alert">@resumeError</div>
+                }
+
+                @if (resumes.Count == 0)
+                {
+                    <div class="profile-upload">
+                        <div class="profile-upload-icon">↑</div>
+                        <h3>Create your first resume</h3>
+                        <p>Add your experience and skills, then attach a PDF, DOC or DOCX file (max 5 MB).</p>
+                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="StartCreateResume" disabled="@(showResumeForm)">
+                            Create resume
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="cv-toolbar">
+                        <p>Upload a file from each resume card. New uploads replace the previous file for that resume.</p>
+                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="StartCreateResume"
+                                disabled="@(showResumeForm || resumes.Count >= 5)">
+                            Add resume
+                        </button>
+                    </div>
+                    <div class="cv-list">
+                        @foreach (var resume in resumes)
+                        {
+                            <div class="cv-item @(resume.IsPrimary ? "cv-item-default" : string.Empty)">
+                                <div class="cv-file">
+                                    <span class="cv-type">@ResumeFileType(resume.FileUrl)</span>
+                                    <div class="cv-file-copy">
+                                        <h3>
+                                            @resume.Title
+                                            @if (resume.IsPrimary)
+                                            {
+                                                <span class="profile-badge profile-badge-green">Primary CV</span>
+                                            }
+                                        </h3>
+                                        <p>
+                                            Updated @resume.CreatedAt.ToString("dd MMM yyyy")
+                                            · @(resume.FileUrl is null ? "No file attached" : "File attached")
+                                            · @resume.SkillCount skill@(resume.SkillCount == 1 ? string.Empty : "s")
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="cv-actions">
+                                    @if (!resume.IsPrimary)
+                                    {
+                                        <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                                                disabled="@(primaryUpdatingId is not null)"
+                                                @onclick="() => SetPrimaryAsync(resume.Id)">
+                                            @(primaryUpdatingId == resume.Id ? "Saving..." : "Set as primary")
+                                        </button>
+                                    }
+                                    <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="() => EditResumeAsync(resume.Id)">
+                                        Edit
+                                    </button>
+                                    <label class="cv-icon-button cv-upload" title="Upload CV file">
+                                        <span aria-hidden="true">@(uploadingResumeId == resume.Id ? "…" : "↑")</span>
+                                        <span class="visually-hidden">Upload a CV file for @resume.Title</span>
+                                        <InputFile OnChange="args => UploadAsync(resume.Id, args)" accept=".pdf,.doc,.docx"
+                                                   class="cv-file-input" disabled="@(uploadingResumeId is not null)" />
+                                    </label>
+                                    @if (resume.FileUrl is not null)
+                                    {
+                                        <a class="cv-icon-button" href="@resume.FileUrl" target="_blank" rel="noopener noreferrer" title="Open @resume.Title" download>↓</a>
+                                    }
+                                    @if (pendingDeleteId != resume.Id)
+                                    {
+                                        <button class="cv-icon-button cv-delete" type="button" title="Delete @resume.Title" @onclick="() => { pendingDeleteId = resume.Id; }">×</button>
+                                    }
+                                </div>
+                                @if (pendingDeleteId == resume.Id)
+                                {
+                                    <div class="cv-confirm" role="group" aria-label="Confirm deleting @resume.Title">
+                                        <span>Delete this resume? This cannot be undone.</span>
+                                        <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="() => { pendingDeleteId = null; }">Cancel</button>
+                                        <button class="profile-btn profile-btn-primary profile-btn-small cv-confirm-danger" type="button" @onclick="() => DeleteResumeAsync(resume.Id)">Confirm delete</button>
+                                    </div>
+                                }
                             </div>
+                        }
+                    </div>
+                }
+
+                @if (showResumeForm)
+                {
+                    <div class="cv-form">
+                        <div class="cv-form-heading">
+                            <h3>@(editingResumeId is null ? "New resume" : "Edit resume")</h3>
+                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="CancelResumeForm">Cancel</button>
                         </div>
-                    }
-                </div>
+                        <EditForm Model="resumeForm" OnValidSubmit="SaveResumeAsync">
+                            <DataAnnotationsValidator />
+                            <div class="profile-form-grid">
+                                <label>Resume title <InputText @bind-Value="resumeForm.Title" placeholder="e.g. Backend Engineer CV" /></label>
+                                <label class="profile-field-wide">Professional summary <InputTextArea @bind-Value="resumeForm.Summary" placeholder="A short pitch for this resume" /></label>
+                            </div>
+
+                            <fieldset class="cv-fieldset">
+                                <legend>Education</legend>
+                                @for (var index = 0; index < resumeForm.Educations.Count; index++)
+                                {
+                                    var row = index;
+                                    <div class="cv-form-row" @key="row">
+                                        <label>School <InputText @bind-Value="resumeForm.Educations[row].SchoolName" placeholder="School name" /></label>
+                                        <label>Major <InputText @bind-Value="resumeForm.Educations[row].Major" placeholder="Major" /></label>
+                                        <label>Start <InputDate @bind-Value="resumeForm.Educations[row].StartDate" /></label>
+                                        <label>End <InputDate @bind-Value="resumeForm.Educations[row].EndDate" /></label>
+                                        <label>GPA <InputNumber @bind-Value="resumeForm.Educations[row].Gpa" step="0.1" min="0" max="4" /></label>
+                                        <button class="cv-remove" type="button" aria-label="Remove education entry" @onclick="() => RemoveEducation(row)">×</button>
+                                    </div>
+                                }
+                                <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="AddEducation">+ Add education</button>
+                            </fieldset>
+
+                            <fieldset class="cv-fieldset">
+                                <legend>Work experience</legend>
+                                @for (var index = 0; index < resumeForm.WorkExperiences.Count; index++)
+                                {
+                                    var row = index;
+                                    <div class="cv-form-row" @key="row">
+                                        <label>Company <InputText @bind-Value="resumeForm.WorkExperiences[row].CompanyName" placeholder="Company name" /></label>
+                                        <label>Job title <InputText @bind-Value="resumeForm.WorkExperiences[row].JobTitle" placeholder="Job title" /></label>
+                                        <label>Start <InputDate @bind-Value="resumeForm.WorkExperiences[row].StartDate" /></label>
+                                        <label>End <InputDate @bind-Value="resumeForm.WorkExperiences[row].EndDate" /></label>
+                                        <button class="cv-remove" type="button" aria-label="Remove work experience entry" @onclick="() => RemoveWorkExperience(row)">×</button>
+                                    </div>
+                                }
+                                <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="AddWorkExperience">+ Add experience</button>
+                            </fieldset>
+
+                            <fieldset class="cv-fieldset">
+                                <legend>Skills</legend>
+                                @if (resumeForm.Skills.Count == 0)
+                                {
+                                    <p class="cv-form-hint">No skills yet. Add the skills this resume should match against jobs.</p>
+                                }
+                                else
+                                {
+                                    @for (var index = 0; index < resumeForm.Skills.Count; index++)
+                                    {
+                                        var row = index;
+                                        <div class="cv-skill-row" @key="row">
+                                            <span class="profile-badge">@SkillName(resumeForm.Skills[row].SkillId)</span>
+                                            <label class="cv-years">Years <InputNumber @bind-Value="resumeForm.Skills[row].YearsOfExperience" min="0" max="50" /></label>
+                                            <button class="cv-remove" type="button" aria-label="Remove skill" @onclick="() => RemoveSkill(row)">×</button>
+                                        </div>
+                                    }
+                                }
+                                <div class="cv-skill-picker">
+                                    <label>
+                                        Skill
+                                        <select @bind="skillPickerId">
+                                            <option value="0">Choose a skill</option>
+                                            @foreach (var skill in AvailableSkills)
+                                            {
+                                                <option value="@skill.Id">@skill.Name</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        Years
+                                        <input type="number" min="0" max="50" @bind="skillPickerYears" />
+                                    </label>
+                                    <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="AddSkill">Add skill</button>
+                                </div>
+                            </fieldset>
+
+                            <div class="cv-form-actions">
+                                <button class="profile-btn profile-btn-primary" type="submit" disabled="@isSavingResume">
+                                    @(isSavingResume ? "Saving..." : editingResumeId is null ? "Create resume" : "Save resume")
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                }
             </section>
 
             <section id="preferences" class="profile-box">
@@ -118,56 +287,142 @@ else
 }
 
 @code {
+    private const long MaxCvBytes = 5 * 1024 * 1024;
+
     private bool isLoading = true;
+    private bool hasLoadedOnce;
     private bool isSaving;
     private bool saveIsError;
     private string? errorMessage;
     private string? saveMessage;
+    private string? cvError;
     private ProfileForm profileForm = new();
+
+    private List<ResumeListItemDto> resumes = new();
+    private List<SkillOptionDto> skillOptions = new();
+    private ResumeInput resumeForm = new();
+    private int? editingResumeId;
+    private bool showResumeForm;
+    private bool isSavingResume;
+    private string? resumeMessage;
+    private string? resumeError;
+    private int? pendingDeleteId;
+    private int? uploadingResumeId;
+    private int? primaryUpdatingId;
+    private int skillPickerId;
+    private int skillPickerYears;
 
     private string DisplayName => string.IsNullOrWhiteSpace(profileForm.FullName) ? "Your profile" : profileForm.FullName;
     private string Initials => string.Join("", DisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
 
-    private readonly List<CvItem> cvs =
-    [
-        new("PDF", "Alex_Nguyen_Senior_Marketing_2025.pdf", "Updated Oct 24, 2024", "1.8 MB", true),
-        new("DOCX", "Alex_Nguyen_Growth_Lead_EN.docx", "Updated Sep 12, 2024", "840 KB", false),
-        new("PDF", "AlexNguyen_SEO_Content_Specialist.pdf", "Updated Aug 05, 2024", "1.2 MB", false)
-    ];
+    private IEnumerable<SkillOptionDto> AvailableSkills =>
+        skillOptions.Where(option => resumeForm.Skills.All(skill => skill.SkillId != option.Id));
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            _ = LoadAsync();
+        }
+        else
+        {
+            isLoading = false;
+            errorMessage = "Please sign in to view your profile.";
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async Task<string> GetUserIdAsync()
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
-        if (string.IsNullOrWhiteSpace(userId))
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub") ?? string.Empty;
+    }
+
+    private async Task LoadAsync()
+    {
+        if (isLoading && hasLoadedOnce)
         {
-            errorMessage = "Please sign in to view your profile.";
-            isLoading = false;
             return;
         }
-
-        var result = await AccountService.GetProfileAsync(userId);
-        if (!result.Success || result.Data?.Candidate is null)
+        isLoading = true;
+        hasLoadedOnce = true;
+        errorMessage = null;
+        cvError = null;
+        try
         {
-            errorMessage = result.Errors.FirstOrDefault() ?? "We could not load your candidate profile.";
-            isLoading = false;
-            return;
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                errorMessage = "Please sign in to view your profile.";
+                return;
+            }
+
+            var result = await AccountService.GetProfileAsync(userId);
+            if (!result.Success || result.Data?.Candidate is null)
+            {
+                errorMessage = result.Errors.FirstOrDefault() ?? "We could not load your candidate profile.";
+                return;
+            }
+
+            var candidate = result.Data.Candidate;
+            profileForm = new ProfileForm
+            {
+                FullName = candidate.FullName,
+                Email = result.Data.Email,
+                Address = candidate.Address,
+                LinkedInUrl = candidate.LinkedInUrl,
+                Position = candidate.Position,
+                Summary = candidate.Summary,
+                JobSeekingStatus = candidate.JobSeekingStatus,
+                PreferredWorkModel = candidate.PreferredWorkModel,
+                PreferredLocation = candidate.PreferredLocation
+            };
+
+            // Sequential awaits: ResumeService and AccountService share the circuit's DbContext.
+            var resumeResult = await ResumeService.ListAsync(userId);
+            if (resumeResult.Success && resumeResult.Data is not null)
+            {
+                resumes = resumeResult.Data.ToList();
+            }
+            else
+            {
+                cvError = resumeResult.Errors.FirstOrDefault() ?? "We could not load your resumes.";
+            }
+
+            var skillResult = await ResumeService.ListSkillsAsync();
+            if (skillResult.Success && skillResult.Data is not null)
+            {
+                skillOptions = skillResult.Data.ToList();
+            }
+            else if (string.IsNullOrWhiteSpace(cvError))
+            {
+                cvError = skillResult.Errors.FirstOrDefault() ?? "We could not load the skill list.";
+            }
         }
-
-        var candidate = result.Data.Candidate;
-        profileForm = new ProfileForm
+        catch (Exception exception)
         {
-            FullName = candidate.FullName,
-            Email = result.Data.Email,
-            Address = candidate.Address,
-            LinkedInUrl = candidate.LinkedInUrl,
-            Position = candidate.Position,
-            Summary = candidate.Summary,
-            JobSeekingStatus = candidate.JobSeekingStatus,
-            PreferredWorkModel = candidate.PreferredWorkModel,
-            PreferredLocation = candidate.PreferredLocation
-        };
-        isLoading = false;
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
     private async Task SaveProfileAsync()
@@ -209,6 +464,266 @@ else
         saveIsError = !result.Success;
     }
 
+    private void StartCreateResume()
+    {
+        editingResumeId = null;
+        resumeForm = new ResumeInput();
+        skillPickerId = 0;
+        skillPickerYears = 0;
+        resumeError = null;
+        resumeMessage = null;
+        showResumeForm = true;
+    }
+
+    private async Task EditResumeAsync(int resumeId)
+    {
+        resumeError = null;
+        resumeMessage = null;
+        var userId = await GetUserIdAsync();
+        var result = await ResumeService.GetAsync(userId, resumeId);
+        if (!result.Success || result.Data is null)
+        {
+            resumeError = result.Errors.FirstOrDefault() ?? "We could not load this resume.";
+            return;
+        }
+
+        var detail = result.Data;
+        editingResumeId = detail.Id;
+        resumeForm = new ResumeInput
+        {
+            Title = detail.Title,
+            Summary = detail.Summary,
+            Educations = detail.Educations.Select(entry => new ResumeEducationInput
+            {
+                SchoolName = entry.SchoolName,
+                Major = entry.Major,
+                StartDate = entry.StartDate,
+                EndDate = entry.EndDate,
+                Gpa = entry.Gpa,
+                Description = entry.Description
+            }).ToList(),
+            WorkExperiences = detail.WorkExperiences.Select(entry => new ResumeWorkExperienceInput
+            {
+                CompanyName = entry.CompanyName,
+                JobTitle = entry.JobTitle,
+                StartDate = entry.StartDate,
+                EndDate = entry.EndDate,
+                Description = entry.Description
+            }).ToList(),
+            Skills = detail.Skills.Select(skill => new ResumeSkillInput
+            {
+                SkillId = skill.SkillId,
+                YearsOfExperience = skill.YearsOfExperience
+            }).ToList()
+        };
+        skillPickerId = 0;
+        skillPickerYears = 0;
+        showResumeForm = true;
+    }
+
+    private void CancelResumeForm()
+    {
+        showResumeForm = false;
+        editingResumeId = null;
+        resumeForm = new ResumeInput();
+        skillPickerId = 0;
+    }
+
+    private async Task SaveResumeAsync()
+    {
+        if (isSavingResume) return;
+
+        isSavingResume = true;
+        resumeError = null;
+        resumeMessage = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            var result = editingResumeId is null
+                ? await ResumeService.CreateAsync(userId, resumeForm)
+                : await ResumeService.UpdateAsync(userId, editingResumeId.Value, resumeForm);
+            if (!result.Success || result.Data is null)
+            {
+                resumeError = string.Join(" ", result.Errors);
+                return;
+            }
+
+            resumeMessage = editingResumeId is null ? "Resume created." : "Resume saved.";
+            showResumeForm = false;
+            editingResumeId = null;
+            resumeForm = new ResumeInput();
+            await ReloadResumesAsync();
+        }
+        catch (Exception exception)
+        {
+            resumeError = exception.Message;
+        }
+        finally
+        {
+            isSavingResume = false;
+        }
+    }
+
+    private async Task UploadAsync(int resumeId, InputFileChangeEventArgs args)
+    {
+        resumeError = null;
+        resumeMessage = null;
+        var file = args.File;
+        if (file.Size <= 0)
+        {
+            resumeError = "The selected file is empty.";
+            return;
+        }
+        if (file.Size > MaxCvBytes)
+        {
+            resumeError = "CV files must be 5 MB or smaller.";
+            return;
+        }
+
+        uploadingResumeId = resumeId;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            await using var stream = file.OpenReadStream(MaxCvBytes);
+            var result = await ResumeService.UploadFileAsync(userId, resumeId, file.Name, file.Size, stream);
+            if (!result.Success)
+            {
+                resumeError = result.Errors.FirstOrDefault() ?? "We could not upload this file.";
+                return;
+            }
+
+            resumeMessage = "CV file uploaded.";
+            await ReloadResumesAsync();
+        }
+        catch (IOException)
+        {
+            resumeError = "CV files must be 5 MB or smaller.";
+        }
+        catch (Exception exception)
+        {
+            resumeError = exception.Message;
+        }
+        finally
+        {
+            uploadingResumeId = null;
+        }
+    }
+
+    private async Task SetPrimaryAsync(int resumeId)
+    {
+        resumeError = null;
+        resumeMessage = null;
+        primaryUpdatingId = resumeId;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            var result = await ResumeService.SetPrimaryAsync(userId, resumeId);
+            if (!result.Success)
+            {
+                resumeError = result.Errors.FirstOrDefault() ?? "We could not update your primary resume.";
+                return;
+            }
+
+            resumeMessage = "Primary CV updated.";
+            await ReloadResumesAsync();
+        }
+        finally
+        {
+            primaryUpdatingId = null;
+        }
+    }
+
+    private async Task DeleteResumeAsync(int resumeId)
+    {
+        resumeError = null;
+        resumeMessage = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            var result = await ResumeService.DeleteAsync(userId, resumeId);
+            pendingDeleteId = null;
+            if (!result.Success)
+            {
+                resumeError = result.Errors.FirstOrDefault() ?? "We could not delete this resume.";
+                return;
+            }
+
+            resumeMessage = "Resume deleted.";
+            if (editingResumeId == resumeId)
+            {
+                CancelResumeForm();
+            }
+            await ReloadResumesAsync();
+        }
+        catch (Exception exception)
+        {
+            resumeError = exception.Message;
+        }
+    }
+
+    private async Task ReloadResumesAsync()
+    {
+        var userId = await GetUserIdAsync();
+        var result = await ResumeService.ListAsync(userId);
+        if (result.Success && result.Data is not null)
+        {
+            resumes = result.Data.ToList();
+        }
+        else
+        {
+            resumeError = result.Errors.FirstOrDefault() ?? "We could not refresh your resumes.";
+        }
+    }
+
+    private void AddEducation() => resumeForm.Educations.Add(new ResumeEducationInput());
+
+    private void RemoveEducation(int index) => resumeForm.Educations.RemoveAt(index);
+
+    private void AddWorkExperience() => resumeForm.WorkExperiences.Add(new ResumeWorkExperienceInput());
+
+    private void RemoveWorkExperience(int index) => resumeForm.WorkExperiences.RemoveAt(index);
+
+    private void AddSkill()
+    {
+        resumeError = null;
+        resumeMessage = null;
+        if (skillPickerId <= 0)
+        {
+            resumeError = "Choose a skill to add.";
+            return;
+        }
+        if (resumeForm.Skills.Any(skill => skill.SkillId == skillPickerId))
+        {
+            resumeError = "That skill is already on this resume.";
+            return;
+        }
+        if (skillPickerYears is < 0 or > 50)
+        {
+            resumeError = "Skill experience must be between 0 and 50 years.";
+            return;
+        }
+
+        resumeForm.Skills.Add(new ResumeSkillInput
+        {
+            SkillId = skillPickerId,
+            YearsOfExperience = skillPickerYears
+        });
+        skillPickerId = 0;
+        skillPickerYears = 0;
+    }
+
+    private void RemoveSkill(int index) => resumeForm.Skills.RemoveAt(index);
+
+    private string SkillName(int skillId) =>
+        skillOptions.FirstOrDefault(option => option.Id == skillId)?.Name ?? $"Skill #{skillId}";
+
+    private static string ResumeFileType(string? fileUrl)
+    {
+        if (string.IsNullOrWhiteSpace(fileUrl)) return "CV";
+        var extension = Path.GetExtension(fileUrl).TrimStart('.').ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(extension) ? "CV" : extension;
+    }
+
     private sealed class ProfileForm
     {
         public string FullName { get; set; } = string.Empty;
@@ -221,6 +736,4 @@ else
         public string? PreferredWorkModel { get; set; }
         public string? PreferredLocation { get; set; }
     }
-
-    private sealed record CvItem(string Type, string Name, string Updated, string Size, bool IsDefault);
 }

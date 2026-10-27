@@ -11,6 +11,9 @@ using hotjob.Services.Employer;
 using hotjob.Services.Job;
 using hotjob.Services.Account;
 using hotjob.Services.Authentication;
+using hotjob.Services.Billing;
+using hotjob.Services.JobAlerts;
+using hotjob.Services.ML;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -102,6 +105,20 @@ builder.Services.AddOptions<JwtOptions>()
     .Validate(options => !string.IsNullOrEmpty(options.SecretKey) && options.SecretKey.Length >= 32,
         "Jwt:SecretKey must be at least 32 characters.")
     .ValidateOnStart();
+builder.Services.AddOptions<VnPayOptions>()
+    .Bind(builder.Configuration.GetSection(VnPayOptions.SectionName));
+builder.Services.AddOptions<BillingOptions>()
+    .Bind(builder.Configuration.GetSection(BillingOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<MatchScoreOptions>()
+    .Bind(builder.Configuration.GetSection(MatchScoreOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<JobAlertsOptions>()
+    .Bind(builder.Configuration.GetSection(JobAlertsOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -167,6 +184,15 @@ builder.Services.AddScoped<IApplicantService, ApplicantService>();
 builder.Services.AddScoped<IInterviewService, InterviewService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<hotjob.Services.Candidate.ICandidateService, hotjob.Services.Candidate.CandidateService>();
+builder.Services.AddScoped<hotjob.Services.Candidate.IResumeService, hotjob.Services.Candidate.ResumeService>();
+builder.Services.AddScoped<hotjob.Services.Candidate.IApplicationService, hotjob.Services.Candidate.ApplicationService>();
+builder.Services.AddSingleton<hotjob.Services.Candidate.ICvFileStorage>(services =>
+    new hotjob.Services.Candidate.CvFileStorage(
+        Path.Combine(
+            builder.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"),
+            "uploads",
+            "cv"),
+        services.GetRequiredService<ILogger<hotjob.Services.Candidate.CvFileStorage>>()));
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -175,6 +201,17 @@ builder.Services.AddScoped<HotJobAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(services =>
     services.GetRequiredService<HotJobAuthStateProvider>());
 builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
+builder.Services.AddScoped<hotjob.Services.Employer.ICandidateSearchService, hotjob.Services.Employer.CandidateSearchService>();
+builder.Services.AddScoped<IVnPayService, VnPayService>();
+builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<IEntitlementService, EntitlementService>();
+builder.Services.AddScoped<ICandidatePremiumService, CandidatePremiumService>();
+builder.Services.AddSingleton<IMatchModelStore>(services => new MatchModelStore(
+    services.GetRequiredService<IOptions<MatchScoreOptions>>(),
+    builder.Environment.ContentRootPath,
+    services.GetRequiredService<ILogger<MatchModelStore>>()));
+builder.Services.AddScoped<IMatchScoreService, MatchScoreService>();
+builder.Services.AddScoped<IJobAlertService, JobAlertService>();
 
 var app = builder.Build();
 
@@ -220,6 +257,8 @@ app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/api"),
     branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 app.UseHttpsRedirection();
+// ponytail: MapStaticAssets only serves build-time assets; runtime CV uploads need classic static files.
+app.UseStaticFiles();
 
 app.UseExceptionHandler();
 

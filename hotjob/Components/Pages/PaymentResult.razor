@@ -1,0 +1,62 @@
+@page "/payment/result"
+@using System.Globalization
+
+<PageTitle>Payment result - HotJob</PageTitle>
+
+<div class="workspace-page">
+    <div class="workspace-container" style="max-width: 640px;">
+        <div class="workspace-card" style="padding: 2rem; text-align: center;">
+            @if (IsSuccess)
+            {
+                <div class="workspace-status workspace-status-success">Payment successful</div>
+                <h1>Thank you — your purchase is active.</h1>
+                <p class="workspace-muted">Your entitlement has been applied to your account.</p>
+            }
+            else if (IsProcessed)
+            {
+                <div class="workspace-status workspace-status-warning">Payment processed</div>
+                <h1>This payment was already handled.</h1>
+                <p class="workspace-muted">No additional charge or entitlement was applied.</p>
+            }
+            else
+            {
+                <div class="workspace-status workspace-status-danger">Payment not completed</div>
+                <h1>We could not confirm this payment.</h1>
+                <p class="workspace-muted">No entitlement was granted. You can try again from the billing page.</p>
+            }
+
+            @if (Amount is { } amount)
+            {
+                <p><strong>@amount.ToString("N0", CultureInfo.InvariantCulture) VND</strong>@(Purpose is null ? string.Empty : $" · {Purpose}")</p>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(TxnRef))
+            {
+                <p class="workspace-muted">Transaction reference: <code>@TxnRef</code></p>
+            }
+
+            <div style="display: flex; gap: .75rem; justify-content: center; margin-top: 1.5rem;">
+                <a class="workspace-btn workspace-btn-primary" href="/employer/billing">Back to billing</a>
+                <a class="workspace-btn" href="/jobs">Browse jobs</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "status")]
+    private string? Status { get; set; }
+
+    [SupplyParameterFromQuery(Name = "purpose")]
+    private string? Purpose { get; set; }
+
+    [SupplyParameterFromQuery(Name = "amount")]
+    private decimal? Amount { get; set; }
+
+    [SupplyParameterFromQuery(Name = "txnRef")]
+    private string? TxnRef { get; set; }
+
+    private bool IsSuccess => string.Equals(Status, "success", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsProcessed => string.Equals(Status, "processed", StringComparison.OrdinalIgnoreCase);
+}

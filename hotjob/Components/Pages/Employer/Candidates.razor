@@ -1,0 +1,309 @@
+@page "/employer/candidates"
+@implements IDisposable
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Employer
+@using hotjob.Services.Employer
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ICandidateSearchService CandidateSearchService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
+
+<PageTitle>Candidate search | HotJob</PageTitle>
+
+<AuthorizeView Roles="Employer">
+    <Authorized Context="auth">
+        <div class="workspace-page workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Employer workspace</p>
+                    <h1>Candidate search</h1>
+                    <p class="workspace-lede">Find opted-in candidates. Cards show name, headline, summary, skills and
+                        years only — no contact details.</p>
+                    </div>
+                    <div class="workspace-actions">
+                        <a class="workspace-btn workspace-btn-primary" href="/employer/jobs">Back to jobs</a>
+                    </div>
+                </section>
+
+                @if (isLoading)
+                {
+                    <section class="workspace-card" aria-busy="true" aria-label="Loading candidates">
+                        <div class="ej-skeleton-grid">
+                            <div class="workspace-skeleton" style="height:140px"></div>
+                            <div class="workspace-skeleton" style="height:140px"></div>
+                            <div class="workspace-skeleton" style="height:140px"></div>
+                        </div>
+                        <p class="visually-hidden" role="status">Loading candidates…</p>
+                    </section>
+                }
+                else if (!string.IsNullOrWhiteSpace(loadError))
+                {
+                    <div class="workspace-alert" role="alert">@loadError</div>
+                }
+                else
+                {
+                    <section class="workspace-card ec-filter-card" aria-label="Candidate filters">
+                        <div class="workspace-section-head">
+                            <div>
+                                <h2>Filters</h2>
+                                <p class="workspace-sub">Narrow the list by keyword, skill and minimum years.</p>
+                            </div>
+                            @if (filterSkills.Count > 0)
+                            {
+                                <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
+                                        @onclick="ClearFiltersAsync">Clear</button>
+                            }
+                        </div>
+
+                        <EditForm Model="query">
+                            <div class="ec-filter-row">
+                                <label class="workspace-field workspace-field-grow">
+                                    <span>Keyword</span>
+                                    <InputText @bind-Value="query.Keyword" placeholder="Position, summary or skill name" />
+                                </label>
+                                <label class="workspace-field">
+                                    <span>Skill</span>
+                                    <select @bind="selectedSkillNames" multiple>
+                                        @foreach (var skill in filterSkills)
+                                        {
+                                            <option value="@skill.Name">@skill.Name</option>
+                                        }
+                                    </select>
+                                    <span class="workspace-hint">Hold Ctrl / Cmd to pick several.</span>
+                                </label>
+                                <label class="workspace-field">
+                                    <span>Min years</span>
+                                    <InputNumber @bind-Value="query.MinYears" min="0" max="50" />
+                                </label>
+                                <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button"
+                                        @onclick="SearchAsync">Apply filters</button>
+                            </div>
+                        </EditForm>
+                    </section>
+
+                    @if (!string.IsNullOrWhiteSpace(actionMessage))
+                    {
+                        <div class="workspace-notice" role="status" aria-live="polite">@actionMessage</div>
+                    }
+
+                    <section class="workspace-card ec-result-card" aria-label="Candidates">
+                        <div class="workspace-section-head">
+                            <div>
+                                <h2>Candidates</h2>
+                                <p class="workspace-sub">
+                                    @result.TotalCount candidate@(result.TotalCount == 1 ? string.Empty : "s")
+                                    @(query.Page > 1 ? $", page {query.Page} of {result.TotalPages}" : string.Empty)
+                                </p>
+                            </div>
+                        </div>
+
+                        @if (result.Items.Count == 0)
+                        {
+                            <div class="workspace-empty">
+                                <span class="workspace-empty-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                                         stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M20 12H4" />
+                                    </svg>
+                                </span>
+                                <h3>No candidates match</h3>
+                                <p>Try a different keyword, skill or lower the minimum years.</p>
+                                @if (HasFilters)
+                                {
+                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                            @onclick="ClearFiltersAsync">Clear filters</button>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <ul class="ec-candidate-list" aria-label="Candidate list">
+                                @foreach (var item in result.Items)
+                                {
+                                    <li class="ec-candidate">
+                                        <div class="ec-candidate-head">
+                                            <div class="ec-candidate-avatar">@Initials(item.DisplayName)</div>
+                                            <div class="ec-candidate-info">
+                                                <h3>@item.DisplayName</h3>
+                                                <p class="ec-position">@(string.IsNullOrWhiteSpace(item.Position) ? "Position not set" :
+                                                                                        item.Position)</p>
+                                                    @if (!string.IsNullOrWhiteSpace(item.Summary))
+                                                    {
+                                                        <p class="ec-summary">@item.Summary</p>
+                                                    }
+                                                    <div class="ec-badges">
+                                                        @if (item.IsPremium)
+                                                        {
+                                                            <span class="workspace-badge is-published ec-badge-premium"
+                                                                  title="Premium profile">Premium</span>
+                                                        }
+                                                        @if (item.IsBoosted)
+                                                        {
+                                                            <span class="workspace-badge is-info ec-badge-boosted"
+                                                                  title="Boosted profile">Boosted</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <div class="ec-candidate-meta">
+                                                    <strong class="ec-years">@item.TotalYears yr<span
+                                                        class="visually-hidden">ears</span></strong>
+                                                        <span class="ec-years-label">total experience</span>
+                                                    </div>
+                                                </div>
+                                                @if (item.Skills.Count > 0)
+                                                {
+                                                    <div class="ec-skills">
+                                                        <span class="ec-skills-label">Skills</span>
+                                                        @foreach (var skill in item.Skills)
+                                                        {
+                                                            <span class="workspace-chip ec-chip">
+                                                                @skill.Name · @skill.YearsOfExperience yr
+                                                            </span>
+                                                        }
+                                                    </div>
+                                                }
+                                            </li>
+                                        }
+                                    </ul>
+
+                                    <div class="workspace-pagination">
+                                        <span>@(result.TotalCount == 0 ? "No candidates" : $"Showing {(query.Page - 1) * result.PageSize +
+                                                                    1}–{Math.Min(query.Page * result.PageSize, result.TotalCount)} of {result.TotalCount}")</span>
+                                            <div class="workspace-pagination-actions">
+                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                        disabled="@(query.Page <= 1)" @onclick="() => ChangePageAsync(query.Page - 1)">←
+                                                    Previous</button>
+                                                    <span class="ej-page-count">Page @query.Page of @Math.Max(result.TotalPages, 1)</span>
+                                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                            disabled="@(query.Page >= result.TotalPages)"
+                                                            @onclick="() => ChangePageAsync(query.Page + 1)">Next →</button>
+                                                </div>
+                                            </div>
+                                        }
+                                    </section>
+                                }
+                            </div>
+                        </Authorized>
+                        <NotAuthorized>
+                            <RedirectToLogin />
+                        </NotAuthorized>
+                    </AuthorizeView>
+
+@code {
+    private CandidateSearchQuery query = new();
+    private string[] selectedSkillNames = [];
+    private IReadOnlyList<CandidateSearchSkillFilterDto> filterSkills = [];
+    private PagedResult<CandidateSearchItemDto> result = new();
+    private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private string? loadError;
+    private string? actionMessage;
+
+    private bool HasFilters =>
+        !string.IsNullOrWhiteSpace(query.Keyword)
+        || query.SkillNames.Count > 0
+        || query.MinYears is { } min && min > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
+    private async Task LoadAsync()
+    {
+        if (isLoading && hasLoadedOnce)
+        {
+            return;
+        }
+
+        isLoading = true;
+        hasLoadedOnce = true;
+        loadError = null;
+        try
+        {
+            await LoadFilterSkillsAsync();
+            await SearchAsync();
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadFilterSkillsAsync()
+    {
+        var userId = await GetUserIdAsync();
+        var result = await CandidateSearchService.GetFilterSkillsAsync(userId);
+        if (result.Success && result.Data is not null)
+        {
+            filterSkills = result.Data;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        actionMessage = null;
+        query.SkillNames = selectedSkillNames;
+        var userId = await GetUserIdAsync();
+        var searchResult = await CandidateSearchService.SearchAsync(userId, query);
+        if (!searchResult.Success || searchResult.Data is null)
+        {
+            loadError = searchResult.Errors.FirstOrDefault() ?? "We could not load candidates.";
+            return;
+        }
+
+        result = searchResult.Data;
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        query = new CandidateSearchQuery();
+        selectedSkillNames = [];
+        actionMessage = null;
+        await SearchAsync();
+    }
+
+    private async Task ChangePageAsync(int next)
+    {
+        query.Page = next;
+        await SearchAsync();
+    }
+
+    private static string Initials(string name)
+    {
+        return string.Join("", name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part =>
+part[0])).ToUpperInvariant();
+    }
+}

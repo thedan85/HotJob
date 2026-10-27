@@ -21,6 +21,9 @@ public class ModelTrainingLog
 
     public DateTime TrainedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Whether this run's model is the one currently used for scoring.</summary>
+    public bool IsActive { get; set; }
+
     /// <summary>User who triggered the training run. Null for scheduled runs.</summary>
     public Users.ApplicationUser? TrainedBy { get; set; }
 }

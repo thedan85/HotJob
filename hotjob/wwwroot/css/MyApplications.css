@@ -166,3 +166,20 @@
     .ma-page { width: min(100% - 28px, 1300px); margin: 20px auto 48px; }
     .ma-app-head { flex-direction: column; gap: 7px; }
 }
+
+/* Withdraw action on in-progress applications */
+.ma-app-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--hj-border);
+}
+
+.ma-withdraw-copy {
+    color: var(--hj-danger);
+    font-size: 12px;
+    font-weight: 600;
+}

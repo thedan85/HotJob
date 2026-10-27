@@ -6,6 +6,7 @@
 @using hotjob.Models.Application
 @using hotjob.Services.Candidate
 @inject ICandidateService CandidateService
+@inject IApplicationService ApplicationService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuthSession AuthSession
 
@@ -169,6 +170,33 @@
                                         </span>
                                     </div>
 
+                                    @if (InProgressStatuses.Contains(application.Status))
+                                    {
+                                        <div class="ma-app-actions">
+                                            @if (withdrawConfirmId == application.ApplicationId)
+                                            {
+                                                <span class="ma-withdraw-copy">Withdraw this application? This cannot be undone.</span>
+                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                        disabled="@(withdrawingId == application.ApplicationId)"
+                                                        @onclick="() => WithdrawAsync(application.ApplicationId)">
+                                                    @(withdrawingId == application.ApplicationId ? "Withdrawing…" : "Confirm withdraw")
+                                                </button>
+                                                <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
+                                                        disabled="@(withdrawingId == application.ApplicationId)"
+                                                        @onclick="() => { withdrawConfirmId = null; }">
+                                                    Cancel
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                        @onclick="() => { withdrawConfirmId = application.ApplicationId; }">
+                                                    Withdraw application
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+
                                     @if (application.History.Count > 0)
                                     {
                                         <details class="workspace-details ma-history">
@@ -270,6 +298,8 @@
     private bool isLoading = true;
     private bool hasLoadedOnce;
     private int? markingId;
+    private int? withdrawConfirmId;
+    private int? withdrawingId;
     private string? loadError;
     private string? actionMessage;
     private string? actionError;
@@ -410,6 +440,46 @@
         finally
         {
             markingId = null;
+        }
+    }
+
+    private async Task WithdrawAsync(int applicationId)
+    {
+        actionMessage = actionError = null;
+        withdrawingId = applicationId;
+        try
+        {
+            var result = await ApplicationService.WithdrawAsync(await GetUserIdAsync(), applicationId);
+            withdrawConfirmId = null;
+            if (!result.Success)
+            {
+                actionError = result.Errors.FirstOrDefault() ?? "We could not withdraw this application.";
+                return;
+            }
+
+            await ReloadApplicationsAsync();
+            actionMessage = "Application withdrawn.";
+        }
+        catch (Exception exception)
+        {
+            actionError = exception.Message;
+        }
+        finally
+        {
+            withdrawingId = null;
+        }
+    }
+
+    private async Task ReloadApplicationsAsync()
+    {
+        var result = await CandidateService.GetMyApplicationsAsync(await GetUserIdAsync());
+        if (result.Success && result.Data is not null)
+        {
+            applications = result.Data.ToList();
+        }
+        else
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "We could not refresh your applications.";
         }
     }
 }

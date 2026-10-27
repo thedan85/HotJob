@@ -1,10 +1,21 @@
 @page "/jobs/{id:int}"
+@implements IDisposable
+@using System.Security.Claims
+@using hotjob.DTOs.Candidate
 @using hotjob.DTOs.Job
+@using hotjob.DTOs.ML
 @using hotjob.Models.Job
+@using hotjob.Services.Billing
+@using hotjob.Services.Candidate
 @using hotjob.Services.Common
 @using hotjob.Services.Job
+@using hotjob.Services.ML
 @inject IJobService JobService
+@inject IApplicationService ApplicationService
+@inject IMatchScoreService MatchScoreService
+@inject ICandidatePremiumService CandidatePremiumService
 @inject HotJobAuthStateProvider AuthStateProvider
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JS
 @rendermode InteractiveServer
 
@@ -107,6 +118,161 @@ else
                 }
                 <a class="job-detail-company-link" href="/companies/@job.CompanyProfileId">View company profile <span aria-hidden="true">→</span></a>
             </div>
+            <AuthorizeView Roles="Candidate">
+                <Authorized>
+                    <div class="job-detail-match" aria-label="Match score">
+                        <h2>Your match</h2>
+                        @if (job.Skills.Count == 0)
+                        {
+                            <p class="job-detail-muted">No match score is available because this job does not list any required skills.</p>
+                        }
+                        else if (applyContext is not null && applyContext.Resumes.Count > 0)
+                        {
+                            @if (applyContext.Resumes.Count > 1)
+                            {
+                                <label class="job-detail-field">
+                                    <span>CV used for this score</span>
+                                    <select @bind="matchResumeId" @bind:after="ReloadMatchAsync">
+                                        @foreach (var resume in applyContext.Resumes)
+                                        {
+                                            <option value="@resume.Id">@resume.Title@(resume.IsPrimary ? " (primary)" : string.Empty)</option>
+                                        }
+                                    </select>
+                                </label>
+                            }
+
+                            @if (matchLoading)
+                            {
+                                <p class="job-detail-muted" role="status">Calculating your match…</p>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(matchError))
+                            {
+                                <p class="job-detail-status job-detail-error" role="alert">@matchError</p>
+                            }
+                            else if (matchScore is { Available: true })
+                            {
+                                <p class="job-detail-match-value"><strong>@matchScore.MatchPercentage.ToString("0")%</strong> match</p>
+                                <p class="job-detail-muted">Calculated with @MatchAlgorithmLabel(matchScore.AlgorithmUsed).</p>
+
+                                @if (advancedMatch is not null)
+                                {
+                                    <div class="job-match-breakdown">
+                                        <h3>Matched skills</h3>
+                                        @if (advancedMatch.MatchedSkills.Count == 0)
+                                        {
+                                            <p class="job-detail-muted">None of the required skills are on this CV yet.</p>
+                                        }
+                                        else
+                                        {
+                                            <ul class="job-match-skills">
+                                                @foreach (var skill in advancedMatch.MatchedSkills)
+                                                {
+                                                    <li><span>@skill.SkillName</span><span class="job-match-weight">weight @skill.ImportanceWeight.ToString("0.#")/10</span></li>
+                                                }
+                                            </ul>
+                                        }
+
+                                        <h3>Missing skills</h3>
+                                        @if (advancedMatch.MissingSkills.Count == 0)
+                                        {
+                                            <p class="job-detail-muted">You cover every required skill.</p>
+                                        }
+                                        else
+                                        {
+                                            <ul class="job-match-skills">
+                                                @foreach (var skill in advancedMatch.MissingSkills)
+                                                {
+                                                    <li><span>@skill.SkillName</span><span class="job-match-weight">weight @skill.ImportanceWeight.ToString("0.#")/10</span></li>
+                                                }
+                                            </ul>
+                                        }
+
+                                        <p class="job-detail-muted">Experience gap: @FormatExperienceGap(advancedMatch.ExperienceGap)</p>
+
+                                        @if (advancedMatch.ImprovementHints.Count > 0)
+                                        {
+                                            <h3>How to improve</h3>
+                                            <ul class="job-match-hints">
+                                                @foreach (var hint in advancedMatch.ImprovementHints)
+                                                {
+                                                    <li>@hint</li>
+                                                }
+                                            </ul>
+                                        }
+                                    </div>
+                                }
+                                else if (!isPremium)
+                                {
+                                    <a class="job-match-upsell" href="/premium">Unlock advanced match analysis with Premium →</a>
+                                }
+                                else if (!string.IsNullOrWhiteSpace(advancedError))
+                                {
+                                    <p class="job-detail-muted">@advancedError</p>
+                                }
+                            }
+                            else if (matchScore is { Available: false })
+                            {
+                                <p class="job-detail-muted">@matchScore.Message</p>
+                            }
+                        }
+                        else if (applyContext is not null && applyContext.Resumes.Count == 0)
+                        {
+                            <p class="job-detail-muted">Create a CV to see how well you match this role.</p>
+                        }
+                    </div>
+                    <div class="job-detail-apply" id="apply">
+                        <h2>Apply for this job</h2>
+
+                        @if (!string.IsNullOrWhiteSpace(applySuccess))
+                        {
+                            <div class="job-detail-success" role="status">@applySuccess</div>
+                        }
+
+                        @if (applyContextLoading)
+                        {
+                            <p class="job-detail-muted" role="status">Checking your resumes…</p>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(applyError))
+                        {
+                            <p class="job-detail-status job-detail-error" role="alert">@applyError</p>
+                        }
+                        else if (applyContext is not null && applyContext.AlreadyApplied)
+                        {
+                            <p class="job-detail-applied-title">You already applied to this job.</p>
+                            <p class="job-detail-muted">
+                                Submitted @(applyContext.AppliedAt?.ToString("dd MMM yyyy") ?? "recently")
+                                · status <strong>@applyContext.CurrentStatus</strong>
+                            </p>
+                            <a class="jobs-search-button" href="/my-applications">Track your application</a>
+                        }
+                        else if (applyContext is not null && applyContext.Resumes.Count == 0)
+                        {
+                            <p class="job-detail-muted">Create a resume before applying. It only takes a minute.</p>
+                            <a class="jobs-search-button" href="/profile#cv-management">Create your CV</a>
+                        }
+                        else if (applyContext is not null)
+                        {
+                            <label class="job-detail-field">
+                                <span>Resume</span>
+                                <select @bind="selectedResumeId">
+                                    @foreach (var resume in applyContext.Resumes)
+                                    {
+                                        <option value="@resume.Id">@resume.Title@(resume.IsPrimary ? " (primary)" : string.Empty)</option>
+                                    }
+                                </select>
+                            </label>
+                            <label class="job-detail-field">
+                                <span>Cover letter (optional)</span>
+                                <textarea @bind="coverLetter" maxlength="2000" rows="5" placeholder="Tell the employer why you are a good fit."></textarea>
+                            </label>
+                            <button class="jobs-search-button" type="button" @onclick="SubmitApplicationAsync" disabled="@isApplying">
+                                @(isApplying ? "Submitting…" : "Submit application")
+                            </button>
+                            <p class="job-detail-muted job-detail-apply-note">Your resume is frozen as a snapshot for this application.</p>
+                        }
+                    </div>
+                </Authorized>
+            </AuthorizeView>
             <div class="job-detail-auth">
                 <AuthorizeView>
                     <Authorized>
@@ -131,6 +297,48 @@ else
     private JobDetailResponse? job;
     private bool isLoading = true;
     private string? loadError;
+    private ApplyContextDto? applyContext;
+    private bool applyContextLoading;
+    private string? applyError;
+    private string? applySuccess;
+    private int selectedResumeId;
+    private string? coverLetter;
+    private bool isApplying;
+    private MatchScoreDto? matchScore;
+    private AdvancedMatchScoreDto? advancedMatch;
+    private bool matchLoading;
+    private string? matchError;
+    private string? advancedError;
+    private int matchResumeId;
+    private bool isPremium;
+
+    protected override void OnInitialized()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadApplyContextAsync();
+                await LoadMatchAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -148,6 +356,186 @@ else
         catch (Exception exception) when (exception is JSException or InvalidOperationException)
         {
             // JS interop unavailable during prerender — guests keep seeing the login prompt.
+        }
+    }
+
+    private async Task LoadApplyContextAsync()
+    {
+        applyContext = null;
+        applyError = null;
+        if (job is null)
+            return;
+
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
+        {
+            applyContextLoading = false;
+            return;
+        }
+
+        applyContextLoading = true;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+                return;
+
+            var result = await ApplicationService.GetApplyContextAsync(userId, job.Id);
+            if (!result.Success || result.Data is null)
+            {
+                applyError = result.Errors.FirstOrDefault() ?? "We could not check your applications.";
+                return;
+            }
+
+            applyContext = result.Data;
+            if (applyContext.Resumes.Count > 0)
+            {
+                selectedResumeId = applyContext.Resumes.FirstOrDefault(resume => resume.IsPrimary)?.Id
+                    ?? applyContext.Resumes[0].Id;
+            }
+        }
+        catch (Exception exception)
+        {
+            applyError = exception.Message;
+        }
+        finally
+        {
+            applyContextLoading = false;
+        }
+    }
+
+    private async Task LoadMatchAsync()
+    {
+        matchScore = null;
+        advancedMatch = null;
+        matchError = null;
+        advancedError = null;
+        isPremium = false;
+
+        if (job is null || job.Skills.Count == 0
+            || applyContext is null || applyContext.Resumes.Count == 0)
+        {
+            return;
+        }
+
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
+        {
+            return;
+        }
+
+        if (matchResumeId <= 0 || applyContext.Resumes.All(resume => resume.Id != matchResumeId))
+        {
+            matchResumeId = applyContext.Resumes.FirstOrDefault(resume => resume.IsPrimary)?.Id
+                ?? applyContext.Resumes[0].Id;
+        }
+
+        var userId = await GetUserIdAsync();
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return;
+        }
+
+        matchLoading = true;
+        try
+        {
+            var result = await MatchScoreService.GetAsync(userId, job.Id, matchResumeId);
+            if (!result.Success || result.Data is null)
+            {
+                matchError = result.Errors.FirstOrDefault() ?? "We could not calculate your match.";
+                return;
+            }
+
+            matchScore = result.Data;
+            if (!matchScore.Available)
+            {
+                return;
+            }
+
+            isPremium = await CandidatePremiumService.IsPremiumAsync(userId);
+            if (!isPremium)
+            {
+                return;
+            }
+
+            var advanced = await MatchScoreService.GetAdvancedAsync(userId, job.Id, matchResumeId);
+            if (advanced.Success)
+            {
+                advancedMatch = advanced.Data;
+            }
+            else
+            {
+                advancedError = advanced.Errors.FirstOrDefault() ?? "Advanced analysis is unavailable right now.";
+            }
+        }
+        catch (Exception exception)
+        {
+            matchError = exception.Message;
+        }
+        finally
+        {
+            matchLoading = false;
+        }
+    }
+
+    private async Task ReloadMatchAsync()
+    {
+        await LoadMatchAsync();
+        StateHasChanged();
+    }
+
+    private static string MatchAlgorithmLabel(string? algorithm) => algorithm switch
+    {
+        hotjob.Services.ML.MatchScoreService.ModelAlgorithm => "the trained ML model (FastTreeBinary)",
+        hotjob.Services.ML.MatchScoreService.WeightedRuleAlgorithm => "skill weighting (weighted-rule)",
+        _ => "match rules"
+    };
+
+    private static string FormatExperienceGap(double gap) => gap switch
+    {
+        > 0 => $"{gap:0.#} year(s) above the requirement",
+        0 => "Meets the experience requirement",
+        _ => $"{Math.Abs(gap):0.#} year(s) below the requirement"
+    };
+
+    private async Task SubmitApplicationAsync()
+    {
+        applyError = null;
+        applySuccess = null;
+        if (selectedResumeId <= 0)
+        {
+            applyError = "Choose a resume before applying.";
+            return;
+        }
+
+        isApplying = true;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                applyError = "Please sign in to apply.";
+                return;
+            }
+
+            var result = await ApplicationService.ApplyAsync(userId, Id, selectedResumeId, coverLetter);
+            if (!result.Success)
+            {
+                applyError = string.Join(" ", result.Errors);
+                return;
+            }
+
+            coverLetter = null;
+            applySuccess = "Application submitted. You can track it from My applications.";
+            await LoadApplyContextAsync();
+        }
+        catch (Exception exception)
+        {
+            applyError = exception.Message;
+        }
+        finally
+        {
+            isApplying = false;
         }
     }
 
@@ -186,6 +574,12 @@ else
         }
 
         isLoading = false;
+
+        if (job is not null)
+        {
+            await LoadApplyContextAsync();
+            await LoadMatchAsync();
+        }
     }
 
     private static string CompanyInitial(string companyName) =>

@@ -1,6 +1,5 @@
 ﻿@rendermode InteractiveServer
 @inject HotJobAuthStateProvider AuthStateProvider
-@inject AuthSession AuthSession
 @inject IJSRuntime JS
 @inject NavigationManager NavigationManager
 @using hotjob.Services.Authentication
@@ -11,11 +10,13 @@
             <span class="brand-hot">hot</span><span>job</span>
         </a>
 
-        <button class="menu-toggle" type="button" @onclick="ToggleMenu" aria-expanded="@menuOpen" aria-controls="site-menu" aria-label="@(menuOpen ? "Close navigation" : "Open navigation")">
+        <button class="menu-toggle" type="button" @onclick="ToggleMenu" aria-expanded="@menuOpen"
+                aria-controls="site-menu" aria-label="@(menuOpen ? "Close navigation" : "Open navigation")">
             <span></span><span></span><span></span>
         </button>
 
-        <nav id="site-menu" class="nav-scrollable @(menuOpen ? "is-open" : string.Empty)" aria-label="Primary navigation" @onclick="CloseMenu">
+        <nav id="site-menu" class="nav-scrollable @(menuOpen ? "is-open" : string.Empty)"
+             aria-label="Primary navigation" @onclick="CloseMenu">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
             <NavLink class="nav-link" href="companies">Companies</NavLink>
             <NavLink class="nav-link" href="it-jobs">Explore jobs</NavLink>
@@ -32,13 +33,16 @@
                 <Authorized Context="employerAuth">
                     <span class="nav-group-label">Employer</span>
                     <NavLink class="nav-link nav-link-employer" href="employer/jobs">My jobs</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="employer/candidates">Candidates</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="employer/interviews">Applicants</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="employer/company">Company</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="employer/billing">Billing</NavLink>
                 </Authorized>
             </AuthorizeView>
             <AuthorizeView Roles="Candidate">
                 <Authorized>
                     <NavLink class="nav-link" href="my-applications">My applications</NavLink>
+                    <NavLink class="nav-link" href="job-alerts">Job alerts</NavLink>
                     <NavLink class="nav-link" href="premium">Go premium</NavLink>
                 </Authorized>
             </AuthorizeView>
@@ -47,9 +51,11 @@
         <div class="nav-actions">
             <AuthorizeView>
                 <Authorized Context="authState">
-                    <a class="nav-user" href="@(authState.User.IsInRole("Employer") ? "/employer/company" : "/profile")" title="@(authState.User.IsInRole("Employer") ? "View your company" : "View your profile")">
+                    <a class="nav-user" href="@(authState.User.IsInRole("Employer") ? "/employer/company" : "/profile")"
+                       title="@(authState.User.IsInRole("Employer") ? "View your company" : "View your profile")">
                         <span class="nav-avatar" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                                 stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="8" r="3.5" />
                                 <path d="M5 19.2c1.2-3.3 3.9-5.2 7-5.2s5.8 1.9 7 5.2" />
                             </svg>
@@ -81,8 +87,6 @@
             return;
         }
 
-        // Session restore: the HttpOnly refresh cookie survives reloads, the scoped
-        // AuthSession does not — rehydrate the UI from GET /api/auth/me per circuit.
         try
         {
             var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
@@ -90,15 +94,10 @@
             {
                 AuthStateProvider.SignIn(result.ToTokens());
             }
-            else if (AuthSession.IsAuthenticated)
-            {
-                // Cookie gone (logout in another tab) — drop the stale in-memory session.
-                AuthStateProvider.SignOut();
-            }
         }
         catch (Exception exception) when (exception is JSException or InvalidOperationException)
         {
-            // JS interop unavailable (prerender) — keep whatever state exists.
+            // JS interop unavailable during prerender; the interactive pass retries.
         }
     }
 

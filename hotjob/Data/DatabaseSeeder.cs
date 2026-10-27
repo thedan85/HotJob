@@ -1,3 +1,4 @@
+using hotjob.Models.Billing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -43,11 +44,49 @@ public static class DatabaseSeeder
             }
 
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            await SeedPlansAsync(db, logger, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Reference data seeding failed.");
             throw;
+        }
+    }
+
+    /// <summary>The plan catalogue (contract D3). Prices here are only the initial values; admins may edit them later.</summary>
+    public static IReadOnlyList<Plan> DefaultPlans() =>
+    [
+        new() { Code = Plan.FreeCode, Audience = PlanAudience.Employer, Name = "Free", Price = 0, JobQuota = 1, DurationDays = 0, SortOrder = 0 },
+        new() { Code = Plan.StarterCode, Audience = PlanAudience.Employer, Name = "Starter", Price = 500_000, JobQuota = 5, DurationDays = 30, SortOrder = 1 },
+        new() { Code = Plan.GrowthCode, Audience = PlanAudience.Employer, Name = "Growth", Price = 1_500_000, JobQuota = 20, DurationDays = 30, SortOrder = 2 },
+        new() { Code = Plan.PremiumMonthlyCode, Audience = PlanAudience.Candidate, Name = "Premium Monthly", Price = 99_000, JobQuota = 0, DurationDays = 30, SortOrder = 10 },
+    ];
+
+    // ponytail: insert-by-Code only. An existing row (possibly edited by an admin) is never touched.
+    private static async Task SeedPlansAsync(ApplicationDbContext db, ILogger logger, CancellationToken cancellationToken)
+    {
+        var existing = await db.Plans.Select(x => x.Code).ToListAsync(cancellationToken).ConfigureAwait(false);
+        var missing = DefaultPlans().Where(x => !existing.Contains(x.Code)).ToList();
+        if (missing.Count > 0)
+        {
+            await db.Plans.AddRangeAsync(missing, cancellationToken).ConfigureAwait(false);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("Seeded plans: {Codes}.", string.Join(", ", missing.Select(x => x.Code)));
+        }
+
+        // Back-fill: companies that predate billing have no plan; make FREE explicit. Null still means FREE at runtime.
+        var freeId = await db.Plans.Where(x => x.Code == Plan.FreeCode).Select(x => (int?)x.Id).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (freeId is not null)
+        {
+            var updated = await db.CompanyProfiles
+                .Where(x => x.PlanId == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.PlanId, freeId), cancellationToken)
+                .ConfigureAwait(false);
+            if (updated > 0)
+            {
+                logger.LogInformation("Assigned the FREE plan to {Count} companies.", updated);
+            }
         }
     }
 }

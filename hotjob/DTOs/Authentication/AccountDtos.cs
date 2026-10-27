@@ -71,6 +71,9 @@ public sealed class CandidateProfileDto
     public string? JobSeekingStatus { get; set; }
     public string? PreferredWorkModel { get; set; }
     public string? PreferredLocation { get; set; }
+
+    /// <summary>Whether approved employers can find this candidate in candidate search.</summary>
+    public bool IsDiscoverable { get; set; }
 }
 
 public sealed class EmployerProfileDto

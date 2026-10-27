@@ -7,9 +7,13 @@
 @using hotjob.DTOs.Job
 @using hotjob.Models.Job
 @using hotjob.Services.Job
+@using hotjob.Services.Billing
 @inject IJobService JobService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuthSession AuthSession
+@inject IEntitlementService EntitlementService
+@inject IBillingService BillingService
+@inject NavigationManager Navigation
 
 <PageTitle>Jobs &amp; Postings | HotJob</PageTitle>
 
@@ -29,6 +33,27 @@
                     </button>
                 </div>
             </section>
+
+            @if (entitlement is not null && !isLoading)
+            {
+                <section class="workspace-card" aria-label="Plan usage" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+                    <div>
+                        <p class="workspace-eyebrow">@entitlement.PlanName plan</p>
+                        <h2 style="margin:.15rem 0 .35rem">@entitlement.ActiveJobCount of @entitlement.JobQuota active job slots used</h2>
+                        <p class="workspace-sub" style="margin:0">
+                            @if (entitlement.PlanExpiresAt is { } expiresAt)
+                            {
+                                <span>Plan active until @expiresAt.ToString("dd MMM yyyy"). </span>
+                            }
+                            @(entitlement.RemainingSlots == 0 ? "Close a job or upgrade to post another." : $"{entitlement.RemainingSlots} slot(s) left.")
+                        </p>
+                    </div>
+                    @if (entitlement.IsOwner)
+                    {
+                        <a class="workspace-btn workspace-btn-secondary" href="/employer/billing">Manage plan</a>
+                    }
+                </section>
+            }
 
             @if (isLoading)
             {
@@ -90,7 +115,13 @@
                 }
                 @if (!string.IsNullOrWhiteSpace(actionError))
                 {
-                    <div class="workspace-alert" role="alert" aria-live="assertive">@actionError</div>
+                    <div class="workspace-alert" role="alert" aria-live="assertive">
+                        @actionError
+                        @if (actionError.Contains("job slots", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <a class="workspace-btn workspace-btn-primary workspace-btn-small" href="/employer/billing">Upgrade</a>
+                        }
+                    </div>
                 }
 
                 <section class="workspace-toolbar" aria-label="Job filters">
@@ -219,6 +250,10 @@
                                         <td data-label="Role">
                                             <button class="ej-title-button" type="button" @onclick="() => ViewDetailAsync(job.Id)">@job.Title</button>
                                             <p class="ej-job-meta">@job.JobType · @job.ExperienceRequired yr exp · posted @job.CreatedAt.ToString("dd MMM")</p>
+                                            @if (job.FeaturedUntil is { } featuredUntil && featuredUntil > DateTime.UtcNow)
+                                            {
+                                                <span class="workspace-badge is-published">Featured until @featuredUntil.ToString("dd MMM")</span>
+                                            }
                                             @if (job.CategoryNames.Count > 0)
                                             {
                                                 <div class="workspace-chip-row ej-job-chips">
@@ -246,6 +281,16 @@
                                             <div class="ej-row-actions">
                                                 <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => ViewDetailAsync(job.Id)">View</button>
                                                 <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => OpenEditFormAsync(job.Id)">Edit</button>
+                                                @if (job.Status == JobStatus.Published
+                                                    && entitlement?.IsOwner == true
+                                                    && (job.FeaturedUntil is null || job.FeaturedUntil <= DateTime.UtcNow))
+                                                {
+                                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                            disabled="@(featuringJobId == job.Id)"
+                                                            @onclick="() => BuyFeaturedAsync(job.Id)">
+                                                        @(featuringJobId == job.Id ? "Redirecting…" : "Feature")
+                                                    </button>
+                                                }
                                                 @if (job.Status == JobStatus.Draft || job.Status == JobStatus.Published)
                                                 {
                                                     <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => DeleteOrCloseAsync(job.Id, job.Title, job.Status)">
@@ -356,13 +401,15 @@
     private CreateJobRequest jobForm = new();
     private string categoryText = string.Empty;
     private string skillText = string.Empty;
+    private EmployerEntitlement? entitlement;
+    private int? featuringJobId;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
         if (AuthSession.IsAuthenticated)
         {
-            _ = LoadAsync();
+            await LoadAsync();
         }
     }
 
@@ -421,6 +468,7 @@
             publishedCount = published.Data?.TotalCount ?? 0;
             closedCount = closed.Data?.TotalCount ?? 0;
             expiredCount = expired.Data?.TotalCount ?? 0;
+            entitlement = await EntitlementService.GetForUserAsync(userId);
         }
         catch (Exception exception)
         {
@@ -598,6 +646,32 @@
             actionError = result.Errors.FirstOrDefault() ?? "Could not remove this job.";
         if (selected?.Id == id) selected = null;
         await LoadAsync();
+    }
+
+    private async Task BuyFeaturedAsync(int jobId)
+    {
+        actionMessage = actionError = null;
+        featuringJobId = jobId;
+        try
+        {
+            var result = await BillingService.CreateFeaturedCheckoutAsync(
+                await GetUserIdAsync(), jobId, "127.0.0.1");
+            if (!result.Success || result.Data is null)
+            {
+                actionError = result.Errors.FirstOrDefault() ?? "Could not start the featured payment.";
+                return;
+            }
+
+            Navigation.NavigateTo(result.Data.PaymentUrl, forceLoad: true);
+        }
+        catch (Exception exception)
+        {
+            actionError = exception.Message;
+        }
+        finally
+        {
+            featuringJobId = null;
+        }
     }
 
     private static string StatusClass(JobStatus status) => status switch
