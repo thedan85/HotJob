@@ -14,6 +14,7 @@ using hotjob.Services.Authentication;
 using hotjob.Services.Billing;
 using hotjob.Services.JobAlerts;
 using hotjob.Services.ML;
+using hotjob.Swagger;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -88,6 +89,7 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
+    options.SchemaFilter<RequestExampleSchemaFilter>();
     var xml = Path.Combine(AppContext.BaseDirectory, $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml");
     if (File.Exists(xml))
     {

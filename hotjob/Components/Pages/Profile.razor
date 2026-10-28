@@ -318,12 +318,12 @@ else
     private IEnumerable<SkillOptionDto> AvailableSkills =>
         skillOptions.Where(option => resumeForm.Skills.All(skill => skill.SkillId != option.Id));
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
         if (AuthSession.IsAuthenticated)
         {
-            _ = LoadAsync();
+            await LoadAsync();
         }
         else
         {

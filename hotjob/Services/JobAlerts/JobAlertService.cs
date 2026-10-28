@@ -4,7 +4,6 @@ using hotjob.DTOs.JobAlerts;
 using hotjob.DTOs.ML;
 using hotjob.Models;
 using hotjob.Models.Job;
-using hotjob.Services.Billing;
 using hotjob.Services.Common;
 using hotjob.Services.ML;
 using Microsoft.EntityFrameworkCore;
@@ -13,20 +12,18 @@ using Microsoft.Extensions.Options;
 namespace hotjob.Services.JobAlerts;
 
 /// <summary>
-/// Premium job alerts (contract D11): on publish, score every Premium candidate's resumes
+/// Job alerts (contract D11): on publish, score every active candidate's resumes
 /// and create one in-app notification per candidate whose best resume clears the threshold.
+/// Free for all candidates.
 /// </summary>
 public sealed class JobAlertService(
     ApplicationDbContext dbContext,
     IMatchScoreService matchScoreService,
-    ICandidatePremiumService premiumService,
     IOptions<JobAlertsOptions> options,
     TimeProvider timeProvider,
     ILogger<JobAlertService> logger) : IJobAlertService
 {
     private const string TitlePrefix = "New matching job: ";
-    private const string UpsellMessage =
-        "Job alerts are a Premium feature. Upgrade to be told when a new job matches your CV.";
 
     public async Task<int> NotifyForPublishedJobAsync(
         int jobPostingId,
@@ -57,22 +54,20 @@ public sealed class JobAlertService(
             return 0;
         }
 
-        var premiumUserIds = await dbContext.Candidates
+        var candidateUserIds = await dbContext.Candidates
             .AsNoTracking()
-            .Where(candidate => candidate.PremiumUntil != null
-                && candidate.PremiumUntil > now
-                && candidate.User.IsActive)
+            .Where(candidate => candidate.User.IsActive)
             .Select(candidate => candidate.UserId)
             .ToListAsync(cancellationToken);
 
-        if (premiumUserIds.Count == 0)
+        if (candidateUserIds.Count == 0)
         {
             return 0;
         }
 
         var resumeIdsByUser = (await dbContext.Resumes
                 .AsNoTracking()
-                .Where(resume => premiumUserIds.Contains(resume.Candidate.UserId))
+                .Where(resume => candidateUserIds.Contains(resume.Candidate.UserId))
                 .Select(resume => new { resume.Id, resume.Candidate.UserId })
                 .ToListAsync(cancellationToken))
             .GroupBy(row => row.UserId, StringComparer.Ordinal)
@@ -92,7 +87,7 @@ public sealed class JobAlertService(
         var minimumScore = options.Value.MinMatchPercent;
         var created = 0;
 
-        foreach (var userId in premiumUserIds)
+        foreach (var userId in candidateUserIds)
         {
             if (alreadyNotified.Contains(userId)
                 || !resumeIdsByUser.TryGetValue(userId, out var resumeIds)
@@ -146,17 +141,19 @@ public sealed class JobAlertService(
         string? userId,
         CancellationToken cancellationToken = default)
     {
-        var status = await premiumService.GetStatusAsync(userId, cancellationToken);
-        if (status is null)
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return ServiceResult<JobAlertsPageDto>.Fail(
+                ServiceErrorType.Unauthorized, "Not signed in.");
+        }
+
+        var candidateExists = await dbContext.Candidates
+            .AsNoTracking()
+            .AnyAsync(candidate => candidate.UserId == userId, cancellationToken);
+        if (!candidateExists)
         {
             return ServiceResult<JobAlertsPageDto>.Fail(
                 ServiceErrorType.NotFound, "Candidate profile not found.");
-        }
-
-        if (!status.IsPremium)
-        {
-            return ServiceResult<JobAlertsPageDto>.Ok(
-                new JobAlertsPageDto(false, Array.Empty<JobAlertDto>(), 0, UpsellMessage));
         }
 
         var alerts = await dbContext.Notifications
@@ -175,7 +172,7 @@ public sealed class JobAlertService(
             .ToListAsync(cancellationToken);
 
         return ServiceResult<JobAlertsPageDto>.Ok(
-            new JobAlertsPageDto(true, alerts, alerts.Count(alert => !alert.IsRead), null));
+            new JobAlertsPageDto(alerts, alerts.Count(alert => !alert.IsRead)));
     }
 
     public async Task<ServiceResult<int>> MarkAllReadAsync(

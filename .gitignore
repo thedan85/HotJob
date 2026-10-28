@@ -10,6 +10,7 @@ build.log
 .env.local
 node_modules/
 AGENTS.md
+hotjob/Tests/AGENTS.md
 
 .dll
 hotjob/appsettings.json

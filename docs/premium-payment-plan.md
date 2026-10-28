@@ -180,11 +180,11 @@ Quyền lợi theo bản tóm tắt (chính xác với code đã triển khai / 
 | Xem điểm phù hợp cơ bản | Có | Có |
 | Điểm phù hợp nâng cao + gợi ý cải thiện CV | Không | Có (server-side gate) |
 | Tạo CV (CV builder) | Có miễn phí | Không bán (theo khuyến nghị monetization) |
-| Thông báo việc làm phù hợp (job alerts) | Không | Có |
+| Thông báo việc làm phù hợp (job alerts) | Có | Có |
 | Huy hiệu Premium trên hồ sơ | Không | Có |
 | Đẩy hồ sơ lên trước trong tìm ứng viên của Employer | Không | Có (`BoostUntil`) |
 
-> **Lưu ý quan trọng:** tài liệu monetization khuyên **không bán tính năng tạo CV** (các bên khác đã làm miễn phí). Do đó CV builder để Free, và Premium chỉ bán điểm phù hợp nâng cao + job alerts + huy hiệu/đẩy hồ sơ. Trang `/premium` phải được viết lại tại GĐ5 để hứa đúng những tính năng này (loại bỏ các claim "AI CV score" / "Automatic CV builder" chưa có).
+> **Lưu ý quan trọng:** tài liệu monetization khuyên **không bán tính năng tạo CV** (các bên khác đã làm miễn phí). Do đó CV builder để Free, và Premium chỉ bán điểm phù hợp nâng cao + huy hiệu/đẩy hồ sơ. Job alerts miễn phí cho mọi ứng viên. Trang `/premium` phải được viết lại tại GĐ5 để hứa đúng những tính năng này (loại bỏ các claim "AI CV score" / "Automatic CV builder" chưa có).
 
 ---
 
@@ -365,7 +365,7 @@ Job không có kỹ năng yêu cầu → không có điểm (UI ẩn badge và c
 - Thanh toán VNPay (`CandidatePremium`), cộng 30 ngày vào `PremiumUntil`.
 - `ICandidatePremiumService.IsPremiumAsync` ⇔ `PremiumUntil > now`; hết hạn tự động (kiểm tra khi dùng).
 - Huy hiệu Premium trên hồ sơ.
-- Gate quyền lợi Premium ở server (điểm nâng cao, job alerts, đẩy hồ sơ).
+- Gate quyền lợi Premium ở server (điểm phù hợp nâng cao, đẩy hồ sơ).
 - Trang quản lý Premium: ngày hết hạn, gia hạn.
 
 **Xong khi:** mua Premium xong quyền lợi mở ngay; hết hạn thì tự khóa lại; Free không dùng được quyền lợi Premium.
@@ -384,12 +384,12 @@ Job không có kỹ năng yêu cầu → không có điểm (UI ẩn badge và c
 ### GĐ6 — Job alerts
 
 **Việc làm:**
-- Khi một tin trở thành Published (tạo Published, Draft→Published, hoặc mở lại), tạo `Notification` cho mỗi ứng viên Premium có resume tốt nhất đạt ≥ `JobAlerts:MinMatchPercent` (mặc định 60%).
+- Khi một tin trở thành Published (tạo Published, Draft→Published, hoặc mở lại), tạo `Notification` cho mỗi ứng viên đang hoạt động có resume tốt nhất đạt ≥ `JobAlerts:MinMatchPercent` (mặc định 60%).
 - Một lần duy nhất cho mỗi (ứng viên, tin) — thêm `Kind` và `RelatedJobPostingId` vào `Notification` để loại trùng/lọc.
 - Chỉ trong ứng dụng (in-app); email để sau.
-- Trang `/job-alerts` (Premium) + liên kết trong nav; ứng viên Free không nhận và thấy trang upsell.
+- Trang `/job-alerts` miễn phí cho mọi ứng viên + liên kết trong nav.
 
-**Xong khi:** đăng tin mới → ứng viên Premium nhận thông báo, ứng viên Free không.
+**Xong khi:** đăng tin mới → mọi ứng viên có CV đạt ngưỡng nhận thông báo, không phụ thuộc Premium.
 
 ### GĐ7 — Tìm ứng viên + đẩy hồ sơ
 
@@ -493,7 +493,7 @@ Thẻ test VNPay sandbox: Ngân hàng NCB, thẻ `9704198526191432198`, tên `NG
 
 ## 15. Việc đã chốt (không cần hỏi lại)
 
-1. Premium bán điểm phù hợp nâng cao + job alerts + huy hiệu/đẩy hồ sơ; **không bán CV builder** (theo khuyến nghị monetization).
+1. Premium bán điểm phù hợp nâng cao + huy hiệu/đẩy hồ sơ; job alerts miễn phí; **không bán CV builder** (theo khuyến nghị monetization).
 2. Giá Premium: 99.000đ/tháng (gói `PREMIUM_MONTHLY`, 30 ngày).
 3. Thực hiện đầy đủ 8 giai đoạn theo thứ tự 1 → 2 → 3 → 4 → 5 → 8 → 6 → 7.
 4. Cần trang Admin `/admin/billing` (doanh thu + gán gói thủ công).
