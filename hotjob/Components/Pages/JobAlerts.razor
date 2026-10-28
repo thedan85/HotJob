@@ -22,7 +22,7 @@
                     <p class="workspace-lede">New roles that match your CV, flagged the moment an employer publishes them.</p>
                 </div>
                 <div class="workspace-actions">
-                    @if (!isLoading && feed is { IsPremium: true, Alerts.Count: > 0 })
+                    @if (!isLoading && feed is { Alerts.Count: > 0 })
                     {
                         <button class="workspace-btn workspace-btn-secondary" type="button"
                                 disabled="@(isMarking || feed.UnreadCount == 0)"
@@ -51,28 +51,6 @@
                     <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
                             style="margin-left:12px" @onclick="LoadAsync">Try again</button>
                 </div>
-            }
-            else if (feed is { IsPremium: false })
-            {
-                <section class="workspace-card ja-upsell" aria-labelledby="ja-upsell-title">
-                    <span class="ja-upsell-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                            <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-                        </svg>
-                    </span>
-                    <div>
-                        <h2 id="ja-upsell-title">Job alerts are a Premium feature</h2>
-                        <p>
-                            Premium watches every job as it is published, scores it against your best CV,
-                            and tells you here when the match is strong. Free accounts do not receive alerts.
-                        </p>
-                        <div class="ja-upsell-actions">
-                            <a class="workspace-btn workspace-btn-primary" href="/premium">Explore Premium</a>
-                            <a class="workspace-btn workspace-btn-ghost" href="/jobs">Browse open jobs</a>
-                        </div>
-                    </div>
-                </section>
             }
             else if (feed is not null)
             {

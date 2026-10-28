@@ -25,7 +25,7 @@
                 </p>
                 <h1 id="premium-title">Candidate <span class="premium-title-accent">Premium</span> plan</h1>
                 <p class="premium-lede">
-                    Advanced match scoring, job alerts, a premium profile badge and a profile boost —
+                    Advanced match scoring, a premium profile badge and a profile boost —
                     30 days for 99.000đ, paid by VNPay sandbox.
                 </p>
             </section>
@@ -54,7 +54,7 @@
                             }
                             else if (!status.IsPremium)
                             {
-                                <p class="workspace-sub">Subscribe to Premium for advanced match scoring, job alerts, a profile badge and a profile boost.</p>
+                                <p class="workspace-sub">Subscribe to Premium for advanced match scoring, a profile badge and a profile boost.</p>
                             }
                         </div>
                     </div>
@@ -94,7 +94,6 @@
                 </div>
                 <ul class="premium-plan-features">
                     <li><strong>Advanced match scoring:</strong> see how your CV scores against a job before you apply.</li>
-                    <li><strong>Job alerts:</strong> get notified when a new job scores at least 60% against your best CV.</li>
                     <li><strong>Premium badge:</strong> a verified badge on your profile so employers spot you at a glance.</li>
                     <li><strong>Profile boost:</strong> your profile is shown to employers first while boosted.</li>
                 </ul>
@@ -137,12 +136,12 @@
     private string? actionMessage;
     private string? actionError;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
         if (AuthSession.IsAuthenticated)
         {
-            _ = LoadAsync();
+            await LoadAsync();
         }
     }
 

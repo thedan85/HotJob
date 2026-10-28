@@ -28,7 +28,7 @@ public sealed class StubJobAlertService : IJobAlertService
         string? userId,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(ServiceResult<JobAlertsPageDto>.Ok(
-            new JobAlertsPageDto(false, Array.Empty<JobAlertDto>(), 0, null)));
+            new JobAlertsPageDto(Array.Empty<JobAlertDto>(), 0)));
 
     public Task<ServiceResult<int>> MarkAllReadAsync(
         string? userId,

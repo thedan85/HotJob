@@ -12,7 +12,7 @@ using Microsoft.Extensions.Options;
 
 namespace hotjob.Tests.JobAlertTests;
 
-/// <summary>Premium job alert generation and read-side isolation (contract D11).</summary>
+/// <summary>Job alert generation and read-side isolation (contract D11).</summary>
 public sealed class JobAlertServiceTests
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 27, 9, 0, 0, TimeSpan.Zero);
@@ -36,7 +36,6 @@ public sealed class JobAlertServiceTests
         return new JobAlertService(
             fx.Db,
             scores,
-            premium,
             Options.Create(new JobAlertsOptions { MinMatchPercent = minMatchPercent }),
             clock,
             NullLogger<JobAlertService>.Instance);
@@ -50,7 +49,7 @@ public sealed class JobAlertServiceTests
     }
 
     [Fact]
-    public async Task PublishedJob_NotifiesOnlyPremiumCandidatesAtOrAboveThreshold()
+    public async Task PublishedJob_NotifiesEveryCandidateAtOrAboveThreshold()
     {
         await using var fx = await TestFixture.CreateAsync();
         using var temp = new TempModelDirectory();
@@ -65,22 +64,24 @@ public sealed class JobAlertServiceTests
         var job = await MatchTestData.CreateJobAsync(
             fx, company.Id, [(csharp.Id, 10), (sql.Id, 10)], title: "Backend engineer");
 
-        await MakePremiumAsync(fx, high.Candidate, clock.GetUtcNow().UtcDateTime.AddDays(30));
-        await MakePremiumAsync(fx, low.Candidate, clock.GetUtcNow().UtcDateTime.AddDays(30));
-
         var created = await CreateService(fx, temp, clock).NotifyForPublishedJobAsync(job.Id);
 
-        Assert.Equal(1, created);
-        var alert = await fx.Db.Notifications.SingleAsync();
-        Assert.Equal(high.Candidate.UserId, alert.UserId);
-        Assert.Equal(NotificationKinds.JobAlert, alert.Kind);
-        Assert.Equal(job.Id, alert.RelatedJobPostingId);
-        Assert.Contains("Backend engineer", alert.Title);
-        Assert.Contains(company.CompanyName, alert.Content);
-        Assert.Contains("100%", alert.Content);
-        Assert.False(alert.IsRead);
-        Assert.Equal(clock.GetUtcNow().UtcDateTime, alert.CreatedAt);
-        Assert.DoesNotContain(alert.UserId, new[] { low.Candidate.UserId, free.Candidate.UserId });
+        Assert.Equal(2, created);
+        var alerts = await fx.Db.Notifications.ToListAsync();
+        Assert.Equal(2, alerts.Count);
+        Assert.All(alerts, alert =>
+        {
+            Assert.Equal(NotificationKinds.JobAlert, alert.Kind);
+            Assert.Equal(job.Id, alert.RelatedJobPostingId);
+            Assert.Contains("Backend engineer", alert.Title);
+            Assert.Contains(company.CompanyName, alert.Content);
+            Assert.Contains("100%", alert.Content);
+            Assert.False(alert.IsRead);
+            Assert.Equal(clock.GetUtcNow().UtcDateTime, alert.CreatedAt);
+        });
+        Assert.Contains(alerts, alert => alert.UserId == high.Candidate.UserId);
+        Assert.Contains(alerts, alert => alert.UserId == free.Candidate.UserId);
+        Assert.DoesNotContain(alerts, alert => alert.UserId == low.Candidate.UserId);
     }
 
     [Fact]
@@ -247,14 +248,13 @@ public sealed class JobAlertServiceTests
         var result = await CreateService(fx, temp, clock).GetAlertsAsync(me.Candidate.UserId);
 
         Assert.True(result.Success, string.Join("; ", result.Errors));
-        Assert.True(result.Data!.IsPremium);
-        Assert.Equal(2, result.Data.Alerts.Count);
-        Assert.Equal("Newer alert", result.Data.Alerts[0].Title);
-        Assert.Equal("Older alert", result.Data.Alerts[1].Title);
-        Assert.Equal(2, result.Data.UnreadCount);
-        Assert.Null(result.Data.UpsellMessage);
-        Assert.DoesNotContain(result.Data.Alerts, alert => alert.Title == "Employer message");
-        Assert.DoesNotContain(result.Data.Alerts, alert => alert.Title == "Other candidate alert");
+        var feed = result.Data!;
+        Assert.Equal(2, feed.Alerts.Count);
+        Assert.Equal("Newer alert", feed.Alerts[0].Title);
+        Assert.Equal("Older alert", feed.Alerts[1].Title);
+        Assert.Equal(2, feed.UnreadCount);
+        Assert.DoesNotContain(feed.Alerts, alert => alert.Title == "Employer message");
+        Assert.DoesNotContain(feed.Alerts, alert => alert.Title == "Other candidate alert");
     }
 
     [Fact]
@@ -296,13 +296,12 @@ public sealed class JobAlertServiceTests
     }
 
     [Fact]
-    public async Task FreeCandidate_GetsEmptyFeedEvenWithExistingAlertRows()
+    public async Task FreeCandidate_SeesExistingAlerts()
     {
         await using var fx = await TestFixture.CreateAsync();
         using var temp = new TempModelDirectory();
         var clock = new FakeTimeProvider(Start);
-        var candidate = await MatchTestData.CreateCandidateAsync(fx, "expired@example.com");
-        await MakePremiumAsync(fx, candidate.Candidate, clock.GetUtcNow().UtcDateTime.AddMinutes(-1));
+        var candidate = await MatchTestData.CreateCandidateAsync(fx, "free@example.com");
 
         fx.Db.Notifications.Add(new Notification
         {
@@ -315,10 +314,9 @@ public sealed class JobAlertServiceTests
         var result = await CreateService(fx, temp, clock).GetAlertsAsync(candidate.Candidate.UserId);
 
         Assert.True(result.Success, string.Join("; ", result.Errors));
-        Assert.False(result.Data!.IsPremium);
-        Assert.Empty(result.Data.Alerts);
-        Assert.Equal(0, result.Data.UnreadCount);
-        Assert.False(string.IsNullOrWhiteSpace(result.Data.UpsellMessage));
+        var alert = Assert.Single(result.Data!.Alerts);
+        Assert.Equal("Old alert", alert.Title);
+        Assert.Equal(1, result.Data.UnreadCount);
     }
 
     [Fact]

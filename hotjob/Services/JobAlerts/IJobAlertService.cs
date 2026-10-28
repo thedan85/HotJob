@@ -3,11 +3,11 @@ using hotjob.Services.Common;
 
 namespace hotjob.Services.JobAlerts;
 
-/// <summary>Generates and reads in-app job alerts for Premium candidates (contract D11).</summary>
+/// <summary>Generates and reads in-app job alerts (contract D11). Free for all candidates.</summary>
 public interface IJobAlertService
 {
     /// <summary>
-    /// Creates one alert per eligible Premium candidate when a job is published. Only a
+    /// Creates one alert per eligible candidate when a job is published. Only a
     /// currently Published, unexpired job is considered. Returns the number of alerts
     /// created; calling it again for the same job never duplicates an existing alert.
     /// </summary>
@@ -15,10 +15,7 @@ public interface IJobAlertService
         int jobPostingId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Newest-first alerts for the caller. Free candidates get an empty feed plus an
-    /// upsell message; the Premium gate is applied here, not by the UI.
-    /// </summary>
+    /// <summary>Newest-first alerts for the caller.</summary>
     Task<ServiceResult<JobAlertsPageDto>> GetAlertsAsync(
         string? userId,
         CancellationToken cancellationToken = default);
