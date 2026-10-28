@@ -1,0 +1,120 @@
+@page "/admin"
+@rendermode InteractiveServer
+@using hotjob.DTOs.Admin
+@using hotjob.Models.Job
+@using hotjob.Models.Users
+@using hotjob.Services.Admin
+@inject IAdminService AdminService
+
+<PageTitle>Admin dashboard | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Admin dashboard</h1>
+                    <p class="workspace-lede">Monitor users, company approvals, and job postings from one place.</p>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading admin dashboard">
+                    <p>Loading dashboard…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else if (dashboard is not null)
+            {
+                <section class="workspace-metrics" aria-label="Admin dashboard overview">
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-label">Users</span>
+                        <span class="workspace-stat-value">@dashboard.TotalUsers</span>
+                        <span class="workspace-stat-hint">@dashboard.ActiveUsers active</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-label">Companies</span>
+                        <span class="workspace-stat-value">@dashboard.TotalCompanies</span>
+                        <span class="workspace-stat-hint">@dashboard.PendingCompanies pending</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-label">Jobs</span>
+                        <span class="workspace-stat-value">@dashboard.TotalJobs</span>
+                        <span class="workspace-stat-hint">@dashboard.PublishedJobs published</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-label">Roles</span>
+                        <span class="workspace-stat-value">@dashboard.AdminUsers</span>
+                        <span class="workspace-stat-hint">Admins</span>
+                    </div>
+                </section>
+
+                <section class="workspace-card admin-grid">
+                    <div>
+                        <h2>Summary</h2>
+                        <ul class="admin-summary-list">
+                            <li><strong>Admins:</strong> @dashboard.AdminUsers</li>
+                            <li><strong>Candidates:</strong> @dashboard.CandidateUsers</li>
+                            <li><strong>Employers:</strong> @dashboard.EmployerUsers</li>
+                            <li><strong>Approved companies:</strong> @dashboard.ApprovedCompanies</li>
+                            <li><strong>Rejected companies:</strong> @dashboard.RejectedCompanies</li>
+                            <li><strong>Published jobs:</strong> @dashboard.PublishedJobs</li>
+                            <li><strong>Draft jobs:</strong> @dashboard.DraftJobs</li>
+                            <li><strong>Closed jobs:</strong> @dashboard.ClosedJobs</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h2>Quick actions</h2>
+                        <nav class="admin-links">
+                            <a href="/admin/accounts">Account management</a>
+                            <a href="/admin/companies">Company management</a>
+                            <a href="/admin/jobs">Job posting management</a>
+                        </nav>
+                    </div>
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="state-page state-page-compact">
+            <p class="state-kicker">Access denied</p>
+            <h1>Admin access required</h1>
+            <p class="state-lede">Sign in with an administrator account to use the dashboard.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage;
+    private AdminDashboardDto? dashboard;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var result = await AdminService.GetDashboardAsync();
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+            }
+            else
+            {
+                dashboard = result.Data;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

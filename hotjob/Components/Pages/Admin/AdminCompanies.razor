@@ -1,0 +1,156 @@
+@page "/admin/companies"
+@rendermode InteractiveServer
+@using hotjob.DTOs.Admin
+@using hotjob.Models.Users
+@using hotjob.Services.Admin
+@inject IAdminService AdminService
+
+<PageTitle>Admin companies | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Company management</h1>
+                    <p class="workspace-lede">Review pending companies, approve them, or reject them with a reason.</p>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading companies">
+                    <p>Loading companies…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else
+            {
+                <section class="workspace-card">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Company</th>
+                                <th>Status</th>
+                                <th>Industry</th>
+                                <th>Location</th>
+                                <th>Verified</th>
+                                <th>Members</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var company in companies)
+                            {
+                                <tr>
+                                    <td>@company.CompanyName</td>
+                                    <td>
+                                        <span class="workspace-badge @StatusClass(company.Status)">@company.Status</span>
+                                    </td>
+                                    <td>@(string.IsNullOrWhiteSpace(company.Industry) ? "-" : company.Industry)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(company.Location) ? "-" : company.Location)</td>
+                                    <td>@(company.VerifiedAt is null ? "Unverified" : company.VerifiedAt.Value.ToString("dd MMM yyyy"))</td>
+                                    <td>@company.EmployerCount</td>
+                                    <td>
+                                        @if (company.Status != CompanyStatus.Approved)
+                                        {
+                                            <button class="workspace-btn workspace-btn-primary" type="button" @onclick="() => ApproveCompany(company.Id)">Approve</button>
+                                        }
+                                        @if (company.Status != CompanyStatus.Rejected)
+                                        {
+                                            <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="() => RejectCompany(company.Id)">Reject</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private IReadOnlyList<AdminCompanyListItemDto> companies = Array.Empty<AdminCompanyListItemDto>();
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var result = await AdminService.GetCompaniesAsync();
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            companies = result.Data ?? Array.Empty<AdminCompanyListItemDto>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ApproveCompany(int companyId)
+    {
+        try
+        {
+            var result = await AdminService.UpdateCompanyStatusAsync(companyId, CompanyStatus.Approved, null);
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task RejectCompany(int companyId)
+    {
+        try
+        {
+            var result = await AdminService.UpdateCompanyStatusAsync(companyId, CompanyStatus.Rejected, "Rejected by administrator.");
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private static string StatusClass(CompanyStatus status) => status switch
+    {
+        CompanyStatus.Pending => "warning",
+        CompanyStatus.Approved => "success",
+        CompanyStatus.Rejected => "danger",
+        _ => "neutral"
+    };
+}

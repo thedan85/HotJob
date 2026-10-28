@@ -1,0 +1,119 @@
+@page "/admin/jobs"
+@rendermode InteractiveServer
+@using hotjob.DTOs.Admin
+@using hotjob.Services.Admin
+@inject IAdminService AdminService
+
+<PageTitle>Admin jobs | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Job posting management</h1>
+                    <p class="workspace-lede">Review all company job posts and remove inappropriate or outdated listings.</p>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading job postings">
+                    <p>Loading job postings…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else
+            {
+                <section class="workspace-card">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Company</th>
+                                <th>Location</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Applications</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var job in jobs)
+                            {
+                                <tr>
+                                    <td>@job.Title</td>
+                                    <td>@job.CompanyName</td>
+                                    <td>@(string.IsNullOrWhiteSpace(job.CompanyLocation) ? "-" : job.CompanyLocation)</td>
+                                    <td>@job.Status</td>
+                                    <td>@job.CreatedAt.ToString("dd MMM yyyy")</td>
+                                    <td>@job.ApplicationCount</td>
+                                    <td>
+                                        <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="() => DeleteJob(job.Id)">Delete</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private IReadOnlyList<AdminJobListItemDto> jobs = Array.Empty<AdminJobListItemDto>();
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var result = await AdminService.GetJobsAsync();
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            jobs = result.Data ?? Array.Empty<AdminJobListItemDto>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task DeleteJob(int jobId)
+    {
+        try
+        {
+            var result = await AdminService.DeleteJobAsync(jobId);
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+}

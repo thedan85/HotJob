@@ -202,6 +202,7 @@ builder.Services.AddScoped<AuthenticationStateProvider>(services =>
     services.GetRequiredService<HotJobAuthStateProvider>());
 builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
 builder.Services.AddScoped<hotjob.Services.Employer.ICandidateSearchService, hotjob.Services.Employer.CandidateSearchService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IAdminService, hotjob.Services.Admin.AdminService>();
 builder.Services.AddScoped<IVnPayService, VnPayService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<IEntitlementService, EntitlementService>();

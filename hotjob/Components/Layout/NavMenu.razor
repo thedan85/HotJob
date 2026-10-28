@@ -46,6 +46,15 @@
                     <NavLink class="nav-link" href="premium">Go premium</NavLink>
                 </Authorized>
             </AuthorizeView>
+            <AuthorizeView Roles="Admin">
+                <Authorized>
+                    <span class="nav-group-label">Admin</span>
+                    <NavLink class="nav-link nav-link-employer" href="admin">Dashboard</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/accounts">Accounts</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/companies">Companies</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/jobs">Jobs</NavLink>
+                </Authorized>
+            </AuthorizeView>
         </nav>
 
         <div class="nav-actions">
