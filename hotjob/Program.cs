@@ -11,6 +11,12 @@ using hotjob.Services.Employer;
 using hotjob.Services.Job;
 using hotjob.Services.Account;
 using hotjob.Services.Authentication;
+using hotjob.Services.Billing;
+using hotjob.Services.JobAlerts;
+using hotjob.Services.ML;
+using hotjob.Swagger;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -144,6 +150,21 @@ builder.Services.AddAuthentication(options =>
             ClockSkew = TimeSpan.FromMinutes(1)
         };
     });
+
+// Optional: password/JWT auth still works when Google credentials are absent.
+var googleClientId = builder.Configuration["Google:ClientId"];
+var googleClientSecret = builder.Configuration["Google:ClientSecret"];
+if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
+{
+    builder.Services.AddAuthentication()
+        .AddGoogle(options =>
+        {
+            options.ClientId = googleClientId;
+            options.ClientSecret = googleClientSecret;
+            // Surface Google's verification flag so unverified emails cannot link accounts.
+            options.ClaimActions.MapJsonKey("email_verified", "email_verified");
+        });
+}
 
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>

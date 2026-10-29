@@ -93,6 +93,49 @@
 .login-form .password-wrap input { padding-right: 76px; }
 .login-form .validation-message { margin-top: 6px; }
 
+.google-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    height: 50px;
+    border: 1px solid var(--hj-border-strong);
+    border-radius: var(--hj-radius-sm);
+    background: white;
+    color: var(--hj-ink);
+    font-size: 15px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: border-color var(--hj-transition), box-shadow var(--hj-transition);
+}
+
+.google-button:hover {
+    border-color: var(--hj-accent-text);
+    box-shadow: var(--hj-focus);
+}
+
+.google-button svg { width: 20px; height: 20px; flex: none; }
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0 4px;
+    color: var(--hj-muted);
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--hj-border-strong);
+}
+
 .login-benefits-panel {
     display: flex;
     align-items: center;

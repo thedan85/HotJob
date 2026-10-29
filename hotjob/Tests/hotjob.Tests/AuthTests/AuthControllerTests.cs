@@ -5,6 +5,8 @@ using hotjob.Services.Authentication;
 using hotjob.Services.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace hotjob.Tests;
 
@@ -41,6 +43,10 @@ public sealed class AuthControllerTests
             return Task.FromResult(LoginResult);
         }
 
+        public Task<ServiceResult<AuthTokens>> LoginWithGoogleAsync(
+            string? providerKey, string? email, string? displayName, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
         public Task<ServiceResult<AuthTokens>> RefreshAsync(string? rawRefreshToken, CancellationToken cancellationToken = default)
         {
             SeenRefreshToken = rawRefreshToken;
@@ -65,9 +71,13 @@ public sealed class AuthControllerTests
         StubAuthService stub,
         string? cookie = null,
         ClaimsPrincipal? user = null,
-        bool isHttps = false)
+        bool isHttps = false,
+        IConfiguration? configuration = null)
     {
-        var controller = new AuthController(stub);
+        var controller = new AuthController(
+            stub,
+            configuration ?? new ConfigurationBuilder().Build(),
+            NullLogger<AuthController>.Instance);
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Scheme = isHttps ? "https" : "http";
         if (cookie is not null)
@@ -229,6 +239,36 @@ public sealed class AuthControllerTests
     }
 
     [Fact]
+    public void GoogleLogin_WithoutConfiguration_RedirectsToLoginError()
+    {
+        var controller = CreateController(new StubAuthService());
+
+        var result = controller.GoogleLogin();
+
+        var redirect = Assert.IsType<RedirectResult>(result);
+        Assert.Equal("/login?googleError=unavailable", redirect.Url);
+    }
+
+    [Fact]
+    public void GoogleLogin_WithConfiguration_ChallengesGoogleScheme()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Google:ClientId"] = "client-id",
+                ["Google:ClientSecret"] = "client-secret"
+            })
+            .Build();
+        var controller = CreateController(new StubAuthService(), configuration: configuration);
+
+        var result = controller.GoogleLogin();
+
+        var challenge = Assert.IsType<ChallengeResult>(result);
+        Assert.Contains("Google", challenge.AuthenticationSchemes);
+        Assert.Equal("/api/auth/google/callback", challenge.Properties?.RedirectUri);
+    }
+
+    [Fact]
     public async Task Logout_ForwardsCancellationToken()
     {
         var stub = new StubAuthService();
@@ -237,7 +277,10 @@ public sealed class AuthControllerTests
         cts.Cancel();
         CancellationToken? seen = null;
         var capturing = new TokenCapturingAuthService(ct => seen = ct);
-        var capturingController = new AuthController(capturing);
+        var capturingController = new AuthController(
+            capturing,
+            new ConfigurationBuilder().Build(),
+            NullLogger<AuthController>.Instance);
         capturingController.ControllerContext = controller.ControllerContext;
 
         await capturingController.Logout(cts.Token);
@@ -280,6 +323,9 @@ public sealed class AuthControllerTests
     private sealed class TokenCapturingAuthService(Action<CancellationToken> capture) : IAuthService
     {
         public Task<ServiceResult<AuthTokens>> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+        public Task<ServiceResult<AuthTokens>> LoginWithGoogleAsync(
+            string? providerKey, string? email, string? displayName, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();
         public Task<ServiceResult<AuthTokens>> RefreshAsync(string? rawRefreshToken, CancellationToken cancellationToken = default)
             => throw new NotImplementedException();

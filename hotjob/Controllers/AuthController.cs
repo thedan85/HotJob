@@ -2,7 +2,10 @@ using System.Security.Claims;
 using hotjob.DTOs.Authentication;
 using hotjob.Services.Authentication;
 using hotjob.Services.Common;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace hotjob.Controllers;
@@ -10,10 +13,15 @@ namespace hotjob.Controllers;
 [ApiController]
 [Route("api/auth")]
 [IgnoreAntiforgeryToken]
-public sealed class AuthController(IAuthService authService) : ControllerBase
+public sealed class AuthController(
+    IAuthService authService,
+    IConfiguration configuration,
+    ILogger<AuthController> logger) : ControllerBase
 {
     public const string RefreshCookieName = "hotjob_refresh";
     private const string RefreshCookiePath = "/api/auth";
+    private const string GoogleCallbackPath = "/api/auth/google/callback";
+    private const string GoogleErrorPath = "/login?googleError=failed";
 
     /// <summary>Login with email + password. Sets the HttpOnly refresh cookie, returns access token + user + roles.</summary>
     /// <response code="200">Authenticated. Access token in body, refresh token in cookie.</response>
@@ -36,6 +44,59 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
 
         SetRefreshCookie(result.Data!.RefreshToken, result.Data.RefreshTokenExpiresAtUtc);
         return Ok(ToResponse(result.Data));
+    }
+
+    /// <summary>Start Google sign-in. Redirects to Google; returns to <c>/api/auth/google/callback</c>.</summary>
+    /// <response code="302">Redirect to Google, or back to /login when Google is not configured.</response>
+    [HttpGet("google")]
+    [AllowAnonymous]
+    public IActionResult GoogleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(configuration["Google:ClientId"]) ||
+            string.IsNullOrWhiteSpace(configuration["Google:ClientSecret"]))
+        {
+            return Redirect("/login?googleError=unavailable");
+        }
+
+        return Challenge(
+            new AuthenticationProperties { RedirectUri = GoogleCallbackPath },
+            GoogleDefaults.AuthenticationScheme);
+    }
+
+    /// <summary>Google redirect target: links/creates the account, sets the refresh cookie, returns to the app.</summary>
+    /// <response code="302">Signed in and redirected home, or back to /login on failure.</response>
+    [HttpGet("google/callback")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GoogleCallback(CancellationToken cancellationToken)
+    {
+        var external = await HttpContext.AuthenticateAsync(IdentityConstants.ExternalScheme);
+        if (!external.Succeeded || external.Principal is null)
+        {
+            return Redirect(GoogleErrorPath);
+        }
+
+        var principal = external.Principal;
+        var providerKey = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        var email = principal.FindFirstValue(ClaimTypes.Email);
+        var displayName = principal.FindFirstValue(ClaimTypes.Name);
+        var emailVerified = principal.FindFirstValue("email_verified");
+        await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+
+        if (bool.TryParse(emailVerified, out var verified) && !verified)
+        {
+            logger.LogWarning("Google login rejected: Google reported an unverified email.");
+            return Redirect(GoogleErrorPath);
+        }
+
+        var result = await authService.LoginWithGoogleAsync(providerKey, email, displayName, cancellationToken);
+        if (!result.Success)
+        {
+            logger.LogWarning("Google login failed: {Errors}", string.Join("; ", result.Errors));
+            return Redirect(GoogleErrorPath);
+        }
+
+        SetRefreshCookie(result.Data!.RefreshToken, result.Data.RefreshTokenExpiresAtUtc);
+        return Redirect("/");
     }
 
     /// <summary>Rotate the refresh token (cookie or body fallback). Revokes the presented token, issues a new pair.</summary>

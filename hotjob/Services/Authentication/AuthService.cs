@@ -30,6 +30,7 @@ public sealed class AuthService(
     TimeProvider timeProvider,
     ILogger<AuthService> logger) : IAuthService
 {
+    private const string GoogleLoginProvider = "Google";
     private readonly JwtOptions _jwt = jwtOptions.Value;
 
     public async Task<ServiceResult<AuthTokens>> LoginAsync(
@@ -67,6 +68,60 @@ public sealed class AuthService(
         }
 
         await userManager.ResetAccessFailedCountAsync(user);
+        return await IssueTokensAsync(user, cancellationToken);
+    }
+
+    public async Task<ServiceResult<AuthTokens>> LoginWithGoogleAsync(
+        string? providerKey,
+        string? email,
+        string? displayName,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(providerKey))
+        {
+            return ServiceResult<AuthTokens>.Fail(
+                ServiceErrorType.Validation, "Google did not return an account identifier.");
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return ServiceResult<AuthTokens>.Fail(
+                ServiceErrorType.Validation, "Google did not return an email address.");
+        }
+
+        providerKey = providerKey.Trim();
+        email = email.Trim();
+
+        var user = await userManager.FindByLoginAsync(GoogleLoginProvider, providerKey);
+        if (user is null)
+        {
+            user = await userManager.FindByEmailAsync(email);
+            if (user is null)
+            {
+                return await CreateGoogleUserAsync(providerKey, email, displayName, cancellationToken);
+            }
+
+            if (!user.IsActive)
+            {
+                logger.LogWarning("Google login blocked for disabled account {UserId}.", user.Id);
+                return ServiceResult<AuthTokens>.Fail(ServiceErrorType.Unauthorized, "Account is disabled.");
+            }
+
+            // Verified Google email matches an existing password account: attach the login.
+            var linkResult = await userManager.AddLoginAsync(
+                user, new UserLoginInfo(GoogleLoginProvider, providerKey, GoogleLoginProvider));
+            if (!linkResult.Succeeded)
+            {
+                return ServiceResult<AuthTokens>.Fail(
+                    ServiceErrorType.Conflict, "This Google account could not be linked to the existing account.");
+            }
+        }
+        else if (!user.IsActive)
+        {
+            logger.LogWarning("Google login blocked for disabled account {UserId}.", user.Id);
+            return ServiceResult<AuthTokens>.Fail(ServiceErrorType.Unauthorized, "Account is disabled.");
+        }
+
         return await IssueTokensAsync(user, cancellationToken);
     }
 
@@ -217,6 +272,85 @@ public sealed class AuthService(
 
         await RevokeAllForUserAsync(userId, "Logout", timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
         return ServiceResult.Ok();
+    }
+
+    private async Task<ServiceResult<AuthTokens>> CreateGoogleUserAsync(
+        string providerKey,
+        string email,
+        string? displayName,
+        CancellationToken cancellationToken)
+    {
+        var fullName = string.IsNullOrWhiteSpace(displayName) ? email.Split('@')[0] : displayName.Trim();
+        if (fullName.Length > 100)
+        {
+            fullName = fullName[..100];
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var user = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true,
+                IsActive = true
+            };
+
+            var createResult = await userManager.CreateAsync(user);
+            if (!createResult.Succeeded)
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                return IdentityFailure(createResult);
+            }
+
+            var roleResult = await userManager.AddToRoleAsync(user, AppRoles.Candidate);
+            if (!roleResult.Succeeded)
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                return IdentityFailure(roleResult);
+            }
+
+            var loginResult = await userManager.AddLoginAsync(
+                user, new UserLoginInfo(GoogleLoginProvider, providerKey, GoogleLoginProvider));
+            if (!loginResult.Succeeded)
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                return IdentityFailure(loginResult);
+            }
+
+            dbContext.Candidates.Add(new global::hotjob.Models.Users.Candidate
+            {
+                UserId = user.Id,
+                FullName = fullName
+            });
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return await IssueTokensAsync(user, cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            logger.LogWarning(exception, "Google account creation conflict for {Email}.", email);
+            return ServiceResult<AuthTokens>.Fail(
+                ServiceErrorType.Conflict, "An account with this email already exists.");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            logger.LogError(exception, "Google account creation failed for {Email}.", email);
+            throw;
+        }
+    }
+
+    private static ServiceResult<AuthTokens> IdentityFailure(IdentityResult result)
+    {
+        var errors = result.Errors.ToArray();
+        var errorType = errors.Any(error => error.Code is "DuplicateUserName" or "DuplicateEmail")
+            ? ServiceErrorType.Conflict
+            : ServiceErrorType.Validation;
+        return ServiceResult<AuthTokens>.Fail(errorType, errors.Select(error => error.Description));
     }
 
     private async Task<ServiceResult<AuthTokens>> IssueTokensAsync(

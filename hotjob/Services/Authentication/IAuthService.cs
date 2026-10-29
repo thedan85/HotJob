@@ -10,6 +10,16 @@ public interface IAuthService
         LoginRequest request,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Signs in a verified Google identity: links an existing email account or creates a
+    /// Candidate account, then issues the same JWT + refresh pair as password login.
+    /// </summary>
+    Task<ServiceResult<AuthTokens>> LoginWithGoogleAsync(
+        string? providerKey,
+        string? email,
+        string? displayName,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Rotates a refresh token: revokes the presented one and issues a new pair.</summary>
     Task<ServiceResult<AuthTokens>> RefreshAsync(
         string? rawRefreshToken,
