@@ -38,10 +38,10 @@
     width: fit-content;
     margin-bottom: 16px;
     padding: 8px 12px;
-    border: 1px solid #bbe1fa;
+    border: 1px solid var(--hj-primary-light);
     border-radius: 999px;
-    background: #eaf4fb;
-    color: #0f4c75;
+    background: #F0F9FF;
+    color: var(--hj-primary);
     font-size: 12px;
     font-weight: 700;
     letter-spacing: .01em;
@@ -49,12 +49,12 @@
 }
 
 .spark {
-    color: #3282b8;
+    color: var(--hj-accent-text);
 }
 
 .register-form-panel h1 {
     margin: 0 0 8px;
-    color: #1b262c;
+    color: var(--hj-ink);
     font-size: clamp(1.75rem, 2.5vw, 2.25rem);
     letter-spacing: -.02em;
     line-height: 1.1;
@@ -63,7 +63,7 @@
 
 .intro {
     margin: 0 0 24px;
-    color: #45565f;
+    color: var(--hj-muted);
     font-size: 15px;
     line-height: 1.6;
 }
@@ -83,7 +83,7 @@
 
 .field-group label {
     margin-bottom: 8px;
-    color: #1b262c;
+    color: var(--hj-ink);
     font-size: 14px;
     font-weight: 700;
     line-height: 1.4;
@@ -95,11 +95,11 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0 16px;
-    border: 1px solid #c6d2d9;
+    border: 1px solid var(--hj-border-strong);
     border-radius: 8px;
     outline: none;
     background: #fff;
-    color: #1b262c;
+    color: var(--hj-ink);
     font-family: inherit;
     font-size: 16px;
     line-height: 1.5;
@@ -107,37 +107,37 @@
 }
 
 .field-group input::placeholder {
-    color: #5d707a;
+    color: #64748B;
     font-size: 16px;
     opacity: 1;
 }
 
 .field-group input:focus {
-    border-color: #0f4c75;
-    box-shadow: 0 0 0 3px rgba(50, 130, 184, .28);
+    border-color: var(--hj-primary);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, .28);
 }
 
 .field-group input.invalid {
-    border-color: #b3261e;
+    border-color: var(--hj-danger);
 }
 
 .field-hint {
     margin-top: 6px;
-    color: #45565f;
+    color: var(--hj-muted);
     font-size: 13px;
     line-height: 1.5;
 }
 
 .validation-message {
     margin-top: 6px;
-    color: #b3261e;
+    color: var(--hj-danger);
     font-size: 13px;
     line-height: 1.4;
 }
 
 .validation-summary {
     margin: 0;
-    color: #b3261e;
+    color: var(--hj-danger);
     font-size: 13px;
     line-height: 1.5;
 }
@@ -169,7 +169,7 @@
     border: 0;
     border-radius: 8px;
     background: transparent;
-    color: #0f4c75;
+    color: var(--hj-primary);
     cursor: pointer;
     font-family: inherit;
     font-size: 14px;
@@ -178,11 +178,11 @@
 }
 
 .password-toggle:hover {
-    background: #eaf4fb;
+    background: #F0F9FF;
 }
 
 .password-toggle:focus-visible {
-    outline: 2px solid #0f4c75;
+    outline: 2px solid var(--hj-primary);
     outline-offset: 1px;
 }
 
@@ -206,14 +206,14 @@
     height: 22px;
     flex: 0 0 22px;
     margin-top: 1px;
-    accent-color: #0f4c75;
+    accent-color: var(--hj-primary);
     border-radius: 6px;
     cursor: pointer;
 }
 
 .consent-row a,
 .login-prompt a {
-    color: #0f4c75;
+    color: var(--hj-primary);
     font-weight: 700;
     text-decoration: underline;
     text-underline-offset: 2px;
@@ -221,7 +221,7 @@
 
 .consent-row a:hover,
 .login-prompt a:hover {
-    color: #1b262c;
+    color: var(--hj-ink);
 }
 
 .form-message {
@@ -232,13 +232,13 @@
 }
 
 .form-message.success {
-    background: #e8f6ee;
-    color: #1c5c38;
+    background: var(--hj-success-bg);
+    color: var(--hj-success);
 }
 
 .form-message.error {
-    background: #fdecea;
-    color: #8f1d17;
+    background: var(--hj-danger-bg);
+    color: var(--hj-danger);
 }
 
 /* Full-width button, separated from checkbox */
@@ -254,7 +254,7 @@
     padding: 0 24px;
     border: 0;
     border-radius: 8px;
-    background: #0f4c75;
+    background: var(--hj-primary);
     color: #fff;
     cursor: pointer;
     font-family: inherit;
@@ -265,11 +265,11 @@
 }
 
 .submit-button:hover:not(:disabled) {
-    background: #1b262c;
+    background: var(--hj-ink);
 }
 
 .submit-button:focus-visible {
-    outline: 3px solid #3282b8;
+    outline: 3px solid var(--hj-accent);
     outline-offset: 2px;
 }
 
@@ -284,7 +284,7 @@
 
 .login-prompt {
     margin: 24px 0 0;
-    color: #45565f;
+    color: var(--hj-muted);
     font-size: 14px;
     line-height: 1.5;
     text-align: center;
@@ -299,7 +299,7 @@
     min-height: 100%;
     box-sizing: border-box;
     padding: 48px 32px;
-    background: linear-gradient(145deg, #1b262c 0%, #0f4c75 100%);
+    background: linear-gradient(145deg, var(--hj-ink) 0%, var(--hj-primary) 100%);
     color: #fff;
 }
 
@@ -319,12 +319,12 @@
 }
 
 .benefits-panel h2 span {
-    color: #bbe1fa;
+    color: var(--hj-primary-light);
 }
 
 .panel-copy {
     margin: 0 0 32px;
-    color: #eaf4fb;
+    color: #F0F9FF;
     font-size: 16px;
     line-height: 1.6;
 }
@@ -368,7 +368,7 @@
 }
 
 .benefit-item div span {
-    color: #eaf4fb;
+    color: #F0F9FF;
     font-size: 14px;
     line-height: 1.55;
 }
@@ -387,7 +387,7 @@
 
 .stars {
     margin-bottom: 8px;
-    color: #ffd75e;
+    color: #FCD34D;
     font-style: normal;
     letter-spacing: 2px;
 }

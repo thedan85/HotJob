@@ -1,0 +1,125 @@
+@page "/admin/accounts"
+@rendermode InteractiveServer
+@using hotjob.DTOs.Admin
+@using hotjob.Services.Admin
+@inject IAdminService AdminService
+
+<PageTitle>Admin accounts | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Account management</h1>
+                    <p class="workspace-lede">Search for users, view their roles, and temporarily disable or reactivate accounts.</p>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading accounts">
+                    <p>Loading accounts…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else
+            {
+                <section class="workspace-card">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Roles</th>
+                                <th>Created</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in users)
+                            {
+                                <tr>
+                                    <td>@user.Email</td>
+                                    <td>@(string.IsNullOrWhiteSpace(user.FullName) ? "-" : user.FullName)</td>
+                                    <td>@user.AccountType</td>
+                                    <td>@string.Join(", ", user.Roles)</td>
+                                    <td>@user.CreatedAt.ToString("dd MMM yyyy")</td>
+                                    <td>
+                                        <span class="workspace-badge @(user.IsActive ? "success" : "danger")">
+                                            @(user.IsActive ? "Active" : "Disabled")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="() => ToggleUserAsync(user.UserId)">
+                                            @(user.IsActive ? "Disable" : "Enable")
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private IReadOnlyList<AdminUserListItemDto> users = Array.Empty<AdminUserListItemDto>();
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var result = await AdminService.GetUsersAsync();
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            users = result.Data ?? Array.Empty<AdminUserListItemDto>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleUserAsync(string userId)
+    {
+        try
+        {
+            var result = await AdminService.ToggleUserActiveAsync(userId);
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+}

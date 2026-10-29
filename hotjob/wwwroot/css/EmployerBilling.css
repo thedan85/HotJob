@@ -1,0 +1,89 @@
+/* Employer billing page */
+.eb-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.eb-meter {
+    height: 8px;
+    width: min(360px, 100%);
+    border-radius: 999px;
+    background: #e8ebf2;
+    overflow: hidden;
+    margin-top: .75rem;
+}
+
+.eb-meter span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #ff7a18, #ff4d00);
+}
+
+.eb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.eb-plan {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+}
+
+.eb-plan.is-current {
+    border: 2px solid #ff7a18;
+}
+
+.eb-plan-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.eb-plan-head h3 {
+    margin: 0;
+}
+
+.eb-price {
+    font-size: 1.75rem;
+    font-weight: 800;
+    margin: 0;
+}
+
+.eb-price span {
+    font-size: .9rem;
+    font-weight: 600;
+    color: #667085;
+}
+
+.eb-features {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: .4rem;
+    color: #475467;
+    flex: 1;
+}
+
+.eb-featured {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+.eb-featured-action {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}

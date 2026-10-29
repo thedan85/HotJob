@@ -83,7 +83,36 @@ public sealed class DemoSeederTests
 
         Assert.Equal(1, await fx.Db.CompanyProfiles.CountAsync(c => c.CompanyName == "Acme Corp"));
         Assert.Equal(1, await fx.Db.JobPostings.CountAsync(j => j.Title == "Senior .NET Developer"));
-        Assert.Equal(1, await fx.Db.Applications.CountAsync());
+        Assert.Equal(1, await fx.Db.JobPostings.CountAsync(j => j.Title == "Frontend React Developer"));
+        Assert.Equal(1, await fx.Db.JobPostings.CountAsync(j => j.Title == "Full Stack .NET Developer"));
+        Assert.Equal(1, await fx.Db.JobPostings.CountAsync(j => j.Title == "QA Engineer"));
+        Assert.Equal(3, await fx.Db.Applications.CountAsync());
+    }
+
+    [Fact]
+    public async Task SeedAsync_SeedsExtraJobsAndApplicationsForSwaggerFlows()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await DatabaseSeeder.SeedAsync(fx.Db, NullLogger.Instance);
+
+        await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, DemoSeed(), NullLogger.Instance);
+
+        var company = await fx.Db.CompanyProfiles.SingleAsync(c => c.CompanyName == "Acme Corp");
+        var jobs = await fx.Db.JobPostings
+            .Include(j => j.JobSkills)
+            .Include(j => j.CategoryMappings)
+            .Where(j => j.CompanyProfileId == company.Id)
+            .ToListAsync();
+        Assert.Contains(jobs, j => j.Title == "Frontend React Developer"
+            && j.Status == JobStatus.Published
+            && j.JobSkills.Count > 0
+            && j.CategoryMappings.Count > 0);
+        Assert.Contains(jobs, j => j.Title == "Full Stack .NET Developer" && j.Status == JobStatus.Published);
+        Assert.Contains(jobs, j => j.Title == "QA Engineer" && j.Status == JobStatus.Draft);
+
+        Assert.True(await fx.Db.Applications.AnyAsync(a => a.CurrentStatus == ApplicationStatus.Viewed));
+        Assert.True(await fx.Db.Applications.AnyAsync(a => a.CurrentStatus == ApplicationStatus.Shortlisted));
+        Assert.True(await fx.Db.Applications.AnyAsync(a => a.CurrentStatus == ApplicationStatus.Pending));
     }
 
     [Fact]

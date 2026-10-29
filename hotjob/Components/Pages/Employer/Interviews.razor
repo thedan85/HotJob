@@ -1,53 +1,82 @@
 @page "/employer/interviews"
+@implements IDisposable
 @rendermode InteractiveServer
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using hotjob.DTOs.Employer
+@using hotjob.DTOs.Job
 @using hotjob.Models.Application
 @using hotjob.Services.Employer
+@using hotjob.Services.Job
 @inject IApplicantService ApplicantService
 @inject IInterviewService InterviewService
 @inject INotificationService NotificationService
+@inject IJobService JobService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
 
-<PageTitle>Interviews &amp; Applicants | HotJob</PageTitle>
+<PageTitle>Applicants | HotJob</PageTitle>
 
 <AuthorizeView Roles="Employer">
     <Authorized Context="auth">
-        <div class="ei-page">
-            <section class="ei-header">
-                <div>
-                    <p class="ei-eyebrow">ATS Interview Ops</p>
-                    <h1>Interview Scheduling &amp; Candidate Evaluation</h1>
-                    <p>Review applicants, advance them one step at a time, schedule interviews, and message candidates — all scoped to your own company.</p>
+        <div class="ei-page workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Employer workspace</p>
+                    <h1>Applicants</h1>
+                    <p class="workspace-lede">Review candidates, move them through the pipeline, schedule interviews, and send updates. Everything stays scoped to your company.</p>
+                </div>
+                <div class="workspace-actions">
+                    <a class="workspace-btn workspace-btn-secondary" href="/employer/jobs">View job posts</a>
                 </div>
             </section>
 
-            <div class="ei-banner" role="note"><strong>ATS guardrail:</strong> scheduling for a <strong>Shortlisted</strong> application auto-advances it to Interviewing. Terminal applications (Offered / Rejected / Withdrawn) cannot take new interviews. Status moves forward-only: Pending → Viewed → Shortlisted → Interviewing → Offered, or Reject from any open state.</div>
-
             @if (isLoading)
             {
-                <div class="ei-loading" role="status">Loading applicants...</div>
+                <div class="ei-layout" aria-busy="true" aria-label="Loading applicants">
+                    <section class="workspace-card">
+                        <div class="workspace-skeleton" style="height:28px;width:45%;margin-bottom:16px"></div>
+                        <div class="ei-skeleton-list">
+                            <div class="workspace-skeleton" style="height:84px"></div>
+                            <div class="workspace-skeleton" style="height:84px"></div>
+                            <div class="workspace-skeleton" style="height:84px"></div>
+                        </div>
+                    </section>
+                    <section class="workspace-card">
+                        <div class="workspace-skeleton" style="height:150px"></div>
+                    </section>
+                    <p class="visually-hidden" role="status">Loading applicants…</p>
+                </div>
             }
             else if (!string.IsNullOrWhiteSpace(loadError))
             {
-                <div class="ei-alert" role="alert">@loadError</div>
+                <div class="workspace-alert" role="alert">@loadError</div>
             }
             else
             {
                 @if (!string.IsNullOrWhiteSpace(actionMessage))
                 {
-                    <div class="ei-notice" role="status">@actionMessage</div>
+                    <div class="workspace-notice" role="status" aria-live="polite">@actionMessage</div>
                 }
                 @if (!string.IsNullOrWhiteSpace(actionError))
                 {
-                    <div class="ei-alert" role="alert">@actionError</div>
+                    <div class="workspace-alert" role="alert" aria-live="assertive">@actionError</div>
                 }
 
-                <section class="ei-filters" aria-label="Applicant filters">
-                    <label class="ei-field">Job posting id <InputNumber @bind-Value="query.JobPostingId" /></label>
-                    <label class="ei-field">Status
+                <section class="workspace-toolbar" aria-label="Applicant filters">
+                    <label class="workspace-field ei-job-filter">
+                        <span>Job</span>
+                        <InputSelect @bind-Value="query.JobPostingId">
+                            <option value="">All jobs</option>
+                            @foreach (var job in jobs)
+                            {
+                                <option value="@job.Id">@job.Title (@job.Status)</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <label class="workspace-field">
+                        <span>Status</span>
                         <InputSelect @bind-Value="statusFilter">
                             <option value="">All statuses</option>
                             @foreach (var s in Enum.GetValues<ApplicationStatus>())
@@ -56,34 +85,71 @@
                             }
                         </InputSelect>
                     </label>
-                    <label class="ei-field ei-field-grow">Search <InputText @bind-Value="query.Search" placeholder="Name or email" /></label>
-                    <button class="ei-btn ei-btn-secondary" type="button" @onclick="SearchAsync">Filter</button>
+                    <label class="workspace-field workspace-field-grow">
+                        <span>Search</span>
+                        <InputText @bind-Value="query.Search" placeholder="Candidate name or email" />
+                    </label>
+                    <div class="workspace-toolbar-actions">
+                        <button class="workspace-btn workspace-btn-primary" type="button" @onclick="SearchAsync">Apply filters</button>
+                        @if (HasFilters)
+                        {
+                            <button class="workspace-btn workspace-btn-ghost" type="button" @onclick="ClearFiltersAsync">Clear</button>
+                        }
+                    </div>
                 </section>
 
+                <details class="workspace-details ei-rules">
+                    <summary>How candidate status changes work</summary>
+                    <div class="workspace-details-body">
+                        <p>Statuses move forward one step at a time: Pending → Viewed → Shortlisted → Interviewing → Offered. You can reject from any open state.</p>
+                        <p>Scheduling an interview for a <strong>Shortlisted</strong> candidate automatically advances them to <strong>Interviewing</strong>. Offered, Rejected, and Withdrawn applications are terminal.</p>
+                    </div>
+                </details>
+
                 <div class="ei-layout">
-                    <section class="ei-list" aria-label="Applicants">
-                        <div class="ei-card">
-                            <h2>Applicants</h2>
-                            <p class="ei-sub">@(totalCount) total · page @(page) of @(Math.Max(totalPages, 1))</p>
+                    <section class="workspace-card ei-list" aria-label="Applicant queue">
+                        <div class="workspace-section-head">
+                            <div>
+                                <h2>Applicant queue</h2>
+                                <p class="workspace-sub">@totalCount total · page @(page) of @Math.Max(totalPages, 1)</p>
+                            </div>
+                        </div>
+
+                        <div class="ei-applicant-list">
                             @foreach (var a in applicants)
                             {
-                                <article class="ei-applicant @(selected?.ApplicationId == a.ApplicationId ? "ei-selected" : string.Empty)">
-                                    <div class="ei-applicant-head">
-                                        <strong>@a.CandidateFullName</strong>
-                                        <span class="ei-badge ei-@a.CurrentStatus.ToString().ToLowerInvariant()">@a.CurrentStatus</span>
-                                    </div>
-                                    <small>@a.JobTitle · applied @a.AppliedAt.ToString("dd MMM yyyy")</small>
-                                    <small>@(a.CandidateEmail ?? "no email") · CV: @a.ResumeTitle</small>
-                                    <div><button class="ei-btn ei-btn-secondary ei-btn-small" type="button" @onclick="() => SelectAsync(a.ApplicationId)">Open</button></div>
-                                </article>
+                                <button class="ei-applicant @(selected?.ApplicationId == a.ApplicationId ? "is-selected" : string.Empty)" type="button" aria-pressed="@(selected?.ApplicationId == a.ApplicationId ? "true" : "false")" @onclick="() => SelectAsync(a.ApplicationId)">
+                                    <span class="workspace-avatar workspace-avatar-sm" aria-hidden="true">@Initials(a.CandidateFullName)</span>
+                                    <span class="ei-applicant-body">
+                                        <span class="ei-applicant-top">
+                                            <strong>@a.CandidateFullName</strong>
+                                            <span class="workspace-badge @StatusClass(a.CurrentStatus)">@a.CurrentStatus</span>
+                                        </span>
+                                        <span class="ei-applicant-job">@a.JobTitle</span>
+                                        <span class="ei-applicant-meta">Applied @a.AppliedAt.ToString("dd MMM yyyy") · @(a.CandidateEmail ?? "no email")</span>
+                                    </span>
+                                    <span class="ei-applicant-chevron" aria-hidden="true">›</span>
+                                </button>
                             }
                             @if (applicants.Count == 0)
                             {
-                                <p class="ei-sub">No applicants match this filter.</p>
+                                <div class="workspace-empty">
+                                    <span class="workspace-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3 19c.8-3 3.1-4.5 6-4.5s5.2 1.5 6 4.5" /><path d="M16 8h5" /></svg></span>
+                                    <h3>No applicants match this view</h3>
+                                    <p>Try another job or status, or clear the filters to see the full queue.</p>
+                                    @if (HasFilters)
+                                    {
+                                        <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="ClearFiltersAsync">Clear filters</button>
+                                    }
+                                </div>
                             }
-                            <div class="ei-pagination" style="margin-top:10px">
-                                <button class="ei-btn ei-btn-secondary ei-btn-small" type="button" disabled="@(page <= 1)" @onclick="() => ChangePageAsync(page - 1)">← Prev</button>
-                                <button class="ei-btn ei-btn-secondary ei-btn-small" type="button" disabled="@(page >= totalPages)" @onclick="() => ChangePageAsync(page + 1)">Next →</button>
+                        </div>
+
+                        <div class="workspace-pagination">
+                            <span>@totalCount candidate@(totalCount == 1 ? string.Empty : "s")</span>
+                            <div class="workspace-pagination-actions">
+                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" disabled="@(page <= 1)" @onclick="() => ChangePageAsync(page - 1)">← Previous</button>
+                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" disabled="@(page >= totalPages)" @onclick="() => ChangePageAsync(page + 1)">Next →</button>
                             </div>
                         </div>
                     </section>
@@ -91,114 +157,287 @@
                     <section class="ei-detail" aria-label="Application detail">
                         @if (selected is null)
                         {
-                            <div class="ei-card"><h2>No application selected</h2><p class="ei-sub">Pick an applicant to see the resume snapshot, history, interviews, and actions.</p></div>
+                            <div class="workspace-card">
+                                <div class="workspace-empty">
+                                    <span class="workspace-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></svg></span>
+                                    <h3>Select an applicant</h3>
+                                    <p>Pick someone from the queue to see their resume, history, interviews, and next actions.</p>
+                                </div>
+                            </div>
                         }
                         else
                         {
-                            <div class="ei-section">
-                                <h3>@selected.CandidateFullName — @selected.JobTitle</h3>
-                                <p class="ei-sub"><span class="ei-badge ei-@selected.CurrentStatus.ToString().ToLowerInvariant()">@selected.CurrentStatus</span> · applied @selected.AppliedAt.ToString("dd MMM yyyy HH:mm")</p>
-                                <dl class="ei-meta">
-                                    <div><dt>Email</dt><dd>@(selected.CandidateEmail ?? "—")</dd></div>
-                                    <div><dt>Cover letter</dt><dd>@(selected.CoverLetter ?? "—")</dd></div>
-                                    <div><dt>Snapshot summary</dt><dd class="ei-snapshot">@(selected.SnapshotSummary ?? "—")</dd></div>
-                                    <div><dt>Snapshot file</dt><dd>@(selected.SnapshotFileUrl ?? "—")</dd></div>
-                                </dl>
-                            </div>
-
-                            <div class="ei-section">
-                                <h3>Resume (live)</h3>
-                                <p class="ei-sub"><strong>@selected.Resume.Title</strong>@(selected.Resume.IsPrimary ? " · primary" : string.Empty) — @(selected.Resume.Summary ?? "no summary")</p>
-                                <p class="ei-sub">Education: @(selected.Resume.Educations.Count == 0 ? "—" : string.Join("; ", selected.Resume.Educations.Select(e => $"{e.SchoolName} ({e.Major ?? "—"})")))</p>
-                                <p class="ei-sub">Experience: @(selected.Resume.WorkExperiences.Count == 0 ? "—" : string.Join("; ", selected.Resume.WorkExperiences.Select(w => $"{w.JobTitle ?? "—"} @ {w.CompanyName}")))</p>
-                                <p class="ei-sub">Skills: @(selected.Resume.Skills.Count == 0 ? "—" : string.Join(", ", selected.Resume.Skills.Select(s => $"{s.SkillName} ({s.YearsOfExperience}y)")))</p>
-                            </div>
-
-                            <div class="ei-section">
-                                <h3>Advance status</h3>
-                                <EditForm Model="statusForm" OnValidSubmit="AdvanceStatusAsync">
-                                    <DataAnnotationsValidator />
-                                    <ValidationSummary />
-                                    <div class="ei-form-grid">
-                                        <label>Next status
-                                            <InputSelect @bind-Value="statusForm.Status">
-                                                @foreach (var s in new[] { ApplicationStatus.Viewed, ApplicationStatus.Shortlisted, ApplicationStatus.Interviewing, ApplicationStatus.Offered, ApplicationStatus.Rejected })
-                                                {
-                                                    <option value="@s">@s</option>
-                                                }
-                                            </InputSelect>
-                                        </label>
-                                        <label class="ei-wide">Note <InputTextArea @bind-Value="statusForm.Notes" rows="2" placeholder="Optional note for history + candidate notification" /></label>
-                                    </div>
-                                    <div style="margin-top:10px"><button class="ei-btn ei-btn-primary ei-btn-small" type="submit" disabled="@isActing">Update status</button></div>
-                                </EditForm>
-                                <h3 style="margin-top:14px">Status history</h3>
-                                <ul class="ei-timeline">
-                                    @foreach (var h in selected.StatusHistory.OrderByDescending(h => h.ChangedAt))
-                                    {
-                                        <li><strong>@h.Status</strong> — @(h.Notes ?? "no note")<br /><small>@h.ChangedAt.ToString("dd MMM yyyy HH:mm")</small></li>
-                                    }
-                                    @if (selected.StatusHistory.Count == 0)
-                                    {
-                                        <li>No history yet.</li>
-                                    }
-                                </ul>
-                            </div>
-
-                            <div class="ei-section">
-                                <h3>Interviews</h3>
-                                @foreach (var iv in interviews.OrderBy(i => i.InterviewDate))
-                                {
-                                    <div class="ei-interview">
-                                        <strong>@iv.InterviewDate.ToString("dd MMM yyyy HH:mm")</strong>
-                                        <span class="ei-badge ei-@iv.Status.ToString().ToLowerInvariant()">@iv.Status</span><br />
-                                        <span>@(iv.InterviewType?.ToString() ?? "—") · @(iv.LocationOrLink ?? "no location/link")</span><br />
-                                        <span>@(iv.Notes ?? "no notes")</span>
-                                        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-                                            @if (iv.Status == InterviewStatus.Scheduled)
+                            <article class="workspace-card ei-candidate-head">
+                                <div class="ei-candidate-identity">
+                                    <span class="workspace-avatar workspace-avatar-lg" aria-hidden="true">@Initials(selected.CandidateFullName)</span>
+                                    <div class="ei-candidate-copy">
+                                        <div class="ei-candidate-title">
+                                            <h2>@selected.CandidateFullName</h2>
+                                            <span class="workspace-badge @StatusClass(selected.CurrentStatus)">@selected.CurrentStatus</span>
+                                        </div>
+                                        <p class="workspace-sub">@selected.JobTitle · applied @selected.AppliedAt.ToString("dd MMM yyyy HH:mm")</p>
+                                        <div class="ei-contact-row">
+                                            @if (!string.IsNullOrWhiteSpace(selected.CandidateEmail))
                                             {
-                                                <button class="ei-btn ei-btn-secondary ei-btn-small" type="button" @onclick="() => CompleteAsync(iv.Id)">Mark completed</button>
-                                                <button class="ei-btn ei-btn-danger ei-btn-small" type="button" @onclick="() => CancelAsync(iv.Id)">Cancel</button>
+                                                <a href="mailto:@selected.CandidateEmail">@selected.CandidateEmail</a>
+                                            }
+                                            @if (SafeUrl(selected.SnapshotFileUrl) is { } snapshotUrl)
+                                            {
+                                                <a href="@snapshotUrl" target="_blank" rel="noopener noreferrer">Open resume snapshot</a>
                                             }
                                         </div>
                                     </div>
-                                }
-                                @if (interviews.Count == 0)
-                                {
-                                    <p class="ei-sub">No interviews scheduled for this application.</p>
-                                }
-                                <h3 style="margin-top:12px">Schedule interview</h3>
-                                <EditForm Model="interviewForm" OnValidSubmit="ScheduleAsync">
-                                    <DataAnnotationsValidator />
-                                    <div class="ei-form-grid">
-                                        <label>Date &amp; time (UTC, future) <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="interviewForm.InterviewDate" /></label>
-                                        <label>Type
-                                            <InputSelect @bind-Value="interviewForm.InterviewType">
-                                                <option value="">—</option>
-                                                @foreach (var t in Enum.GetValues<InterviewType>())
-                                                {
-                                                    <option value="@t">@t</option>
-                                                }
-                                            </InputSelect>
-                                        </label>
-                                        <label class="ei-wide">Location or link <InputText @bind-Value="interviewForm.LocationOrLink" placeholder="Room / address / meeting URL" /></label>
-                                        <label class="ei-wide">Notes <InputTextArea @bind-Value="interviewForm.Notes" rows="2" /></label>
-                                    </div>
-                                    <div style="margin-top:10px"><button class="ei-btn ei-btn-primary ei-btn-small" type="submit" disabled="@isActing">Schedule</button></div>
-                                </EditForm>
-                            </div>
+                                </div>
+                                <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="#advance-status">Review candidate</a>
+                            </article>
 
-                            <div class="ei-section">
-                                <h3>Message candidate</h3>
-                                <EditForm Model="notifyForm" OnValidSubmit="NotifyAsync">
-                                    <DataAnnotationsValidator />
-                                    <ValidationSummary />
-                                    <div class="ei-form-grid">
-                                        <label class="ei-wide">Title <InputText @bind-Value="notifyForm.Title" placeholder="e.g. Next-round invitation" /></label>
-                                        <label class="ei-wide">Content <InputTextArea @bind-Value="notifyForm.Content" rows="2" /></label>
-                                    </div>
-                                    <div style="margin-top:10px"><button class="ei-btn ei-btn-secondary ei-btn-small" type="submit" disabled="@isActing">Send message</button></div>
-                                </EditForm>
+                            <div class="ei-detail-grid">
+                                <div class="ei-detail-main">
+                                    <section class="workspace-card">
+                                        <h2>Cover letter</h2>
+                                        <p class="ei-copy">@(string.IsNullOrWhiteSpace(selected.CoverLetter) ? "No cover letter attached." : selected.CoverLetter)</p>
+                                    </section>
+
+                                    @if (!string.IsNullOrWhiteSpace(selected.SnapshotSummary))
+                                    {
+                                        <section class="workspace-card">
+                                            <h2>Screening snapshot</h2>
+                                            <p class="ei-copy">@selected.SnapshotSummary</p>
+                                        </section>
+                                    }
+
+                                    <section class="workspace-card">
+                                        <div class="workspace-section-head">
+                                            <div>
+                                                <h2>Resume</h2>
+                                                <p class="workspace-sub">@selected.Resume.Title@(selected.Resume.IsPrimary ? " · primary CV" : string.Empty)</p>
+                                            </div>
+                                        </div>
+                                        <p class="ei-copy">@(string.IsNullOrWhiteSpace(selected.Resume.Summary) ? "No resume summary." : selected.Resume.Summary)</p>
+
+                                        <div class="ei-resume-grid">
+                                            <div class="ei-resume-block">
+                                                <h3>Experience</h3>
+                                                @if (selected.Resume.WorkExperiences.Count == 0)
+                                                {
+                                                    <p class="workspace-sub">No experience listed.</p>
+                                                }
+                                                else
+                                                {
+                                                    @foreach (var work in selected.Resume.WorkExperiences)
+                                                    {
+                                                        <div class="ei-resume-item">
+                                                            <strong>@(work.JobTitle ?? "Role")</strong>
+                                                            <span>@work.CompanyName</span>
+                                                            <span class="ei-date">@DateRange(work.StartDate, work.EndDate)</span>
+                                                            @if (!string.IsNullOrWhiteSpace(work.Description))
+                                                            {
+                                                                <p>@work.Description</p>
+                                                            }
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+
+                                            <div class="ei-resume-block">
+                                                <h3>Education</h3>
+                                                @if (selected.Resume.Educations.Count == 0)
+                                                {
+                                                    <p class="workspace-sub">No education listed.</p>
+                                                }
+                                                else
+                                                {
+                                                    @foreach (var education in selected.Resume.Educations)
+                                                    {
+                                                        <div class="ei-resume-item">
+                                                            <strong>@education.SchoolName</strong>
+                                                            <span>@(education.Major ?? "No major")</span>
+                                                            <span class="ei-date">@DateRange(education.StartDate, education.EndDate)@(education.Gpa.HasValue ? $" · GPA {education.Gpa:0.0}" : string.Empty)</span>
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                        </div>
+
+                                        <div class="ei-resume-skills">
+                                            <h3>Skills</h3>
+                                            @if (selected.Resume.Skills.Count == 0)
+                                            {
+                                                <p class="workspace-sub">No skills listed.</p>
+                                            }
+                                            else
+                                            {
+                                                <div class="workspace-chip-row">
+                                                    @foreach (var skill in selected.Resume.Skills)
+                                                    {
+                                                        <span class="workspace-chip">@skill.SkillName · @skill.YearsOfExperience y</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    </section>
+
+                                    <section class="workspace-card">
+                                        <div class="workspace-section-head">
+                                            <div>
+                                                <h2>Status history</h2>
+                                                <p class="workspace-sub">Newest first</p>
+                                            </div>
+                                        </div>
+                                        <ol class="ei-timeline">
+                                            @foreach (var h in selected.StatusHistory.OrderByDescending(h => h.ChangedAt))
+                                            {
+                                                <li>
+                                                    <span class="ei-timeline-dot" aria-hidden="true"></span>
+                                                    <div>
+                                                        <strong>@h.Status</strong>
+                                                        <span class="ei-timeline-note">@(h.Notes ?? "No note")</span>
+                                                        <time>@h.ChangedAt.ToString("dd MMM yyyy HH:mm")</time>
+                                                    </div>
+                                                </li>
+                                            }
+                                            @if (selected.StatusHistory.Count == 0)
+                                            {
+                                                <li>
+                                                    <span class="ei-timeline-dot" aria-hidden="true"></span>
+                                                    <div><strong>No history yet</strong><span class="ei-timeline-note">The application was just created.</span></div>
+                                                </li>
+                                            }
+                                        </ol>
+                                    </section>
+                                </div>
+
+                                <aside class="ei-detail-side">
+                                    <section class="workspace-card" id="advance-status">
+                                        <h2>Move candidate</h2>
+                                        <p class="workspace-sub">Forward-only. Reject from any open state.</p>
+                                        @if (AllowedStatuses(selected.CurrentStatus).Length == 0)
+                                        {
+                                            <p class="workspace-hint">This application is terminal. No further status changes are possible.</p>
+                                        }
+                                        else
+                                        {
+                                            <EditForm Model="statusForm" OnValidSubmit="AdvanceStatusAsync">
+                                                <DataAnnotationsValidator />
+                                                <ValidationSummary />
+                                                <div class="workspace-form-grid">
+                                                    <label class="workspace-field workspace-wide">
+                                                        <span>Next status</span>
+                                                        <InputSelect @bind-Value="statusForm.Status">
+                                                            @foreach (var s in AllowedStatuses(selected.CurrentStatus))
+                                                            {
+                                                                <option value="@s">@s</option>
+                                                            }
+                                                        </InputSelect>
+                                                    </label>
+                                                    <label class="workspace-field workspace-wide">
+                                                        <span>Note</span>
+                                                        <InputTextArea @bind-Value="statusForm.Notes" rows="3" placeholder="Optional note for history and the candidate notification." />
+                                                    </label>
+                                                </div>
+                                                <div class="workspace-form-actions">
+                                                    <button class="workspace-btn workspace-btn-primary" type="submit" disabled="@isActing">Update status</button>
+                                                </div>
+                                            </EditForm>
+                                        }
+                                    </section>
+
+                                    <section class="workspace-card">
+                                        <div class="workspace-section-head">
+                                            <div>
+                                                <h2>Interviews</h2>
+                                                <p class="workspace-sub">@interviews.Count scheduled</p>
+                                            </div>
+                                        </div>
+
+                                        @foreach (var iv in interviews.OrderBy(i => i.InterviewDate))
+                                        {
+                                            <article class="ei-interview-card">
+                                                <div class="ei-interview-top">
+                                                    <strong>@iv.InterviewDate.ToString("dd MMM yyyy")</strong>
+                                                    <span class="workspace-badge @InterviewStatusClass(iv.Status)">@iv.Status</span>
+                                                </div>
+                                                <p class="ei-interview-meta">@iv.InterviewDate.ToString("HH:mm") · @(iv.InterviewType?.ToString() ?? "Type not set")</p>
+                                                @if (!string.IsNullOrWhiteSpace(iv.LocationOrLink))
+                                                {
+                                                    <p class="ei-interview-location">@iv.LocationOrLink</p>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(iv.Notes))
+                                                {
+                                                    <p class="ei-interview-notes">@iv.Notes</p>
+                                                }
+                                                @if (iv.Status == InterviewStatus.Scheduled)
+                                                {
+                                                    <div class="ei-interview-actions">
+                                                        <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => CompleteAsync(iv.Id)">Mark completed</button>
+                                                        <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => CancelAsync(iv.Id)">Cancel</button>
+                                                    </div>
+                                                }
+                                            </article>
+                                        }
+                                        @if (interviews.Count == 0)
+                                        {
+                                            <p class="workspace-sub">No interviews scheduled yet.</p>
+                                        }
+
+                                        <details class="workspace-details ei-schedule">
+                                            <summary>Schedule an interview</summary>
+                                            <div class="workspace-details-body">
+                                                <EditForm Model="interviewForm" OnValidSubmit="ScheduleAsync">
+                                                    <DataAnnotationsValidator />
+                                                    <div class="workspace-form-grid">
+                                                        <label class="workspace-field workspace-wide">
+                                                            <span>Date &amp; time (UTC, future)</span>
+                                                            <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="interviewForm.InterviewDate" />
+                                                        </label>
+                                                        <label class="workspace-field workspace-wide">
+                                                            <span>Type</span>
+                                                            <InputSelect @bind-Value="interviewForm.InterviewType">
+                                                                <option value="">—</option>
+                                                                @foreach (var t in Enum.GetValues<InterviewType>())
+                                                                {
+                                                                    <option value="@t">@t</option>
+                                                                }
+                                                            </InputSelect>
+                                                        </label>
+                                                        <label class="workspace-field workspace-wide">
+                                                            <span>Location or link</span>
+                                                            <InputText @bind-Value="interviewForm.LocationOrLink" placeholder="Room, address, or meeting URL" />
+                                                        </label>
+                                                        <label class="workspace-field workspace-wide">
+                                                            <span>Notes</span>
+                                                            <InputTextArea @bind-Value="interviewForm.Notes" rows="2" />
+                                                        </label>
+                                                    </div>
+                                                    <div class="workspace-form-actions">
+                                                        <button class="workspace-btn workspace-btn-primary" type="submit" disabled="@isActing">Schedule interview</button>
+                                                    </div>
+                                                </EditForm>
+                                            </div>
+                                        </details>
+                                    </section>
+
+                                    <details class="workspace-card ei-message">
+                                        <summary>Message candidate</summary>
+                                        <EditForm Model="notifyForm" OnValidSubmit="NotifyAsync">
+                                            <DataAnnotationsValidator />
+                                            <ValidationSummary />
+                                            <div class="workspace-form-grid">
+                                                <label class="workspace-field workspace-wide">
+                                                    <span>Title</span>
+                                                    <InputText @bind-Value="notifyForm.Title" placeholder="e.g. Next-round invitation" />
+                                                </label>
+                                                <label class="workspace-field workspace-wide">
+                                                    <span>Message</span>
+                                                    <InputTextArea @bind-Value="notifyForm.Content" rows="3" placeholder="Write a short update for the candidate." />
+                                                </label>
+                                            </div>
+                                            <div class="workspace-form-actions">
+                                                <button class="workspace-btn workspace-btn-secondary" type="submit" disabled="@isActing">Send message</button>
+                                            </div>
+                                        </EditForm>
+                                    </details>
+                                </aside>
                             </div>
                         }
                     </section>
@@ -225,18 +464,57 @@
     private ApplicationStatus? statusFilter;
     private readonly ApplicantListQuery query = new() { PageSize = PageSize };
     private List<ApplicantListItemResponse> applicants = new();
+    private List<JobListItemResponse> jobs = new();
     private ApplicantDetailResponse? selected;
     private List<InterviewResponse> interviews = new();
     private readonly UpdateStatusRequest statusForm = new() { Status = ApplicationStatus.Viewed };
     private readonly CreateInterviewRequest interviewForm = new() { InterviewDate = DateTime.UtcNow.AddDays(1) };
     private readonly SendNotificationRequest notifyForm = new();
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    [SupplyParameterFromQuery(Name = "jobId")]
+    public int? JobId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        query.JobPostingId = JobId;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync();
+            await LoadJobsAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated != true || (isLoading && hasLoadedOnce))
+        {
+            return;
+        }
+        await InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            await LoadJobsAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
 
     private async Task<string?> GetUserIdAsync()
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        var result = await JobService.ListAsync(await GetUserIdAsync() ?? string.Empty, null, null, 1, 100);
+        jobs = result.Success && result.Data is not null
+            ? result.Data.Items.ToList()
+            : new List<JobListItemResponse>();
     }
 
     private async Task LoadAsync()
@@ -286,6 +564,17 @@
         await LoadAsync();
     }
 
+    private bool HasFilters => query.JobPostingId.HasValue || statusFilter.HasValue || !string.IsNullOrWhiteSpace(query.Search);
+
+    private async Task ClearFiltersAsync()
+    {
+        query.JobPostingId = null;
+        query.Search = null;
+        statusFilter = null;
+        page = 1;
+        await LoadAsync();
+    }
+
     private async Task SelectAsync(int applicationId)
     {
         actionMessage = actionError = null;
@@ -297,6 +586,8 @@
             return;
         }
         selected = detail.Data;
+        statusForm.Status = NextStatusFor(selected.CurrentStatus);
+        statusForm.Notes = null;
         var list = await InterviewService.ListAsync(userId, applicationId);
         interviews = list.Success && list.Data is not null ? list.Data.ToList() : new();
     }
@@ -311,6 +602,8 @@
         if (result.Success && result.Data is not null)
         {
             selected = result.Data;
+            statusForm.Status = NextStatusFor(selected.CurrentStatus);
+            statusForm.Notes = null;
             actionMessage = $"Status updated to {selected.CurrentStatus}; candidate notified.";
             await LoadAsync();
         }
@@ -388,5 +681,60 @@
         {
             actionError = result.Errors.FirstOrDefault() ?? "Could not send this message.";
         }
+    }
+
+    private static string Initials(string fullName)
+    {
+        var initials = string.Join("", fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0]));
+        return string.IsNullOrWhiteSpace(initials) ? "?" : initials.ToUpperInvariant();
+    }
+
+    private static string StatusClass(ApplicationStatus status) => status switch
+    {
+        ApplicationStatus.Pending => "is-pending",
+        ApplicationStatus.Viewed => "is-viewed",
+        ApplicationStatus.Shortlisted => "is-shortlisted",
+        ApplicationStatus.Interviewing => "is-interviewing",
+        ApplicationStatus.Offered => "is-offered",
+        ApplicationStatus.Rejected => "is-rejected",
+        ApplicationStatus.Withdrawn => "is-withdrawn",
+        _ => "is-muted"
+    };
+
+    private static string InterviewStatusClass(InterviewStatus status) => status switch
+    {
+        InterviewStatus.Scheduled => "is-scheduled",
+        InterviewStatus.Completed => "is-completed",
+        InterviewStatus.Cancelled => "is-cancelled",
+        _ => "is-muted"
+    };
+
+    private static ApplicationStatus[] AllowedStatuses(ApplicationStatus status) => status switch
+    {
+        ApplicationStatus.Pending => new[] { ApplicationStatus.Viewed, ApplicationStatus.Rejected },
+        ApplicationStatus.Viewed => new[] { ApplicationStatus.Shortlisted, ApplicationStatus.Rejected },
+        ApplicationStatus.Shortlisted => new[] { ApplicationStatus.Interviewing, ApplicationStatus.Rejected },
+        ApplicationStatus.Interviewing => new[] { ApplicationStatus.Offered, ApplicationStatus.Rejected },
+        _ => Array.Empty<ApplicationStatus>()
+    };
+
+    private static ApplicationStatus NextStatusFor(ApplicationStatus status) =>
+        AllowedStatuses(status).FirstOrDefault(status);
+
+    private static string DateRange(DateOnly? start, DateOnly? end)
+    {
+        if (start is null && end is null) return "Dates not set";
+        if (start is null) return $"Until {end:MMM yyyy}";
+        if (end is null) return $"{start:MMM yyyy} – present";
+        return $"{start:MMM yyyy} – {end:MMM yyyy}";
+    }
+
+    private static string? SafeUrl(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate)) return null;
+        return Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            ? candidate
+            : null;
     }
 }

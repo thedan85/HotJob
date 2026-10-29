@@ -1,4 +1,5 @@
 using hotjob.Models;
+using hotjob.Models.Billing;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Models.ML;
@@ -34,6 +35,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<MatchScore> MatchScores => Set<MatchScore>();
     public DbSet<ModelTrainingLog> ModelTrainingLogs => Set<ModelTrainingLog>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Plan> Plans => Set<Plan>();
+    public DbSet<Payment> Payments => Set<Payment>();
 
     /// <summary>Configures relationships, delete behaviors, indexes and column precision.</summary>
     /// <param name="modelBuilder">Fluent API builder.</param>
@@ -101,16 +104,67 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<SavedJob>().HasOne(x => x.JobPosting).WithMany(x => x.SavedBy).HasForeignKey(x => x.JobPostingId).OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Notification>().HasIndex(x => new { x.UserId, x.IsRead });
+        modelBuilder.Entity<Notification>().HasIndex(x => new { x.UserId, x.Kind, x.CreatedAt });
+        // ponytail: MySQL and SQLite both treat NULLs as distinct in a unique index, so the
+        // many notifications without a related job are unaffected. Job alerts have both
+        // values set, making (candidate, job) unique; the service also checks first.
+        modelBuilder.Entity<Notification>()
+            .HasIndex(x => new { x.UserId, x.Kind, x.RelatedJobPostingId })
+            .IsUnique();
+        modelBuilder.Entity<Notification>()
+            .HasOne(x => x.RelatedJob).WithMany().HasForeignKey(x => x.RelatedJobPostingId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<MatchScore>().HasKey(x => new { x.JobPostingId, x.ResumeId });
         modelBuilder.Entity<MatchScore>().HasOne(x => x.JobPosting).WithMany(x => x.MatchScores).HasForeignKey(x => x.JobPostingId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<MatchScore>().HasOne(x => x.Resume).WithMany(x => x.MatchScores).HasForeignKey(x => x.ResumeId).OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ModelTrainingLog>().HasOne(x => x.TrainedBy).WithMany().HasForeignKey(x => x.TrainedByUserId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<ModelTrainingLog>().HasIndex(x => new { x.IsActive, x.TrainedAt });
 
         modelBuilder.Entity<RefreshToken>()
             .HasOne(x => x.User).WithMany(x => x.RefreshTokens).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<RefreshToken>().HasIndex(x => x.TokenHash).IsUnique();
         modelBuilder.Entity<RefreshToken>().HasIndex(x => new { x.UserId, x.RevokedAtUtc });
+
+        ConfigureBilling(modelBuilder);
+    }
+
+    // ponytail: every Payment FK is Restrict or SetNull — deleting a company/user/plan must not erase billing history,
+    // and deleting a job only detaches it (SetNull) so jobs stay deletable.
+    private static void ConfigureBilling(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Plan>(plan =>
+        {
+            plan.HasIndex(x => x.Code).IsUnique();
+            plan.Property(x => x.Price).HasPrecision(18, 0);
+        });
+
+        modelBuilder.Entity<CompanyProfile>()
+            .HasOne(x => x.Plan).WithMany().HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Candidate>()
+            .HasOne(x => x.PremiumPlan).WithMany().HasForeignKey(x => x.PremiumPlanId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<JobPosting>().HasIndex(x => x.FeaturedUntil);
+
+        modelBuilder.Entity<Payment>(payment =>
+        {
+            payment.Property(x => x.Amount).HasPrecision(18, 0);
+            payment.HasIndex(x => x.VnpTxnRef).IsUnique();
+            payment.HasIndex(x => new { x.Status, x.PaidAt });
+            payment.HasIndex(x => x.CompanyProfileId);
+            payment.HasIndex(x => x.CandidateId);
+            payment.HasIndex(x => x.PayerUserId);
+            payment.HasIndex(x => x.JobPostingId);
+
+            // ponytail: Status is a concurrency token so a SaveChanges "Pending -> Paid" claim becomes
+            // UPDATE ... WHERE Id = @id AND Status = @original; a second concurrent delivery loses (contract D5).
+            payment.Property(x => x.Status).IsConcurrencyToken();
+
+            payment.HasOne(x => x.PayerUser).WithMany().HasForeignKey(x => x.PayerUserId).OnDelete(DeleteBehavior.Restrict);
+            payment.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyProfileId).OnDelete(DeleteBehavior.Restrict);
+            payment.HasOne(x => x.Candidate).WithMany().HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Restrict);
+            payment.HasOne(x => x.Plan).WithMany().HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Restrict);
+            payment.HasOne(x => x.JobPosting).WithMany().HasForeignKey(x => x.JobPostingId).OnDelete(DeleteBehavior.SetNull);
+        });
     }
 }

@@ -78,7 +78,8 @@ public sealed record JobDetailResponse(
     IReadOnlyList<JobCategoryDto> Categories,
     int ApplicationsCount,
     DateTime CreatedAt,
-    string? CompanyLocation);
+    string? CompanyLocation,
+    DateTime? FeaturedUntil);
 
 public sealed record JobListItemResponse(
     int Id,
@@ -93,7 +94,8 @@ public sealed record JobListItemResponse(
     int SkillsCount,
     IReadOnlyList<string> CategoryNames,
     int ApplicationsCount,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? FeaturedUntil);
 
 public sealed record JobDeleteResponse(int Id, bool Closed, JobStatus Status);
 
@@ -108,7 +110,8 @@ public sealed record PublicJobListItemResponse(
     JobType JobType,
     DateTime? ExpiryDate,
     DateTime CreatedAt,
-    IReadOnlyList<string> Skills);
+    IReadOnlyList<string> Skills,
+    DateTime? FeaturedUntil);
 
 public sealed class PagedResponse<T>
 {

@@ -62,9 +62,12 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
         if (string.IsNullOrWhiteSpace(userId))
             return ServiceResult<IReadOnlyList<MyNotificationDto>>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
 
+        // Job alerts have their own page; this feed carries employer messages only.
+        // The null branch is explicit because SQL would reject NULL != 'JobAlert'.
         var notifications = await dbContext.Notifications
             .AsNoTracking()
-            .Where(notification => notification.UserId == userId)
+            .Where(notification => notification.UserId == userId
+                && (notification.Kind == null || notification.Kind != NotificationKinds.JobAlert))
             .OrderByDescending(notification => notification.CreatedAt)
             .ThenByDescending(notification => notification.Id)
             .ToListAsync(cancellationToken);

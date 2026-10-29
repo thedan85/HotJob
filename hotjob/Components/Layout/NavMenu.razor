@@ -1,6 +1,5 @@
 ﻿@rendermode InteractiveServer
 @inject HotJobAuthStateProvider AuthStateProvider
-@inject AuthSession AuthSession
 @inject IJSRuntime JS
 @inject NavigationManager NavigationManager
 @using hotjob.Services.Authentication
@@ -11,16 +10,17 @@
             <span class="brand-hot">hot</span><span>job</span>
         </a>
 
-        <input type="checkbox" title="Navigation menu" class="navbar-toggler" id="site-menu-toggle" />
-        <label class="menu-toggle" for="site-menu-toggle" aria-label="Toggle navigation">
+        <button class="menu-toggle" type="button" @onclick="ToggleMenu" aria-expanded="@menuOpen"
+                aria-controls="site-menu" aria-label="@(menuOpen ? "Close navigation" : "Open navigation")">
             <span></span><span></span><span></span>
-        </label>
+        </button>
 
-        <nav class="nav-scrollable" aria-label="Primary navigation">
+        <nav id="site-menu" class="nav-scrollable @(menuOpen ? "is-open" : string.Empty)"
+             aria-label="Primary navigation" @onclick="CloseMenu">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
             <NavLink class="nav-link" href="companies">Companies</NavLink>
             <NavLink class="nav-link" href="it-jobs">Explore jobs</NavLink>
-     
+
             <AuthorizeView>
                 <Authorized Context="navAuth">
                     @if (!navAuth.User.IsInRole("Employer"))
@@ -31,15 +31,28 @@
             </AuthorizeView>
             <AuthorizeView Roles="Employer">
                 <Authorized Context="employerAuth">
-                    <NavLink class="nav-link" href="employer/jobs">My Jobs</NavLink>
-                    <NavLink class="nav-link" href="employer/interviews">Applicants</NavLink>
-                    <NavLink class="nav-link" href="employer/company">Company</NavLink>
+                    <span class="nav-group-label">Employer</span>
+                    <NavLink class="nav-link nav-link-employer" href="employer/jobs">My jobs</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="employer/candidates">Candidates</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="employer/interviews">Applicants</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="employer/company">Company</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="employer/billing">Billing</NavLink>
                 </Authorized>
             </AuthorizeView>
             <AuthorizeView Roles="Candidate">
                 <Authorized>
-                    <NavLink class="nav-link" href="my-applications">My Applications</NavLink>
+                    <NavLink class="nav-link" href="my-applications">My applications</NavLink>
+                    <NavLink class="nav-link" href="job-alerts">Job alerts</NavLink>
                     <NavLink class="nav-link" href="premium">Go premium</NavLink>
+                </Authorized>
+            </AuthorizeView>
+            <AuthorizeView Roles="Admin">
+                <Authorized>
+                    <span class="nav-group-label">Admin</span>
+                    <NavLink class="nav-link nav-link-employer" href="admin">Dashboard</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/accounts">Accounts</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/companies">Companies</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/jobs">Jobs</NavLink>
                 </Authorized>
             </AuthorizeView>
         </nav>
@@ -47,19 +60,22 @@
         <div class="nav-actions">
             <AuthorizeView>
                 <Authorized Context="authState">
-                    <a class="nav-user" href="/profile" title="View your profile">
+                    <a class="nav-user" href="@(authState.User.IsInRole("Employer") ? "/employer/company" : "/profile")"
+                       title="@(authState.User.IsInRole("Employer") ? "View your company" : "View your profile")">
                         <span class="nav-avatar" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                                 stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="8" r="3.5" />
                                 <path d="M5 19.2c1.2-3.3 3.9-5.2 7-5.2s5.8 1.9 7 5.2" />
                             </svg>
                         </span>
-                        @authState.User.Identity?.Name
+                        <span class="nav-user-name">@authState.User.Identity?.Name</span>
                     </a>
                     <button class="nav-sign-out" type="button" @onclick="SignOutAsync">Sign out</button>
                 </Authorized>
                 <NotAuthorized>
                     <a class="nav-sign-in" href="/login">Sign in</a>
+                    <a class="nav-get-started" href="/register">Get started</a>
                 </NotAuthorized>
             </AuthorizeView>
         </div>
@@ -67,6 +83,12 @@
 </header>
 
 @code {
+    private bool menuOpen;
+
+    private void ToggleMenu() => menuOpen = !menuOpen;
+
+    private void CloseMenu() => menuOpen = false;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
@@ -74,8 +96,15 @@
             return;
         }
 
-        // Session restore: the HttpOnly refresh cookie survives reloads, the scoped
-        // AuthSession does not — rehydrate the UI from GET /api/auth/me per circuit.
+        // The login/register pages are always anonymous; calling /api/auth/me there
+        // just produces a guaranteed 401 before the user signs in.
+        var path = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        if (path.StartsWith("login", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("register", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         try
         {
             var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
@@ -83,15 +112,10 @@
             {
                 AuthStateProvider.SignIn(result.ToTokens());
             }
-            else if (AuthSession.IsAuthenticated)
-            {
-                // Cookie gone (logout in another tab) — drop the stale in-memory session.
-                AuthStateProvider.SignOut();
-            }
         }
         catch (Exception exception) when (exception is JSException or InvalidOperationException)
         {
-            // JS interop unavailable (prerender) — keep whatever state exists.
+            // JS interop unavailable during prerender; the interactive pass retries.
         }
     }
 

@@ -125,7 +125,9 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
-            .OrderByDescending(job => job.CreatedAt)
+            .OrderByDescending(job => job.FeaturedUntil != null && job.FeaturedUntil > now)
+            .ThenByDescending(job => job.FeaturedUntil)
+            .ThenByDescending(job => job.CreatedAt)
             .ThenByDescending(job => job.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)

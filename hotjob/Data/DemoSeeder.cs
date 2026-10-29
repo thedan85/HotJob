@@ -148,6 +148,8 @@ public static class DemoSeeder
             logger.LogInformation("Seeded demo job {JobId}.", job.Id);
         }
 
+        await SeedAdditionalJobsAsync(db, company.Id, employer.Id, logger, cancellationToken).ConfigureAwait(false);
+
         var candidateUser = await EnsureUserAsync(
             userManager, demo.CandidateEmail.Trim(), demo.CandidatePassword, AppRoles.Candidate, logger).ConfigureAwait(false);
         var candidate = await db.Candidates
@@ -235,8 +237,25 @@ public static class DemoSeeder
             logger.LogInformation("Seeded demo application {ApplicationId}.", application.Id);
         }
 
+        await SeedAdditionalApplicationsAsync(db, company.Id, candidate.Id, resume.Id, logger, cancellationToken).ConfigureAwait(false);
+
         await SeedReviewsAsync(db, userManager, logger, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>Extra postings so Swagger has list/search, draft and featured-ordering data.</summary>
+    private static readonly (string Title, string Description, string[] SkillNames, JobStatus Status, int SalaryMin, int SalaryMax, int Experience)[] AdditionalJobs =
+    [
+        ("Frontend React Developer", "Build candidate-facing React screens for the demo job board.", ["React", "SQL"], JobStatus.Published, 900, 1800, 2),
+        ("Full Stack .NET Developer", "Own an ASP.NET Core API and its React front end.", ["C#", "React"], JobStatus.Published, 1200, 2400, 3),
+        ("QA Engineer", "Draft posting used to exercise update and delete flows.", ["SQL"], JobStatus.Draft, 700, 1200, 1),
+    ];
+
+    /// <summary>Extra applications so ATS status filters and history have data.</summary>
+    private static readonly (string JobTitle, ApplicationStatus Status, int DaysAgo, string Note)[] AdditionalApplications =
+    [
+        ("Frontend React Developer", ApplicationStatus.Viewed, 3, "Viewed by demo seed"),
+        ("Full Stack .NET Developer", ApplicationStatus.Shortlisted, 5, "Shortlisted by demo seed"),
+    ];
 
     /// <summary>Fixed catalog of Vietnamese tech companies so the public directory
     /// has realistic browse/filter/pagination data. Idempotent by company name;
@@ -347,6 +366,117 @@ public static class DemoSeeder
             }
 
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task SeedAdditionalJobsAsync(
+        ApplicationDbContext db,
+        int companyId,
+        int employerId,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        var category = await db.JobCategories
+            .FirstOrDefaultAsync(c => c.Name == "IT - Software", cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var entry in AdditionalJobs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var exists = await db.JobPostings.AnyAsync(
+                j => j.Title == entry.Title && j.CompanyProfileId == companyId,
+                cancellationToken).ConfigureAwait(false);
+            if (exists)
+                continue;
+
+            var job = new JobPosting
+            {
+                CompanyProfileId = companyId,
+                CreatedByEmployerId = employerId,
+                Title = entry.Title,
+                Description = entry.Description,
+                SalaryMin = entry.SalaryMin,
+                SalaryMax = entry.SalaryMax,
+                ExperienceRequired = entry.Experience,
+                JobType = JobType.FullTime,
+                ExpiryDate = DateTime.UtcNow.AddMonths(3),
+                Status = entry.Status,
+            };
+            db.JobPostings.Add(job);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            if (category is not null)
+                db.JobCategoryMappings.Add(new JobCategoryMapping { JobPostingId = job.Id, JobCategoryId = category.Id });
+
+            var skillNames = entry.SkillNames.ToList();
+            var skills = await db.Skills
+                .Where(s => skillNames.Contains(s.Name))
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var skill in skills)
+                db.JobSkills.Add(new JobSkill { JobPostingId = job.Id, SkillId = skill.Id, ImportanceWeight = 8 });
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("Seeded demo job {JobId} ({Status}).", job.Id, job.Status);
+        }
+    }
+
+    private static async Task SeedAdditionalApplicationsAsync(
+        ApplicationDbContext db,
+        int companyId,
+        int candidateId,
+        int resumeId,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in AdditionalApplications)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var job = await db.JobPostings.FirstOrDefaultAsync(
+                j => j.Title == entry.JobTitle && j.CompanyProfileId == companyId,
+                cancellationToken).ConfigureAwait(false);
+            if (job is null)
+                continue;
+
+            var exists = await db.Applications.AnyAsync(
+                a => a.JobPostingId == job.Id && a.CandidateId == candidateId,
+                cancellationToken).ConfigureAwait(false);
+            if (exists)
+                continue;
+
+            var appliedAt = DateTime.UtcNow.AddDays(-entry.DaysAgo - 1);
+            var application = new Models.Application.Application
+            {
+                JobPostingId = job.Id,
+                ResumeId = resumeId,
+                CandidateId = candidateId,
+                CoverLetter = "Demo application for Swagger testing.",
+                CurrentStatus = entry.Status,
+                SnapshotSummary = "3 years .NET + SQL.",
+                AppliedAt = appliedAt,
+            };
+            db.Applications.Add(application);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            db.ApplicationStatusHistories.Add(new ApplicationStatusHistory
+            {
+                ApplicationId = application.Id,
+                Status = ApplicationStatus.Pending,
+                Notes = "Applied via demo seed",
+                ChangedAt = appliedAt,
+            });
+            if (entry.Status != ApplicationStatus.Pending)
+            {
+                db.ApplicationStatusHistories.Add(new ApplicationStatusHistory
+                {
+                    ApplicationId = application.Id,
+                    Status = entry.Status,
+                    Notes = entry.Note,
+                    ChangedAt = DateTime.UtcNow.AddDays(-entry.DaysAgo),
+                });
+            }
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("Seeded demo application {ApplicationId} ({Status}).", application.Id, application.CurrentStatus);
         }
     }
 

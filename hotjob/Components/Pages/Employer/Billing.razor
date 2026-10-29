@@ -1,0 +1,243 @@
+@page "/employer/billing"
+@implements IDisposable
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.Models.Billing
+@using hotjob.Services.Billing
+@using Microsoft.Extensions.Options
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IEntitlementService EntitlementService
+@inject IBillingService BillingService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
+@inject NavigationManager Navigation
+@inject IOptions<BillingOptions> BillingOptions
+
+<PageTitle>Billing &amp; plan | HotJob</PageTitle>
+
+<AuthorizeView Roles="Employer">
+    <Authorized Context="auth">
+        <div class="workspace-page workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Employer workspace</p>
+                    <h1>Billing &amp; plan</h1>
+                    <p class="workspace-lede">Every plan counts active jobs — drafts and published postings. Closing a
+                        job frees its slot immediately.</p>
+                    </div>
+                </section>
+
+                @if (isLoading)
+                {
+                    <section class="workspace-card" aria-busy="true" aria-label="Loading billing">
+                        <div class="workspace-skeleton" style="height:120px"></div>
+                        <div class="workspace-skeleton" style="height:220px;margin-top:16px"></div>
+                        <p class="visually-hidden" role="status">Loading your plan…</p>
+                    </section>
+                }
+                else if (!string.IsNullOrWhiteSpace(loadError))
+                {
+                    <div class="workspace-alert" role="alert">@loadError</div>
+                }
+                else if (entitlement is not null)
+                {
+                    <section class="workspace-card eb-summary" aria-label="Current plan">
+                        <div>
+                            <p class="workspace-eyebrow">Current plan</p>
+                            <h2>@entitlement.PlanName</h2>
+                            <p class="workspace-sub">
+                                @entitlement.ActiveJobCount of @entitlement.JobQuota active job slots used
+                                @if (entitlement.PlanExpiresAt is { } expiresAt)
+                                {
+                                    <span> · renews or lapses on @expiresAt.ToString("dd MMM yyyy")</span>
+                                }
+                            </p>
+                            <div class="eb-meter" role="img"
+                                 aria-label="@entitlement.ActiveJobCount of @entitlement.JobQuota slots used">
+                                <span style="width:@UsagePercent%"></span>
+                            </div>
+                            @if (!entitlement.IsOwner)
+                            {
+                                <p class="workspace-hint">Only the company owner can buy or renew a plan. You can still see the
+                                    current usage.</p>
+                                }
+                            </div>
+                            <a class="workspace-btn workspace-btn-secondary" href="/employer/jobs">Back to jobs</a>
+                        </section>
+
+                        @if (!string.IsNullOrWhiteSpace(actionError))
+                        {
+                            <div class="workspace-alert" role="alert" aria-live="assertive">@actionError</div>
+                        }
+
+                        @if (entitlement.IsOwner)
+                        {
+                            <section aria-label="Available plans">
+                                <div class="workspace-section-head">
+                                    <div>
+                                        <h2>Upgrade your hiring capacity</h2>
+                                        <p class="workspace-sub">Pay by VNPay sandbox. Your plan is active as soon as the gateway
+                                            confirms it.</p>
+                                        </div>
+                                    </div>
+                                    @if (plans.Count == 0)
+                                    {
+                                        <div class="workspace-empty">
+                                            <h3>No plans available</h3>
+                                            <p>The plan catalogue is empty. Ask an administrator to seed it.</p>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="eb-grid">
+                                            @foreach (var plan in plans)
+                                            {
+                                                <article
+                                                    class="workspace-card eb-plan @(plan.Code == entitlement.PlanCode ? "is-current" : string.Empty)">
+                                                    <div class="eb-plan-head">
+                                                        <h3>@plan.Name</h3>
+                                                        @if (plan.Code == entitlement.PlanCode)
+                                                        {
+                                                            <span class="workspace-badge is-published">Current</span>
+                                                        }
+                                                    </div>
+                                                    <p class="eb-price">@plan.Price.ToString("N0") <span>VND</span></p>
+                                                    <ul class="eb-features">
+                                                        <li><strong>@plan.JobQuota</strong> active job slots</li>
+                                                        <li>@(plan.DurationDays == 0 ? "Never expires" : $"{plan.DurationDays} days")</li>
+                                                        <li>Standard employer workspace</li>
+                                                    </ul>
+                                                    <button class="workspace-btn workspace-btn-primary" type="button" disabled="@isBuying"
+                                                            @onclick="() => BuyAsync(plan.Code)">
+                                                        @(isBuying ? "Redirecting…" : plan.Code == entitlement.PlanCode ? "Renew" : "Choose plan")
+                                                    </button>
+                                                </article>
+                                            }
+                                        </div>
+                                    }
+                                </section>
+
+                                <section class="workspace-card eb-featured" aria-label="Featured jobs">
+                                    <div>
+                                        <h2>Featured jobs</h2>
+                                        <p class="workspace-sub">Pin one published role to the top of the job board for @FeaturedDays days.
+                                        </p>
+                                    </div>
+                                    <div class="eb-featured-action">
+                                        <strong>@FeaturedPrice.ToString("N0") VND</strong>
+                                        <a class="workspace-btn workspace-btn-secondary" href="/employer/jobs">Choose a job</a>
+                                    </div>
+                                </section>
+                            }
+                        }
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="workspace-page workspace">
+                        <div class="workspace-alert" role="alert">Sign in with an employer account to manage billing.</div>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+
+@code {
+    private EmployerEntitlement? entitlement;
+    private IReadOnlyList<Plan> plans = [];
+    private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private bool isBuying;
+    private string? loadError;
+    private string? actionError;
+
+    private decimal FeaturedPrice => BillingOptions.Value.FeaturedPrice;
+    private int FeaturedDays => BillingOptions.Value.FeaturedDays;
+
+    private int UsagePercent => entitlement is null || entitlement.JobQuota <= 0
+        ? 100
+        : (int)Math.Clamp(Math.Round(entitlement.ActiveJobCount * 100.0 / entitlement.JobQuota), 0, 100);
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async Task<string> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub") ?? string.Empty;
+    }
+
+    private async Task LoadAsync()
+    {
+        if (isLoading && hasLoadedOnce)
+        {
+            return;
+        }
+
+        isLoading = true;
+        hasLoadedOnce = true;
+        loadError = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            entitlement = await EntitlementService.GetForUserAsync(userId);
+            plans = entitlement is null
+                ? []
+                : await EntitlementService.GetPurchasableEmployerPlansAsync();
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task BuyAsync(string planCode)
+    {
+        actionError = null;
+        isBuying = true;
+        try
+        {
+            var result = await BillingService.CreateEmployerPlanCheckoutAsync(
+                await GetUserIdAsync(), planCode, "127.0.0.1");
+            if (!result.Success || result.Data is null)
+            {
+                actionError = result.Errors.FirstOrDefault() ?? "Could not start the payment.";
+                return;
+            }
+
+            // forceLoad: leave the Blazor circuit and go to the gateway.
+            Navigation.NavigateTo(result.Data.PaymentUrl, forceLoad: true);
+        }
+        catch (Exception exception)
+        {
+            actionError = exception.Message;
+        }
+        finally
+        {
+            isBuying = false;
+        }
+    }
+}

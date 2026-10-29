@@ -1,0 +1,247 @@
+@page "/job-alerts"
+@implements IDisposable
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.JobAlerts
+@using hotjob.Services.JobAlerts
+@using Microsoft.Extensions.Options
+@inject IJobAlertService JobAlertService
+@inject IOptions<JobAlertsOptions> JobAlertOptions
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
+
+<PageTitle>Job alerts | HotJob</PageTitle>
+
+<AuthorizeView Roles="Candidate">
+    <Authorized Context="auth">
+        <div class="ja-page workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Candidate workspace</p>
+                    <h1>Job alerts</h1>
+                    <p class="workspace-lede">New roles that match your CV, flagged the moment an employer publishes them.</p>
+                </div>
+                <div class="workspace-actions">
+                    @if (!isLoading && feed is { Alerts.Count: > 0 })
+                    {
+                        <button class="workspace-btn workspace-btn-secondary" type="button"
+                                disabled="@(isMarking || feed.UnreadCount == 0)"
+                                @onclick="MarkAllReadAsync">
+                            @(isMarking ? "Marking…" : "Mark all as read")
+                        </button>
+                    }
+                    <a class="workspace-btn workspace-btn-primary" href="/jobs">Browse jobs</a>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card ja-card" aria-busy="true" aria-label="Loading your job alerts">
+                    <div class="workspace-skeleton" style="height:26px;width:220px"></div>
+                    <div class="workspace-skeleton" style="height:88px;margin-top:18px"></div>
+                    <div class="workspace-skeleton" style="height:88px;margin-top:12px"></div>
+                    <div class="workspace-skeleton" style="height:88px;margin-top:12px"></div>
+                    <p class="visually-hidden" role="status">Loading your job alerts…</p>
+                </section>
+            }
+            else if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="workspace-alert" role="alert">
+                    @loadError
+                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                            style="margin-left:12px" @onclick="LoadAsync">Try again</button>
+                </div>
+            }
+            else if (feed is not null)
+            {
+                @if (!string.IsNullOrWhiteSpace(actionMessage))
+                {
+                    <div class="workspace-notice" role="status" aria-live="polite">@actionMessage</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(actionError))
+                {
+                    <div class="workspace-alert" role="alert" aria-live="assertive">@actionError</div>
+                }
+
+                <section class="workspace-card ja-card" aria-label="Your job alerts">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2>Your alerts</h2>
+                            <p class="workspace-sub">
+                                @feed.Alerts.Count alert@(feed.Alerts.Count == 1 ? string.Empty : "s")
+                                @if (feed.UnreadCount > 0)
+                                {
+                                    <span>· @feed.UnreadCount unread</span>
+                                }
+                            </p>
+                        </div>
+                        @if (feed.UnreadCount > 0)
+                        {
+                            <span class="workspace-badge is-info">@feed.UnreadCount unread</span>
+                        }
+                    </div>
+
+                    @if (feed.Alerts.Count == 0)
+                    {
+                        <div class="workspace-empty">
+                            <span class="workspace-empty-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                                    <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+                                </svg>
+                            </span>
+                            <h3>No alerts yet</h3>
+                            <p>
+                                When an employer publishes a job that scores at least
+                                @MinMatchPercent% against one of your CVs, it will appear here.
+                                A stronger CV is the fastest way to get noticed.
+                            </p>
+                            <a class="workspace-btn workspace-btn-primary workspace-btn-small" href="/profile">Improve your CV</a>
+                        </div>
+                    }
+                    else
+                    {
+                        <ul class="ja-list">
+                            @foreach (var alert in feed.Alerts)
+                            {
+                                <li class="ja-alert @(alert.IsRead ? string.Empty : "is-unread")">
+                                    <div class="ja-alert-main">
+                                        <h3>@alert.Title</h3>
+                                        @if (!string.IsNullOrWhiteSpace(alert.Content))
+                                        {
+                                            <p>@alert.Content</p>
+                                        }
+                                        <div class="ja-alert-meta">
+                                            <span class="workspace-badge @(alert.IsRead ? "is-muted" : "is-info")">
+                                                @(alert.IsRead ? "Read" : "Unread")
+                                            </span>
+                                            <time datetime="@alert.CreatedAt.ToString("O")">@alert.CreatedAt.ToString("dd MMM yyyy, HH:mm")</time>
+                                        </div>
+                                    </div>
+                                    @if (alert.JobPostingId is int jobId)
+                                    {
+                                        <a class="workspace-btn workspace-btn-secondary workspace-btn-small ja-alert-actions" href="/jobs/@jobId">View job</a>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private bool isMarking;
+    private string? loadError;
+    private string? actionMessage;
+    private string? actionError;
+    private JobAlertsPageDto? feed;
+
+    private int MinMatchPercent => JobAlertOptions.Value.MinMatchPercent;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
+    private async Task LoadAsync()
+    {
+        if (isLoading && hasLoadedOnce)
+        {
+            return;
+        }
+
+        isLoading = true;
+        hasLoadedOnce = true;
+        loadError = null;
+        try
+        {
+            var result = await JobAlertService.GetAlertsAsync(await GetUserIdAsync());
+            if (!result.Success || result.Data is null)
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "We could not load your job alerts.";
+                return;
+            }
+
+            feed = result.Data;
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task MarkAllReadAsync()
+    {
+        if (feed is null || feed.UnreadCount == 0 || isMarking)
+        {
+            return;
+        }
+
+        isMarking = true;
+        actionMessage = actionError = null;
+        try
+        {
+            var result = await JobAlertService.MarkAllReadAsync(await GetUserIdAsync());
+            if (!result.Success)
+            {
+                actionError = result.Errors.FirstOrDefault() ?? "We could not mark your alerts as read.";
+                return;
+            }
+
+            feed = feed with
+            {
+                Alerts = feed.Alerts.Select(alert => alert with { IsRead = true }).ToArray(),
+                UnreadCount = 0
+            };
+            actionMessage = result.Data == 1
+                ? "1 alert marked as read."
+                : $"{result.Data} alerts marked as read.";
+        }
+        catch (Exception exception)
+        {
+            actionError = exception.Message;
+        }
+        finally
+        {
+            isMarking = false;
+        }
+    }
+}

@@ -1,5 +1,15 @@
 @page "/premium"
+@implements IDisposable
 @rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.Models.Billing
+@using hotjob.Services.Billing
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ICandidatePremiumService PremiumService
+@inject IBillingService BillingService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
+@inject NavigationManager Navigation
 
 <PageTitle>Candidate Premium | HotJob</PageTitle>
 
@@ -9,128 +19,94 @@
             <section class="premium-hero" aria-labelledby="premium-title">
                 <p class="premium-eyebrow">
                     <svg class="premium-eyebrow-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M12 2.6l2.8 5.8 6.4.9-4.6 4.5 1.1 6.4L12 17.2l-5.7 3 1.1-6.4L2.8 9.3l6.4-.9L12 2.6z" />
+                        <path d="M12 2.6l2.8 5.8 6.4 .9-4.6 4.5 1.1 6.4L12 17.2l-5.7 3 1.1-6.4L2.8 9.3l6.4-.9L12 2.6z" />
                     </svg>
                     Premium
                 </p>
                 <h1 id="premium-title">Candidate <span class="premium-title-accent">Premium</span> plan</h1>
                 <p class="premium-lede">
-                    A quieter, sharper job search. See how your CV scores before anyone else does,
-                    build it faster, and get matched to the right roles the moment they open.
+                    Advanced match scoring, a premium profile badge and a profile boost —
+                    30 days for 99.000đ, paid by VNPay sandbox.
                 </p>
             </section>
 
-            <section class="premium-features" aria-labelledby="premium-features-title">
-                <h2 class="premium-section-title" id="premium-features-title">Everything in one upgrade</h2>
-
-                <div class="premium-grid">
-                    <article class="premium-feature">
-                        <span class="premium-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z" />
-                                <path d="M18.4 15.6l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" />
-                            </svg>
-                        </span>
-                        <h3>AI-powered CV score</h3>
-                        <p>Get your CV scored by AI and see its strengths and weak spots before you apply.</p>
-                    </article>
-
-                    <article class="premium-feature">
-                        <span class="premium-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" />
-                                <path d="M14 3v5h5" />
-                                <path d="M9 13h4" />
-                                <path d="M9 17h6" />
-                            </svg>
-                        </span>
-                        <h3>Automatic CV builder</h3>
-                        <p>Turn your profile into a clean, professional CV in minutes — no design work needed.</p>
-                    </article>
-
-                    <article class="premium-feature">
-                        <span class="premium-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                                <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-                            </svg>
-                        </span>
-                        <h3>Instant matching job alerts</h3>
-                        <p>Be the first to know when new jobs that match your profile are posted.</p>
-                    </article>
-
-                    <article class="premium-feature">
-                        <span class="premium-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 3l7 3v5c0 4.5-3 8.2-7 9.5-4-1.3-7-5-7-9.5V6l7-3z" />
-                                <path d="M9 12l2 2 4-4" />
-                            </svg>
-                        </span>
-                        <h3>Premium user badge</h3>
-                        <p>Show a verified Premium badge on your profile so employers can spot you at a glance.</p>
-
-                        <div class="premium-id-preview">
-                            <span class="premium-id-avatar" aria-hidden="true">AN</span>
-                            <span class="premium-id-name">Alex Nguyen</span>
-                            <span class="premium-id-badge">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M5 12l4 4 10-10" />
-                                </svg>
-                                Premium
-                            </span>
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading your premium status">
+                    <div class="workspace-skeleton" style="height:120px"></div>
+                    <p class="visually-hidden" role="status">Loading your Premium status…</p>
+                </section>
+            }
+            else if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="workspace-alert" role="alert">@loadError</div>
+            }
+            else if (status is not null)
+            {
+                <section class="workspace-card premium-status-card" aria-label="Your Premium status">
+                    <div class="premium-status-head">
+                        <div>
+                            <p class="workspace-eyebrow">Your subscription</p>
+                            <h2>@(status.IsPremium ? "Active" : "Not subscribed")</h2>
+                            @if (status.IsPremium && status.PremiumUntil is { } until)
+                            {
+                                <p class="workspace-sub">Active until @until.ToString("dd MMM yyyy"). Boost active until @(status.BoostUntil?.ToString("dd MMM yyyy") ?? "—").</p>
+                            }
+                            else if (!status.IsPremium)
+                            {
+                                <p class="workspace-sub">Subscribe to Premium for advanced match scoring, a profile badge and a profile boost.</p>
+                            }
                         </div>
-                    </article>
+                    </div>
+
+                    <div class="premium-status-actions">
+                        @if (status.IsPremium)
+                        {
+                            <button class="workspace-btn workspace-btn-primary" type="button"
+                                    disabled="@isBuying"
+                                    @onclick="BuyAsync">
+                                @(isBuying ? "Renewing…" : "Renew Premium")
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="workspace-btn workspace-btn-primary" type="button"
+                                    disabled="@isBuying"
+                                    @onclick="BuyAsync">
+                                @(isBuying ? "Subscribing…" : "Subscribe to Premium — 99.000đ")
+                            </button>
+                        }
+                    </div>
+                </section>
+
+                @if (!string.IsNullOrWhiteSpace(actionError))
+                {
+                    <div class="workspace-alert" role="alert" aria-live="assertive">@actionError</div>
+                }
+            }
+
+            <section class="workspace-card premium-plan-card" aria-label="Premium Monthly plan">
+                <div class="workspace-section-head">
+                    <div>
+                        <h2>Premium Monthly</h2>
+                        <p class="workspace-sub">99.000đ per 30 days. Your benefits run until the end of the period you paid for.</p>
+                    </div>
+                </div>
+                <ul class="premium-plan-features">
+                    <li><strong>Advanced match scoring:</strong> see how your CV scores against a job before you apply.</li>
+                    <li><strong>Premium badge:</strong> a verified badge on your profile so employers spot you at a glance.</li>
+                    <li><strong>Profile boost:</strong> your profile is shown to employers first while boosted.</li>
+                </ul>
+                <div class="premium-plain-price">
+                    <strong>99.000đ</strong> <span>/ 30 days</span>
+                    <p class="workspace-hint">Paid by VNPay sandbox. Your entitlement is active as soon as the gateway confirms the payment.</p>
                 </div>
             </section>
 
-            <section class="premium-compare" aria-labelledby="premium-compare-title">
-                <h2 class="premium-compare-title" id="premium-compare-title">Free vs Premium</h2>
-                <table class="premium-compare-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Feature</th>
-                            <th scope="col">Free</th>
-                            <th scope="col" class="is-premium">Premium</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <th scope="row">AI CV score</th>
-                            <td><span class="premium-dash" aria-hidden="true">—</span><span class="visually-hidden">Not included</span></td>
-                            <td class="is-premium"><svg class="premium-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10" /></svg><span class="visually-hidden">Included</span></td>
-                        </tr>
-                        <tr>
-                            <th scope="row">Automatic CV builder</th>
-                            <td><span class="premium-dash" aria-hidden="true">—</span><span class="visually-hidden">Not included</span></td>
-                            <td class="is-premium"><svg class="premium-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10" /></svg><span class="visually-hidden">Included</span></td>
-                        </tr>
-                        <tr>
-                            <th scope="row">Matching job alerts</th>
-                            <td><span class="premium-dash" aria-hidden="true">—</span><span class="visually-hidden">Not included</span></td>
-                            <td class="is-premium"><svg class="premium-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10" /></svg><span class="visually-hidden">Included</span></td>
-                        </tr>
-                        <tr>
-                            <th scope="row">Premium profile badge</th>
-                            <td><span class="premium-dash" aria-hidden="true">—</span><span class="visually-hidden">Not included</span></td>
-                            <td class="is-premium"><svg class="premium-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10" /></svg><span class="visually-hidden">Included</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </section>
-
-            <section class="premium-cta-block" aria-labelledby="premium-cta-title">
-                <h2 id="premium-cta-title">Premium is almost ready</h2>
-                <p>All four features arrive together at launch. Checkout will open at the same time.</p>
-                <button class="premium-cta" type="button" aria-disabled="true" aria-describedby="premium-cta-note">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M12 7v5l3 2" />
-                    </svg>
-                    Unlock Premium
-                    <span class="premium-cta-tag">Coming soon</span>
-                </button>
-                <p class="premium-note" id="premium-cta-note">Premium features and checkout will open in a future release.</p>
-            </section>
+            @if (!string.IsNullOrWhiteSpace(actionMessage))
+            {
+                <div class="workspace-notice" role="status" aria-live="polite">@actionMessage</div>
+            }
         </div>
     </Authorized>
     <NotAuthorized>
@@ -138,7 +114,7 @@
             <section class="premium-hero premium-hero-guest" aria-labelledby="premium-title">
                 <p class="premium-eyebrow">
                     <svg class="premium-eyebrow-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M12 2.6l2.8 5.8 6.4.9-4.6 4.5 1.1 6.4L12 17.2l-5.7 3 1.1-6.4L2.8 9.3l6.4-.9L12 2.6z" />
+                        <path d="M12 2.6l2.8 5.8 6.4 .9-4.6 4.5 1.1 6.4L12 17.2l-5.7 3 1.1-6.4L2.8 9.3l6.4-.9L12 2.6z" />
                     </svg>
                     Premium
                 </p>
@@ -150,3 +126,97 @@
         </div>
     </NotAuthorized>
 </AuthorizeView>
+
+@code {
+    private CandidatePremiumStatus? status;
+    private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private bool isBuying;
+    private string? loadError;
+    private string? actionMessage;
+    private string? actionError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async Task<string> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub") ?? string.Empty;
+    }
+
+    private async Task LoadAsync()
+    {
+        if (isLoading && hasLoadedOnce)
+        {
+            return;
+        }
+
+        isLoading = true;
+        hasLoadedOnce = true;
+        loadError = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            status = await PremiumService.GetStatusAsync(userId);
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task BuyAsync()
+    {
+        actionMessage = null;
+        actionError = null;
+        isBuying = true;
+        try
+        {
+            var result = await BillingService.CreateCandidatePremiumCheckoutAsync(
+                await GetUserIdAsync(), Plan.PremiumMonthlyCode, "127.0.0.1");
+            if (!result.Success || result.Data is null)
+            {
+                actionError = result.Errors.FirstOrDefault() ?? "Could not start the payment.";
+                return;
+            }
+
+            // forceLoad: leave the Blazor circuit and go to the gateway.
+            Navigation.NavigateTo(result.Data.PaymentUrl, forceLoad: true);
+        }
+        catch (Exception exception)
+        {
+            actionError = exception.Message;
+        }
+        finally
+        {
+            isBuying = false;
+        }
+    }
+}

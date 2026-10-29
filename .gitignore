@@ -10,8 +10,15 @@ build.log
 .env.local
 node_modules/
 AGENTS.md
+hotjob/Tests/AGENTS.md
 
 .dll
 hotjob/appsettings.json
 Directory.Build.props
 
+
+# Candidate CV uploads are runtime data
+hotjob/wwwroot/uploads/
+
+# Trained ML models are runtime data
+App_Data/

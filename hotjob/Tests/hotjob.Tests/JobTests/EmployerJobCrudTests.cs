@@ -5,6 +5,7 @@ using hotjob.Models.Job;
 using hotjob.Models.Users;
 using hotjob.Repositories.Job;
 using hotjob.Services.Common;
+using hotjob.Services.Billing;
 using hotjob.Services.Job;
 using hotjob.Tests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -15,7 +16,7 @@ namespace hotjob.Tests.JobTests;
 public sealed class EmployerJobCrudTests
 {
     private static JobService CreateService(TestFixture fx) =>
-        new(fx.Db, new JobPostingRepository(fx.Db), NullLogger<JobService>.Instance);
+        new(fx.Db, new JobPostingRepository(fx.Db), new EntitlementService(fx.Db, TimeProvider.System), new StubJobAlertService(), NullLogger<JobService>.Instance);
 
     private static async Task<(string UserId, int SkillId, int CategoryId)> SeedEmployerAsync(
         TestFixture fx, string email = "owner@example.com")

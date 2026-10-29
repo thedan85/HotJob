@@ -54,6 +54,9 @@ public class JobPosting
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>The posting is "featured" (listed first) while this is in the future.</summary>
+    public DateTime? FeaturedUntil { get; set; }
+
     /// <summary>Company that owns this posting.</summary>
     public Users.CompanyProfile Company { get; set; } = default!;
 

@@ -1,108 +1,282 @@
 @page "/my-applications"
+@implements IDisposable
 @rendermode InteractiveServer
 @using System.Security.Claims
 @using hotjob.DTOs.Candidate
+@using hotjob.Models.Application
 @using hotjob.Services.Candidate
-@using Microsoft.AspNetCore.Components.Authorization
 @inject ICandidateService CandidateService
+@inject IApplicationService ApplicationService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
 
-<PageTitle>My Applications | HotJob</PageTitle>
+<PageTitle>My applications | HotJob</PageTitle>
 
 <AuthorizeView Roles="Candidate">
     <Authorized Context="auth">
-        <div class="ei-page">
-            <section class="ei-header">
-                <div>
-                    <p class="ei-eyebrow">Candidate workspace</p>
-                    <h1>My Applications &amp; Notifications</h1>
-                    <p>Follow the review status of every job you applied to, and read the messages employers sent you.</p>
+        <div class="ma-page workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Candidate workspace</p>
+                    <h1>Your applications</h1>
+                    <p class="workspace-lede">Track every role you applied to, follow each status change, and read the messages employers sent you.</p>
+                </div>
+                <div class="workspace-actions">
+                    <a class="workspace-btn workspace-btn-primary" href="/jobs">Browse jobs</a>
                 </div>
             </section>
 
             @if (isLoading)
             {
-                <div class="ei-loading" role="status">Loading your applications...</div>
+                <section class="workspace-card" aria-busy="true" aria-label="Loading your applications">
+                    <div class="workspace-metrics">
+                        <div class="workspace-skeleton" style="height:110px"></div>
+                        <div class="workspace-skeleton" style="height:110px"></div>
+                        <div class="workspace-skeleton" style="height:110px"></div>
+                        <div class="workspace-skeleton" style="height:110px"></div>
+                    </div>
+                    <div class="ma-skeleton-layout">
+                        <div class="workspace-skeleton" style="height:300px"></div>
+                        <div class="workspace-skeleton" style="height:300px"></div>
+                    </div>
+                    <p class="visually-hidden" role="status">Loading your applications…</p>
+                </section>
             }
             else if (!string.IsNullOrWhiteSpace(loadError))
             {
-                <div class="ei-alert" role="alert">@loadError</div>
+                <div class="workspace-alert" role="alert">@loadError</div>
             }
             else
             {
+                <section class="workspace-metrics" aria-label="Application overview">
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /><path d="M8 12h8M8 16h5" /></svg>
+                        </span>
+                        <span class="workspace-stat-label">Applications</span>
+                        <span class="workspace-stat-value">@totalCount</span>
+                        <span class="workspace-stat-hint">Jobs you applied to</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                        </span>
+                        <span class="workspace-stat-label">In progress</span>
+                        <span class="workspace-stat-value">@InProgressCount</span>
+                        <span class="workspace-stat-hint">Still being reviewed</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4 4L19 6" /></svg>
+                        </span>
+                        <span class="workspace-stat-label">Offers</span>
+                        <span class="workspace-stat-value">@OfferCount</span>
+                        <span class="workspace-stat-hint">Offers received</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v11H8l-4 4V6z" /><path d="M8 10h8M8 13h5" /></svg>
+                        </span>
+                        <span class="workspace-stat-label">Unread messages</span>
+                        <span class="workspace-stat-value">@unreadCount</span>
+                        <span class="workspace-stat-hint">From employers</span>
+                    </div>
+                </section>
+
                 @if (!string.IsNullOrWhiteSpace(actionMessage))
                 {
-                    <div class="ei-notice" role="status">@actionMessage</div>
+                    <div class="workspace-notice" role="status" aria-live="polite">@actionMessage</div>
                 }
                 @if (!string.IsNullOrWhiteSpace(actionError))
                 {
-                    <div class="ei-alert" role="alert">@actionError</div>
+                    <div class="workspace-alert" role="alert" aria-live="assertive">@actionError</div>
                 }
 
-                <div class="ei-layout">
-                    <section class="ei-list" aria-label="My applications">
-                        <div class="ei-card">
-                            <h2>Applications</h2>
-                            <p class="ei-sub">@totalCount total</p>
-                            @foreach (var app in applications)
+                @if (totalCount > 0)
+                {
+                    <section class="workspace-toolbar" aria-label="Filter applications">
+                        <label class="workspace-field workspace-field-grow">
+                            <span>Search</span>
+                            <input type="search" @bind="search" @bind:event="oninput" placeholder="Job title or company" />
+                        </label>
+                        <label class="workspace-field">
+                            <span>Status</span>
+                            <select @bind="statusGroup">
+                                <option value="">All applications</option>
+                                <option value="active">In progress</option>
+                                <option value="offers">Offers</option>
+                                <option value="closed">Rejected or withdrawn</option>
+                            </select>
+                        </label>
+                        @if (HasFilters)
+                        {
+                            <div class="workspace-toolbar-actions">
+                                <button class="workspace-btn workspace-btn-ghost" type="button" @onclick="ClearFilters">Clear</button>
+                            </div>
+                        }
+                    </section>
+                }
+
+                var visible = VisibleApplications.ToList();
+
+                <div class="ma-layout">
+                    <section class="workspace-card ma-apps" aria-label="My applications">
+                        <div class="workspace-section-head">
+                            <div>
+                                <h2>Applications</h2>
+                                <p class="workspace-sub">@(visible.Count == totalCount ? $"{totalCount} total" : $"{visible.Count} of {totalCount} shown")</p>
+                            </div>
+                        </div>
+
+                        @if (applications.Count == 0)
+                        {
+                            <div class="workspace-empty">
+                                <span class="workspace-empty-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /><path d="M8 12h8M8 16h5" /></svg>
+                                </span>
+                                <h3>No applications yet</h3>
+                                <p>When you apply to a job, its status and history appear here so you always know where you stand.</p>
+                                <a class="workspace-btn workspace-btn-primary workspace-btn-small" href="/jobs">Browse open jobs</a>
+                            </div>
+                        }
+                        else if (visible.Count == 0)
+                        {
+                            <div class="workspace-empty">
+                                <h3>Nothing matches those filters</h3>
+                                <p>Try a different search term or status.</p>
+                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="ClearFilters">Clear filters</button>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var application in visible)
                             {
-                                <article class="ei-applicant">
-                                    <div class="ei-applicant-head">
-                                        <strong>@app.JobTitle</strong>
-                                        <span class="ei-badge ei-@app.Status.ToString().ToLowerInvariant()">@app.Status</span>
+                                <article class="ma-app">
+                                    <div class="ma-app-head">
+                                        <div>
+                                            <h3 class="ma-app-title">@application.JobTitle</h3>
+                                            <p class="ma-app-company">@application.CompanyName</p>
+                                        </div>
+                                        <span class="workspace-badge @StatusClass(application.Status)">@application.Status</span>
                                     </div>
-                                    <small>@app.CompanyName · applied @app.AppliedAt.ToString("dd MMM yyyy")</small>
-                                    <small>CV: @app.ResumeTitle</small>
-                                    @if (app.History.Count > 0)
+                                    <div class="ma-app-meta">
+                                        <span>
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>
+                                            Applied @application.AppliedAt.ToString("dd MMM yyyy")
+                                        </span>
+                                        <span>
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V4h8l2 2h6v14H4z" /><path d="M8 12h8M8 16h5" /></svg>
+                                            CV: @application.ResumeTitle
+                                        </span>
+                                    </div>
+
+                                    @if (InProgressStatuses.Contains(application.Status))
                                     {
-                                        <ul class="ei-timeline">
-                                            @foreach (var h in app.History.OrderByDescending(h => h.ChangedAt))
+                                        <div class="ma-app-actions">
+                                            @if (withdrawConfirmId == application.ApplicationId)
                                             {
-                                                <li><strong>@h.Status</strong> — @(h.Notes ?? "no note")<br /><small>@h.ChangedAt.ToString("dd MMM yyyy HH:mm")</small></li>
+                                                <span class="ma-withdraw-copy">Withdraw this application? This cannot be undone.</span>
+                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                        disabled="@(withdrawingId == application.ApplicationId)"
+                                                        @onclick="() => WithdrawAsync(application.ApplicationId)">
+                                                    @(withdrawingId == application.ApplicationId ? "Withdrawing…" : "Confirm withdraw")
+                                                </button>
+                                                <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
+                                                        disabled="@(withdrawingId == application.ApplicationId)"
+                                                        @onclick="() => { withdrawConfirmId = null; }">
+                                                    Cancel
+                                                </button>
                                             }
-                                        </ul>
+                                            else
+                                            {
+                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                        @onclick="() => { withdrawConfirmId = application.ApplicationId; }">
+                                                    Withdraw application
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+
+                                    @if (application.History.Count > 0)
+                                    {
+                                        <details class="workspace-details ma-history">
+                                            <summary>Status history (@application.History.Count update@(application.History.Count == 1 ? string.Empty : "s"))</summary>
+                                            <div class="workspace-details-body">
+                                                <ol class="ma-timeline">
+                                                    @foreach (var entry in application.History.OrderByDescending(h => h.ChangedAt))
+                                                    {
+                                                        <li>
+                                                            <strong>@entry.Status</strong>
+                                                            <span>@(string.IsNullOrWhiteSpace(entry.Notes) ? "No note added." : entry.Notes)</span>
+                                                            <small>@entry.ChangedAt.ToString("dd MMM yyyy, HH:mm")</small>
+                                                        </li>
+                                                    }
+                                                </ol>
+                                            </div>
+                                        </details>
                                     }
                                 </article>
                             }
-                            @if (applications.Count == 0)
-                            {
-                                <p class="ei-sub">You have not applied to any jobs yet.</p>
-                            }
-                        </div>
+                        }
                     </section>
 
-                    <section class="ei-detail" aria-label="Notifications">
-                        <div class="ei-section">
-                            <h3>Notifications @(unreadCount > 0 ? $"({unreadCount} unread)" : string.Empty)</h3>
-                            @foreach (var note in notifications)
-                            {
-                                <div class="ei-interview">
-                                    <div class="ei-applicant-head">
-                                        <strong>@note.Title</strong>
-                                        @if (!note.IsRead)
-                                        {
-                                            <span class="ei-badge ei-pending">Unread</span>
-                                        }
-                                    </div>
-                                    @if (!string.IsNullOrWhiteSpace(note.Content))
-                                    {
-                                        <span>@note.Content</span><br />
-                                    }
-                                    <small>@note.CreatedAt.ToString("dd MMM yyyy HH:mm")</small>
-                                    @if (!note.IsRead)
-                                    {
-                                        <div style="margin-top:6px">
-                                            <button class="ei-btn ei-btn-secondary ei-btn-small" type="button" @onclick="() => MarkReadAsync(note.Id)">Mark read</button>
-                                        </div>
-                                    }
+                    <aside class="ma-rail" aria-label="Notifications">
+                        <section class="workspace-card">
+                            <div class="workspace-section-head">
+                                <div>
+                                    <h2>Messages</h2>
+                                    <p class="workspace-sub">Updates from employers.</p>
                                 </div>
-                            }
+                                @if (unreadCount > 0)
+                                {
+                                    <span class="workspace-badge is-pending">@unreadCount unread</span>
+                                }
+                            </div>
+
                             @if (notifications.Count == 0)
                             {
-                                <p class="ei-sub">No messages yet.</p>
+                                <div class="workspace-empty">
+                                    <span class="workspace-empty-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v11H8l-4 4V6z" /><path d="M8 10h8M8 13h5" /></svg>
+                                    </span>
+                                    <h3>No messages yet</h3>
+                                    <p>Employer updates and interview notes will show up here.</p>
+                                </div>
                             }
-                        </div>
-                    </section>
+                            else
+                            {
+                                <ul class="ma-notes">
+                                    @foreach (var note in notifications.OrderBy(n => n.IsRead).ThenByDescending(n => n.CreatedAt))
+                                    {
+                                        <li class="ma-note @(note.IsRead ? string.Empty : "is-unread")">
+                                            <div class="ma-note-head">
+                                                <strong>
+                                                    @if (!note.IsRead)
+                                                    {
+                                                        <span class="ma-note-dot" aria-hidden="true"></span>
+                                                    }
+                                                    @note.Title
+                                                    @if (!note.IsRead)
+                                                    {
+                                                        <span class="visually-hidden">(unread)</span>
+                                                    }
+                                                </strong>
+                                                <time datetime="@note.CreatedAt.ToString("O")">@note.CreatedAt.ToString("dd MMM")</time>
+                                            </div>
+                                            @if (!string.IsNullOrWhiteSpace(note.Content))
+                                            {
+                                                <p>@note.Content</p>
+                                            }
+                                            @if (!note.IsRead)
+                                            {
+                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" disabled="@(markingId == note.Id)" @onclick="() => MarkReadAsync(note.Id)">@(markingId == note.Id ? "Marking…" : "Mark read")</button>
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        </section>
+                    </aside>
                 </div>
             }
         </div>
@@ -113,16 +287,88 @@
 </AuthorizeView>
 
 @code {
+    private static readonly HashSet<ApplicationStatus> InProgressStatuses =
+    [
+        ApplicationStatus.Pending,
+        ApplicationStatus.Viewed,
+        ApplicationStatus.Shortlisted,
+        ApplicationStatus.Interviewing
+    ];
+
     private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private int? markingId;
+    private int? withdrawConfirmId;
+    private int? withdrawingId;
     private string? loadError;
     private string? actionMessage;
     private string? actionError;
+    private string search = string.Empty;
+    private string statusGroup = string.Empty;
     private List<MyApplicationDto> applications = new();
     private List<MyNotificationDto> notifications = new();
-    private int totalCount;
-    private int unreadCount;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    private int totalCount => applications.Count;
+    private int unreadCount => notifications.Count(note => !note.IsRead);
+    private int InProgressCount => applications.Count(a => InProgressStatuses.Contains(a.Status));
+    private int OfferCount => applications.Count(a => a.Status == ApplicationStatus.Offered);
+    private bool HasFilters => !string.IsNullOrWhiteSpace(search) || !string.IsNullOrWhiteSpace(statusGroup);
+
+    private IEnumerable<MyApplicationDto> VisibleApplications =>
+        applications
+            .Where(a => string.IsNullOrWhiteSpace(search)
+                || a.JobTitle.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase)
+                || a.CompanyName.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(a => statusGroup switch
+            {
+                "active" => InProgressStatuses.Contains(a.Status),
+                "offers" => a.Status == ApplicationStatus.Offered,
+                "closed" => a.Status is ApplicationStatus.Rejected or ApplicationStatus.Withdrawn,
+                _ => true
+            })
+            .OrderByDescending(a => a.AppliedAt);
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private static string StatusClass(ApplicationStatus status) => status switch
+    {
+        ApplicationStatus.Pending => "is-pending",
+        ApplicationStatus.Viewed => "is-viewed",
+        ApplicationStatus.Shortlisted => "is-shortlisted",
+        ApplicationStatus.Interviewing => "is-interviewing",
+        ApplicationStatus.Offered => "is-offered",
+        ApplicationStatus.Rejected => "is-rejected",
+        _ => "is-withdrawn"
+    };
+
+    private void ClearFilters()
+    {
+        search = string.Empty;
+        statusGroup = string.Empty;
+    }
 
     private async Task<string?> GetUserIdAsync()
     {
@@ -132,7 +378,12 @@
 
     private async Task LoadAsync()
     {
+        if (isLoading && hasLoadedOnce)
+        {
+            return;
+        }
         isLoading = true;
+        hasLoadedOnce = true;
         loadError = null;
         try
         {
@@ -144,11 +395,16 @@
                 return;
             }
             applications = apps.Data.ToList();
-            totalCount = applications.Count;
 
             var notes = await CandidateService.GetMyNotificationsAsync(userId);
-            notifications = notes.Success && notes.Data is not null ? notes.Data.ToList() : new();
-            unreadCount = notifications.Count(note => !note.IsRead);
+            if (notes.Success && notes.Data is not null)
+            {
+                notifications = notes.Data.ToList();
+            }
+            else
+            {
+                actionError = notes.Errors.FirstOrDefault() ?? "We could not load your messages.";
+            }
         }
         catch (Exception exception)
         {
@@ -163,20 +419,67 @@
     private async Task MarkReadAsync(int notificationId)
     {
         actionMessage = actionError = null;
-        var result = await CandidateService.MarkNotificationReadAsync(await GetUserIdAsync(), notificationId);
+        markingId = notificationId;
+        try
+        {
+            var result = await CandidateService.MarkNotificationReadAsync(await GetUserIdAsync(), notificationId);
+            if (result.Success && result.Data is not null)
+            {
+                var index = notifications.FindIndex(note => note.Id == notificationId);
+                if (index >= 0)
+                {
+                    notifications[index] = result.Data;
+                }
+                actionMessage = "Notification marked read.";
+            }
+            else
+            {
+                actionError = result.Errors.FirstOrDefault() ?? "Could not update this notification.";
+            }
+        }
+        finally
+        {
+            markingId = null;
+        }
+    }
+
+    private async Task WithdrawAsync(int applicationId)
+    {
+        actionMessage = actionError = null;
+        withdrawingId = applicationId;
+        try
+        {
+            var result = await ApplicationService.WithdrawAsync(await GetUserIdAsync(), applicationId);
+            withdrawConfirmId = null;
+            if (!result.Success)
+            {
+                actionError = result.Errors.FirstOrDefault() ?? "We could not withdraw this application.";
+                return;
+            }
+
+            await ReloadApplicationsAsync();
+            actionMessage = "Application withdrawn.";
+        }
+        catch (Exception exception)
+        {
+            actionError = exception.Message;
+        }
+        finally
+        {
+            withdrawingId = null;
+        }
+    }
+
+    private async Task ReloadApplicationsAsync()
+    {
+        var result = await CandidateService.GetMyApplicationsAsync(await GetUserIdAsync());
         if (result.Success && result.Data is not null)
         {
-            var index = notifications.FindIndex(note => note.Id == notificationId);
-            if (index >= 0)
-            {
-                notifications[index] = result.Data;
-            }
-            unreadCount = notifications.Count(note => !note.IsRead);
-            actionMessage = "Notification marked read.";
+            applications = result.Data.ToList();
         }
         else
         {
-            actionError = result.Errors.FirstOrDefault() ?? "Could not update this notification.";
+            actionError = result.Errors.FirstOrDefault() ?? "We could not refresh your applications.";
         }
     }
 }

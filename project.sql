@@ -13,6 +13,9 @@
 --   Application.CurrentStatus / ApplicationStatusHistory.Status: 0=Pending, 1=Viewed, 2=Shortlisted, 3=Interviewing, 4=Offered, 5=Rejected, 6=Withdrawn
 --   Interview.Status: 0=Scheduled, 1=Completed, 2=Cancelled
 --   Interview.InterviewType: 0=Online, 1=Onsite, 2=Phone (NULL = unspecified)
+--   PlanAudience: 0=Employer, 1=Candidate
+--   PaymentPurpose: 0=EmployerPlan, 1=EmployerFeatured, 2=CandidatePremium
+--   PaymentStatus: 0=Pending, 1=Paid, 2=Failed, 3=Expired
 --
 -- Usage: mysql -u root -p < project.sql
 
@@ -35,6 +38,8 @@ DROP TABLE IF EXISTS `Educations`;
 DROP TABLE IF EXISTS `Resumes`;
 DROP TABLE IF EXISTS `Reviews`;
 DROP TABLE IF EXISTS `Employers`;
+DROP TABLE IF EXISTS `Payments`;
+DROP TABLE IF EXISTS `Plans`;
 DROP TABLE IF EXISTS `RefreshTokens`;
 DROP TABLE IF EXISTS `Notifications`;
 DROP TABLE IF EXISTS `ModelTrainingLogs`;
@@ -137,6 +142,57 @@ CREATE TABLE `AspNetUserTokens` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
+-- Billing: plans + payments
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE `Plans` (
+  `Id` int NOT NULL AUTO_INCREMENT,
+  `Audience` int NOT NULL,
+  `Code` varchar(30) CHARACTER SET utf8mb4 NOT NULL,
+  `Name` varchar(100) CHARACTER SET utf8mb4 NOT NULL,
+  `Price` decimal(18,0) NOT NULL,
+  `JobQuota` int NOT NULL,
+  `DurationDays` int NOT NULL,
+  `IsActive` tinyint(1) NOT NULL,
+  `SortOrder` int NOT NULL,
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `IX_Plans_Code` (`Code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `Payments` (
+  `Id` int NOT NULL AUTO_INCREMENT,
+  `PayerUserId` varchar(255) CHARACTER SET utf8mb4 NOT NULL,
+  `CompanyProfileId` int NULL,
+  `CandidateId` int NULL,
+  `Purpose` int NOT NULL,
+  `PlanId` int NULL,
+  `JobPostingId` int NULL,
+  `Amount` decimal(18,0) NOT NULL,
+  `Status` int NOT NULL,
+  `CreatedAt` datetime(6) NOT NULL,
+  `PaidAt` datetime(6) NULL,
+  `VnpTxnRef` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
+  `VnpTransactionNo` varchar(50) CHARACTER SET utf8mb4 NULL,
+  `VnpResponseCode` varchar(10) CHARACTER SET utf8mb4 NULL,
+  `VnpBankCode` varchar(20) CHARACTER SET utf8mb4 NULL,
+  `VnpPayDate` varchar(14) CHARACTER SET utf8mb4 NULL,
+  `Note` varchar(500) CHARACTER SET utf8mb4 NULL,
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `IX_Payments_VnpTxnRef` (`VnpTxnRef`),
+  KEY `IX_Payments_CandidateId` (`CandidateId`),
+  KEY `IX_Payments_CompanyProfileId` (`CompanyProfileId`),
+  KEY `IX_Payments_JobPostingId` (`JobPostingId`),
+  KEY `IX_Payments_PayerUserId` (`PayerUserId`),
+  KEY `IX_Payments_PlanId` (`PlanId`),
+  KEY `IX_Payments_Status_PaidAt` (`Status`, `PaidAt`),
+  CONSTRAINT `FK_Payments_AspNetUsers_PayerUserId` FOREIGN KEY (`PayerUserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE RESTRICT,
+  CONSTRAINT `FK_Payments_Candidates_CandidateId` FOREIGN KEY (`CandidateId`) REFERENCES `Candidates` (`Id`) ON DELETE RESTRICT,
+  CONSTRAINT `FK_Payments_CompanyProfiles_CompanyProfileId` FOREIGN KEY (`CompanyProfileId`) REFERENCES `CompanyProfiles` (`Id`) ON DELETE RESTRICT,
+  CONSTRAINT `FK_Payments_JobPostings_JobPostingId` FOREIGN KEY (`JobPostingId`) REFERENCES `JobPostings` (`Id`) ON DELETE SET NULL,
+  CONSTRAINT `FK_Payments_Plans_PlanId` FOREIGN KEY (`PlanId`) REFERENCES `Plans` (`Id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------------
 -- Users / Companies
 -- ---------------------------------------------------------------------------
 
@@ -155,9 +211,16 @@ CREATE TABLE `Candidates` (
   `JobSeekingStatus` varchar(50) CHARACTER SET utf8mb4 NULL,
   `PreferredWorkModel` varchar(50) CHARACTER SET utf8mb4 NULL,
   `PreferredLocation` varchar(500) CHARACTER SET utf8mb4 NULL,
+  `BoostUntil` datetime(6) NULL,
+  `PremiumPlanId` int NULL,
+  `PremiumStartedAt` datetime(6) NULL,
+  `PremiumUntil` datetime(6) NULL,
+  `IsDiscoverable` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`Id`),
   UNIQUE KEY `IX_Candidates_UserId` (`UserId`),
-  CONSTRAINT `FK_Candidates_AspNetUsers_UserId` FOREIGN KEY (`UserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE CASCADE
+  KEY `IX_Candidates_PremiumPlanId` (`PremiumPlanId`),
+  CONSTRAINT `FK_Candidates_AspNetUsers_UserId` FOREIGN KEY (`UserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE CASCADE,
+  CONSTRAINT `FK_Candidates_Plans_PremiumPlanId` FOREIGN KEY (`PremiumPlanId`) REFERENCES `Plans` (`Id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `CompanyProfiles` (
@@ -173,10 +236,15 @@ CREATE TABLE `CompanyProfiles` (
   `RejectionReason` varchar(1000) CHARACTER SET utf8mb4 NULL,
   `VerifiedAt` datetime(6) NULL,
   `VerifiedByAdminId` varchar(255) CHARACTER SET utf8mb4 NULL,
+  `PlanId` int NULL,
+  `PlanStartedAt` datetime(6) NULL,
+  `PlanExpiresAt` datetime(6) NULL,
   PRIMARY KEY (`Id`),
   UNIQUE KEY `IX_CompanyProfiles_CompanyName` (`CompanyName`),
+  KEY `IX_CompanyProfiles_PlanId` (`PlanId`),
   KEY `IX_CompanyProfiles_VerifiedByAdminId` (`VerifiedByAdminId`),
-  CONSTRAINT `FK_CompanyProfiles_AspNetUsers_VerifiedByAdminId` FOREIGN KEY (`VerifiedByAdminId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE SET NULL
+  CONSTRAINT `FK_CompanyProfiles_AspNetUsers_VerifiedByAdminId` FOREIGN KEY (`VerifiedByAdminId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE SET NULL,
+  CONSTRAINT `FK_CompanyProfiles_Plans_PlanId` FOREIGN KEY (`PlanId`) REFERENCES `Plans` (`Id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `Employers` (
@@ -216,11 +284,17 @@ CREATE TABLE `Notifications` (
   `UserId` varchar(255) CHARACTER SET utf8mb4 NOT NULL,
   `Title` varchar(200) CHARACTER SET utf8mb4 NOT NULL,
   `Content` varchar(2000) CHARACTER SET utf8mb4 NULL,
+  `Kind` varchar(40) CHARACTER SET utf8mb4 NULL,
+  `RelatedJobPostingId` int NULL,
   `IsRead` tinyint(1) NOT NULL DEFAULT 0,
   `CreatedAt` datetime(6) NOT NULL,
   PRIMARY KEY (`Id`),
   KEY `IX_Notifications_UserId_IsRead` (`UserId`, `IsRead`),
-  CONSTRAINT `FK_Notifications_AspNetUsers_UserId` FOREIGN KEY (`UserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE CASCADE
+  KEY `IX_Notifications_RelatedJobPostingId` (`RelatedJobPostingId`),
+  KEY `IX_Notifications_UserId_Kind_CreatedAt` (`UserId`, `Kind`, `CreatedAt`),
+  UNIQUE KEY `IX_Notifications_UserId_Kind_RelatedJobPostingId` (`UserId`, `Kind`, `RelatedJobPostingId`),
+  CONSTRAINT `FK_Notifications_AspNetUsers_UserId` FOREIGN KEY (`UserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE CASCADE,
+  CONSTRAINT `FK_Notifications_JobPostings_RelatedJobPostingId` FOREIGN KEY (`RelatedJobPostingId`) REFERENCES `JobPostings` (`Id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE `ModelTrainingLogs` (
@@ -230,8 +304,10 @@ CREATE TABLE `ModelTrainingLogs` (
   `ModelFilePath` varchar(500) CHARACTER SET utf8mb4 NULL,
   `TrainedByUserId` varchar(255) CHARACTER SET utf8mb4 NULL,
   `TrainedAt` datetime(6) NOT NULL,
+  `IsActive` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`Id`),
   KEY `IX_ModelTrainingLogs_TrainedByUserId` (`TrainedByUserId`),
+  KEY `IX_ModelTrainingLogs_IsActive_TrainedAt` (`IsActive`, `TrainedAt`),
   CONSTRAINT `FK_ModelTrainingLogs_AspNetUsers_TrainedByUserId` FOREIGN KEY (`TrainedByUserId`) REFERENCES `AspNetUsers` (`Id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -326,9 +402,11 @@ CREATE TABLE `JobPostings` (
   `ExpiryDate` datetime(6) NULL,
   `Status` int NOT NULL DEFAULT 0,
   `CreatedAt` datetime(6) NOT NULL,
+  `FeaturedUntil` datetime(6) NULL,
   PRIMARY KEY (`Id`),
   KEY `IX_JobPostings_CompanyProfileId` (`CompanyProfileId`),
   KEY `IX_JobPostings_CreatedByEmployerId` (`CreatedByEmployerId`),
+  KEY `IX_JobPostings_FeaturedUntil` (`FeaturedUntil`),
   CONSTRAINT `FK_JobPostings_CompanyProfiles_CompanyProfileId` FOREIGN KEY (`CompanyProfileId`) REFERENCES `CompanyProfiles` (`Id`) ON DELETE CASCADE,
   CONSTRAINT `FK_JobPostings_Employers_CreatedByEmployerId` FOREIGN KEY (`CreatedByEmployerId`) REFERENCES `Employers` (`Id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

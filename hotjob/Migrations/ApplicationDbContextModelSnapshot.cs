@@ -270,6 +270,138 @@ namespace hotjob.Migrations
                     b.ToTable("Interviews");
                 });
 
+            modelBuilder.Entity("hotjob.Models.Billing.Payment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<int?>("CandidateId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CompanyProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("JobPostingId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("PayerUserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("PlanId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Purpose")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<string>("VnpBankCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("VnpPayDate")
+                        .HasMaxLength(14)
+                        .HasColumnType("varchar(14)");
+
+                    b.Property<string>("VnpResponseCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<string>("VnpTransactionNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("VnpTxnRef")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CandidateId");
+
+                    b.HasIndex("CompanyProfileId");
+
+                    b.HasIndex("JobPostingId");
+
+                    b.HasIndex("PayerUserId");
+
+                    b.HasIndex("PlanId");
+
+                    b.HasIndex("VnpTxnRef")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "PaidAt");
+
+                    b.ToTable("Payments");
+                });
+
+            modelBuilder.Entity("hotjob.Models.Billing.Plan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Audience")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("JobQuota")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18)
+                        .HasColumnType("decimal(18,0)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Plans");
+                });
+
             modelBuilder.Entity("hotjob.Models.Job.JobCategory", b =>
                 {
                     b.Property<int>("Id")
@@ -338,6 +470,9 @@ namespace hotjob.Migrations
                     b.Property<DateTime?>("ExpiryDate")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<DateTime?>("FeaturedUntil")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<int>("JobType")
                         .HasColumnType("int");
 
@@ -362,6 +497,8 @@ namespace hotjob.Migrations
                     b.HasIndex("CompanyProfileId");
 
                     b.HasIndex("CreatedByEmployerId");
+
+                    b.HasIndex("FeaturedUntil");
 
                     b.ToTable("JobPostings");
                 });
@@ -420,6 +557,9 @@ namespace hotjob.Migrations
                     b.Property<double>("AccuracyScore")
                         .HasColumnType("double");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<string>("ModelFilePath")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
@@ -437,6 +577,8 @@ namespace hotjob.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TrainedByUserId");
+
+                    b.HasIndex("IsActive", "TrainedAt");
 
                     b.ToTable("ModelTrainingLogs");
                 });
@@ -459,6 +601,13 @@ namespace hotjob.Migrations
                     b.Property<bool>("IsRead")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<string>("Kind")
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<int?>("RelatedJobPostingId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -471,7 +620,14 @@ namespace hotjob.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("RelatedJobPostingId");
+
                     b.HasIndex("UserId", "IsRead");
+
+                    b.HasIndex("UserId", "Kind", "CreatedAt");
+
+                    b.HasIndex("UserId", "Kind", "RelatedJobPostingId")
+                        .IsUnique();
 
                     b.ToTable("Notifications");
                 });
@@ -771,6 +927,9 @@ namespace hotjob.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("varchar(2048)");
 
+                    b.Property<DateTime?>("BoostUntil")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<DateOnly?>("DateOfBirth")
                         .HasColumnType("date");
 
@@ -785,6 +944,9 @@ namespace hotjob.Migrations
                     b.Property<string>("GithubUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("varchar(2048)");
+
+                    b.Property<bool>("IsDiscoverable")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("JobSeekingStatus")
                         .HasMaxLength(50)
@@ -806,6 +968,15 @@ namespace hotjob.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<int?>("PremiumPlanId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PremiumStartedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("PremiumUntil")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("Summary")
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
@@ -816,6 +987,8 @@ namespace hotjob.Migrations
                         .HasColumnType("varchar(255)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PremiumPlanId");
 
                     b.HasIndex("UserId")
                         .IsUnique();
@@ -852,6 +1025,15 @@ namespace hotjob.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("varchar(2048)");
 
+                    b.Property<DateTime?>("PlanExpiresAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("PlanId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PlanStartedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("RejectionReason")
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)");
@@ -877,6 +1059,8 @@ namespace hotjob.Migrations
 
                     b.HasIndex("CompanyName")
                         .IsUnique();
+
+                    b.HasIndex("PlanId");
 
                     b.HasIndex("VerifiedByAdminId");
 
@@ -1079,6 +1263,45 @@ namespace hotjob.Migrations
                     b.Navigation("Application");
                 });
 
+            modelBuilder.Entity("hotjob.Models.Billing.Payment", b =>
+                {
+                    b.HasOne("hotjob.Models.Users.Candidate", "Candidate")
+                        .WithMany()
+                        .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("hotjob.Models.Users.CompanyProfile", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyProfileId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("hotjob.Models.Job.JobPosting", "JobPosting")
+                        .WithMany()
+                        .HasForeignKey("JobPostingId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("hotjob.Models.Users.ApplicationUser", "PayerUser")
+                        .WithMany()
+                        .HasForeignKey("PayerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("hotjob.Models.Billing.Plan", "Plan")
+                        .WithMany()
+                        .HasForeignKey("PlanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Candidate");
+
+                    b.Navigation("Company");
+
+                    b.Navigation("JobPosting");
+
+                    b.Navigation("PayerUser");
+
+                    b.Navigation("Plan");
+                });
+
             modelBuilder.Entity("hotjob.Models.Job.JobCategoryMapping", b =>
                 {
                     b.HasOne("hotjob.Models.Job.JobCategory", "Category")
@@ -1166,11 +1389,18 @@ namespace hotjob.Migrations
 
             modelBuilder.Entity("hotjob.Models.Notification", b =>
                 {
+                    b.HasOne("hotjob.Models.Job.JobPosting", "RelatedJob")
+                        .WithMany()
+                        .HasForeignKey("RelatedJobPostingId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("hotjob.Models.Users.ApplicationUser", "User")
                         .WithMany("Notifications")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("RelatedJob");
 
                     b.Navigation("User");
                 });
@@ -1267,21 +1497,35 @@ namespace hotjob.Migrations
 
             modelBuilder.Entity("hotjob.Models.Users.Candidate", b =>
                 {
+                    b.HasOne("hotjob.Models.Billing.Plan", "PremiumPlan")
+                        .WithMany()
+                        .HasForeignKey("PremiumPlanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("hotjob.Models.Users.ApplicationUser", "User")
                         .WithOne("Candidate")
                         .HasForeignKey("hotjob.Models.Users.Candidate", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("PremiumPlan");
+
                     b.Navigation("User");
                 });
 
             modelBuilder.Entity("hotjob.Models.Users.CompanyProfile", b =>
                 {
+                    b.HasOne("hotjob.Models.Billing.Plan", "Plan")
+                        .WithMany()
+                        .HasForeignKey("PlanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("hotjob.Models.Users.ApplicationUser", "VerifiedBy")
                         .WithMany()
                         .HasForeignKey("VerifiedByAdminId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Plan");
 
                     b.Navigation("VerifiedBy");
                 });

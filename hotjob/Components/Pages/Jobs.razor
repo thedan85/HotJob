@@ -51,7 +51,20 @@
 <section class="jobs-section" aria-label="Job results">
     @if (isLoading)
     {
-        <p class="jobs-status" role="status">Loading jobs…</p>
+        <div class="jobs-list" aria-hidden="true">
+            @for (var i = 0; i < 4; i++)
+            {
+                <div class="job-card jobs-skeleton-card">
+                    <div class="job-logo workspace-skeleton"></div>
+                    <div class="job-main">
+                        <div class="workspace-skeleton" style="height:18px;width:48%"></div>
+                        <div class="workspace-skeleton" style="height:12px;width:28%;margin-top:9px"></div>
+                        <div class="workspace-skeleton" style="height:12px;width:65%;margin-top:13px"></div>
+                    </div>
+                </div>
+            }
+        </div>
+        <p class="jobs-status visually-hidden" role="status">Loading jobs…</p>
     }
     else if (!string.IsNullOrWhiteSpace(loadError))
     {
@@ -103,8 +116,8 @@
                     </div>
                     <div class="job-side">
                         <AuthorizeView>
-                            <Authorized>@FormatSalary(job.SalaryMin, job.SalaryMax)</Authorized>
-                            <NotAuthorized><a class="job-salary job-salary-locked" href="/login">Log in to view salary</a></NotAuthorized>
+                            <Authorized><span class="job-salary">@FormatSalary(job.SalaryMin, job.SalaryMax)</span></Authorized>
+                            <NotAuthorized><span class="job-salary job-salary-locked">Log in to view salary</span></NotAuthorized>
                         </AuthorizeView>
                     </div>
                 </a>

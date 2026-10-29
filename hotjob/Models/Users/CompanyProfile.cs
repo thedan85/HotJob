@@ -59,6 +59,18 @@ public class CompanyProfile
     /// <summary>Admin who verified this company. Null until reviewed.</summary>
     public ApplicationUser? VerifiedBy { get; set; }
 
+    /// <summary>Current employer plan. Null means the FREE plan.</summary>
+    public int? PlanId { get; set; }
+
+    /// <summary>When the current plan period started.</summary>
+    public DateTime? PlanStartedAt { get; set; }
+
+    /// <summary>When the current plan lapses back to FREE. Null means it never lapses.</summary>
+    public DateTime? PlanExpiresAt { get; set; }
+
+    /// <summary>Current employer plan. Null means the FREE plan.</summary>
+    public Billing.Plan? Plan { get; set; }
+
     /// <summary>Employer members of the company.</summary>
     public ICollection<Employer> Employers { get; set; } = new List<Employer>();
 

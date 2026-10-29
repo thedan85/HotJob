@@ -1,0 +1,185 @@
+/* Candidate applications page. Shared primitives live in Workspace.css. */
+
+.ma-page {
+    width: min(1300px, calc(100% - 40px));
+    margin: 28px auto 64px;
+}
+
+.ma-skeleton-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 20px;
+    margin-top: 16px;
+}
+
+.ma-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 20px;
+    align-items: start;
+}
+
+.ma-apps { padding: 20px; }
+
+.ma-app {
+    padding: 16px 0;
+    border-top: 1px solid var(--hj-border);
+}
+
+.ma-app:first-of-type { padding-top: 2px; border-top: 0; }
+.ma-app:last-child { padding-bottom: 0; }
+
+.ma-app-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.ma-app-title { margin: 0; color: var(--hj-ink); font-size: 15px; line-height: 1.4; }
+.ma-app-company { margin: 2px 0 0; color: var(--hj-muted); font-size: 13px; }
+
+.ma-app-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 9px;
+    color: var(--hj-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.ma-app-meta span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.ma-app-meta svg { width: 13px; height: 13px; flex: 0 0 13px; color: var(--hj-accent-text); }
+
+.ma-history { margin-top: 12px; }
+.ma-history .workspace-details-body { background: var(--hj-surface-muted); }
+
+.ma-timeline {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ma-timeline li {
+    position: relative;
+    display: grid;
+    gap: 1px;
+    padding-left: 18px;
+}
+
+.ma-timeline li::before {
+    position: absolute;
+    top: 5px;
+    left: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--hj-accent);
+    content: "";
+}
+
+.ma-timeline li:not(:last-child)::after {
+    position: absolute;
+    top: 15px;
+    bottom: -12px;
+    left: 3px;
+    width: 1px;
+    background: var(--hj-border-strong);
+    content: "";
+}
+
+.ma-timeline strong { color: var(--hj-ink); font-size: 13px; }
+.ma-timeline span { color: var(--hj-muted); font-size: 12.5px; line-height: 1.55; }
+.ma-timeline small { color: var(--hj-muted); font-size: 11px; }
+
+.ma-rail { position: sticky; top: 90px; }
+.ma-rail .workspace-card { padding: 18px; }
+.ma-rail .workspace-empty { padding: 26px 16px; }
+
+.ma-notes {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ma-note {
+    display: grid;
+    gap: 5px;
+    justify-items: start;
+    padding: 12px;
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-sm);
+    background: var(--hj-surface);
+}
+
+.ma-note.is-unread { border-color: #BAE6FD; background: var(--hj-info-bg); }
+
+.ma-note-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+}
+
+.ma-note-head strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--hj-ink);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.ma-note-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--hj-accent);
+}
+
+.ma-note-head time { flex: 0 0 auto; color: var(--hj-muted); font-size: 11px; }
+
+.ma-note p {
+    margin: 0;
+    color: var(--hj-muted);
+    font-size: 12.5px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.ma-note .workspace-btn { margin-top: 4px; }
+
+@media (max-width: 1020px) {
+    .ma-layout,
+    .ma-skeleton-layout { grid-template-columns: 1fr; }
+    .ma-rail { position: static; }
+}
+
+@media (max-width: 760px) {
+    .ma-page { width: min(100% - 28px, 1300px); margin: 20px auto 48px; }
+    .ma-app-head { flex-direction: column; gap: 7px; }
+}
+
+/* Withdraw action on in-progress applications */
+.ma-app-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--hj-border);
+}
+
+.ma-withdraw-copy {
+    color: var(--hj-danger);
+    font-size: 12px;
+    font-weight: 600;
+}
