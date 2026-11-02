@@ -1,5 +1,7 @@
 using hotjob.Data;
 using hotjob.DTOs.Admin;
+using hotjob.DTOs.Job;
+using hotjob.Models;
 using hotjob.Models.Job;
 using hotjob.Models.Users;
 using hotjob.Services.Common;
@@ -201,6 +203,77 @@ public sealed class AdminService(
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<PagedResponse<AdminSkillDto>>> GetSkillsAsync(
+        string? search,
+        string? category,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 200);
+
+        var query = dbContext.Skills.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(skill => EF.Functions.Like(skill.Name, $"%{term}%"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var term = category.Trim();
+            query = query.Where(skill => skill.Category == term);
+        }
+
+        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+
+        var items = await query
+            .OrderBy(skill => skill.Name)
+            .ThenBy(skill => skill.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(skill => new AdminSkillDto(
+                skill.Id,
+                skill.Name,
+                skill.Category,
+                skill.ResumeSkills.Count,
+                skill.JobSkills.Count))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<PagedResponse<AdminSkillDto>>.Ok(
+            new PagedResponse<AdminSkillDto>
+            {
+                Items = items,
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize
+            });
+    }
+
+    public async Task<ServiceResult<AdminSkillDto>> GetSkillAsync(
+        int skillId,
+        CancellationToken cancellationToken = default)
+    {
+        var dto = await dbContext.Skills
+            .AsNoTracking()
+            .Where(skill => skill.Id == skillId)
+            .Select(skill => new AdminSkillDto(
+                skill.Id,
+                skill.Name,
+                skill.Category,
+                skill.ResumeSkills.Count,
+                skill.JobSkills.Count))
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return dto is null
+            ? ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.NotFound, "Skill not found.")
+            : ServiceResult<AdminSkillDto>.Ok(dto);
     }
 }
 
