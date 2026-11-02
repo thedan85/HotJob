@@ -99,6 +99,16 @@ public sealed class ResumeServiceTests
         Skills = [new ResumeSkillInput { SkillId = skillId, YearsOfExperience = 3 }]
     };
 
+    private static async Task<ResumeInput> SimpleInputAsync(TestFixture fx, string title)
+    {
+        var skill = await SeedSkillAsync(fx, $"Skill {Guid.NewGuid():N}");
+        return new ResumeInput
+        {
+            Title = title,
+            Skills = [new ResumeSkillInput { SkillId = skill.Id }]
+        };
+    }
+
     [Fact]
     public async Task CreateAsync_FirstResumeBecomesPrimaryAndPersistsChildren()
     {
@@ -132,11 +142,11 @@ public sealed class ResumeServiceTests
         var service = NewService(fx);
         for (var index = 1; index <= 5; index++)
         {
-            var created = await service.CreateAsync(userId, new ResumeInput { Title = $"CV {index}" });
+            var created = await service.CreateAsync(userId, await SimpleInputAsync(fx, $"CV {index}"));
             Assert.True(created.Success, string.Join("; ", created.Errors));
         }
 
-        var result = await service.CreateAsync(userId, new ResumeInput { Title = "CV 6" });
+        var result = await service.CreateAsync(userId, await SimpleInputAsync(fx, "CV 6"));
 
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
@@ -151,8 +161,8 @@ public sealed class ResumeServiceTests
         var (userId, _) = await SeedCandidateAsync(fx, "me@example.com");
         var service = NewService(fx);
 
-        var first = await service.CreateAsync(userId, new ResumeInput { Title = "First" });
-        var second = await service.CreateAsync(userId, new ResumeInput { Title = "Second" });
+        var first = await service.CreateAsync(userId, await SimpleInputAsync(fx, "First"));
+        var second = await service.CreateAsync(userId, await SimpleInputAsync(fx, "Second"));
 
         Assert.True(first.Data!.IsPrimary);
         Assert.False(second.Data!.IsPrimary);
@@ -166,8 +176,8 @@ public sealed class ResumeServiceTests
         await using var fx = await TestFixture.CreateAsync();
         var (userId, candidateId) = await SeedCandidateAsync(fx, "me@example.com");
         var service = NewService(fx);
-        var first = await service.CreateAsync(userId, new ResumeInput { Title = "First" });
-        var second = await service.CreateAsync(userId, new ResumeInput { Title = "Second" });
+        var first = await service.CreateAsync(userId, await SimpleInputAsync(fx, "First"));
+        var second = await service.CreateAsync(userId, await SimpleInputAsync(fx, "Second"));
 
         var result = await service.SetPrimaryAsync(userId, second.Data!.Id);
 
@@ -189,9 +199,9 @@ public sealed class ResumeServiceTests
         await using var fx = await TestFixture.CreateAsync();
         var (userId, candidateId) = await SeedCandidateAsync(fx, "me@example.com");
         var service = NewService(fx);
-        var first = await service.CreateAsync(userId, new ResumeInput { Title = "First" });
-        var second = await service.CreateAsync(userId, new ResumeInput { Title = "Second" });
-        var third = await service.CreateAsync(userId, new ResumeInput { Title = "Third" });
+        var first = await service.CreateAsync(userId, await SimpleInputAsync(fx, "First"));
+        var second = await service.CreateAsync(userId, await SimpleInputAsync(fx, "Second"));
+        var third = await service.CreateAsync(userId, await SimpleInputAsync(fx, "Third"));
 
         var result = await service.DeleteAsync(userId, first.Data!.Id);
 
@@ -212,7 +222,7 @@ public sealed class ResumeServiceTests
         await using var fx = await TestFixture.CreateAsync();
         var (userId, candidateId) = await SeedCandidateAsync(fx, "me@example.com");
         var service = NewService(fx);
-        var only = await service.CreateAsync(userId, new ResumeInput { Title = "Only" });
+        var only = await service.CreateAsync(userId, await SimpleInputAsync(fx, "Only"));
 
         var result = await service.DeleteAsync(userId, only.Data!.Id);
 
@@ -226,7 +236,7 @@ public sealed class ResumeServiceTests
         await using var fx = await TestFixture.CreateAsync();
         var (userId, candidateId) = await SeedCandidateAsync(fx, "me@example.com");
         var service = NewService(fx);
-        var resume = await service.CreateAsync(userId, new ResumeInput { Title = "Applied CV" });
+        var resume = await service.CreateAsync(userId, await SimpleInputAsync(fx, "Applied CV"));
         var jobId = await SeedJobAsync(fx);
         fx.Db.Applications.Add(new Application
         {
@@ -252,9 +262,10 @@ public sealed class ResumeServiceTests
         var (ownerUserId, _) = await SeedCandidateAsync(fx, "owner@example.com");
         var (otherUserId, _) = await SeedCandidateAsync(fx, "other@example.com");
         var service = NewService(fx);
-        var resume = await service.CreateAsync(ownerUserId, new ResumeInput { Title = "Owner CV" });
+        var resume = await service.CreateAsync(ownerUserId, await SimpleInputAsync(fx, "Owner CV"));
 
-        var result = await service.UpdateAsync(otherUserId, resume.Data!.Id, new ResumeInput { Title = "Hijacked" });
+        var result = await service.UpdateAsync(
+            otherUserId, resume.Data!.Id, await SimpleInputAsync(fx, "Hijacked"));
 
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
@@ -269,7 +280,7 @@ public sealed class ResumeServiceTests
         var (ownerUserId, _) = await SeedCandidateAsync(fx, "owner@example.com");
         var (otherUserId, _) = await SeedCandidateAsync(fx, "other@example.com");
         var service = NewService(fx);
-        var resume = await service.CreateAsync(ownerUserId, new ResumeInput { Title = "Private CV" });
+        var resume = await service.CreateAsync(ownerUserId, await SimpleInputAsync(fx, "Private CV"));
 
         var result = await service.GetAsync(otherUserId, resume.Data!.Id);
 
@@ -402,6 +413,20 @@ public sealed class ResumeServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_NoSkills_ReturnsValidationError()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, _) = await SeedCandidateAsync(fx, "me@example.com");
+
+        var result = await NewService(fx).CreateAsync(userId, new ResumeInput { Title = "CV" });
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Validation, result.ErrorType);
+        Assert.Contains("At least one skill is required.", string.Join(" ", result.Errors));
+        Assert.Equal(0, await fx.Db.Resumes.CountAsync());
+    }
+
+    [Fact]
     public async Task CreateAsync_MissingTitle_ReturnsValidationError()
     {
         await using var fx = await TestFixture.CreateAsync();
@@ -434,7 +459,7 @@ public sealed class ResumeServiceTests
         {
             var (userId, candidateId) = await SeedCandidateAsync(fx, "me@example.com");
             var service = NewService(fx, root);
-            var created = await service.CreateAsync(userId, new ResumeInput { Title = "CV" });
+            var created = await service.CreateAsync(userId, await SimpleInputAsync(fx, "CV"));
             await using var content = new MemoryStream("%PDF-1.4 uploaded"u8.ToArray());
 
             var upload = await service.UploadFileAsync(
@@ -466,7 +491,7 @@ public sealed class ResumeServiceTests
         {
             var (userId, candidateId) = await SeedCandidateAsync(fx, "me@example.com");
             var service = NewService(fx, root);
-            var created = await service.CreateAsync(userId, new ResumeInput { Title = "CV" });
+            var created = await service.CreateAsync(userId, await SimpleInputAsync(fx, "CV"));
 
             await using var first = new MemoryStream("%PDF-1.4 first"u8.ToArray());
             var firstUpload = await service.UploadFileAsync(userId, created.Data!.Id, "first.pdf", first.Length, first);
@@ -508,7 +533,7 @@ public sealed class ResumeServiceTests
         {
             var (userId, _) = await SeedCandidateAsync(fx, "me@example.com");
             var service = NewService(fx, root);
-            var created = await service.CreateAsync(userId, new ResumeInput { Title = "CV" });
+            var created = await service.CreateAsync(userId, await SimpleInputAsync(fx, "CV"));
 
             await using var first = new MemoryStream("%PDF-1.4 first"u8.ToArray());
             var firstUpload = await service.UploadFileAsync(userId, created.Data!.Id, "first.pdf", first.Length, first);

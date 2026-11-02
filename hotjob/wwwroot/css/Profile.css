@@ -32,5 +32,10 @@
 .cv-remove { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--hj-border); border-radius: var(--hj-radius-sm); background: #fff; color: var(--hj-muted); font-size: 16px; cursor: pointer; }
 .cv-remove:hover { border-color: var(--hj-danger); color: var(--hj-danger); }
 .cv-form-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
-@media(max-width:900px){.cv-form-row{grid-template-columns:1fr 1fr}.cv-form-row .cv-remove{justify-self:start}}
+.cv-create-choice { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; padding: 18px; border: 1px solid var(--hj-primary-light); border-radius: var(--hj-radius-md); background: #F8FCFF; }
+.cv-create-option h3 { margin: 0 0 6px; font-size: 15px; }
+.cv-create-option p { margin: 0 0 12px; color: var(--hj-muted); font-size: 12px; }
+.cv-choice-close { position: absolute; top: 8px; right: 8px; }
+.validation-message { color: var(--hj-danger); font-size: 11px; font-weight: 600; }
+@media(max-width:900px){.cv-form-row{grid-template-columns:1fr 1fr}.cv-form-row .cv-remove{justify-self:start}.cv-create-choice{grid-template-columns:1fr}}
 @media(max-width:600px){.cv-toolbar{display:block}.cv-toolbar .profile-btn{margin-top:10px}.cv-form-row{grid-template-columns:1fr}.cv-skill-picker label:first-child{flex-basis:100%}}

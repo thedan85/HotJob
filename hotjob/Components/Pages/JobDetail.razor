@@ -312,6 +312,10 @@ else
     private int matchResumeId;
     private bool isPremium;
 
+    // Session restore fires AuthenticationStateChanged while OnParametersSetAsync is
+    // still loading; both paths share the circuit-scoped DbContext.
+    private readonly SemaphoreSlim loadGate = new(1, 1);
+
     protected override void OnInitialized()
     {
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
@@ -361,120 +365,136 @@ else
 
     private async Task LoadApplyContextAsync()
     {
-        applyContext = null;
-        applyError = null;
-        if (job is null)
-            return;
-
-        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
-        {
-            applyContextLoading = false;
-            return;
-        }
-
-        applyContextLoading = true;
+        await loadGate.WaitAsync();
         try
         {
-            var userId = await GetUserIdAsync();
-            if (string.IsNullOrWhiteSpace(userId))
+            applyContext = null;
+            applyError = null;
+            if (job is null)
                 return;
 
-            var result = await ApplicationService.GetApplyContextAsync(userId, job.Id);
-            if (!result.Success || result.Data is null)
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
             {
-                applyError = result.Errors.FirstOrDefault() ?? "We could not check your applications.";
+                applyContextLoading = false;
                 return;
             }
 
-            applyContext = result.Data;
-            if (applyContext.Resumes.Count > 0)
+            applyContextLoading = true;
+            try
             {
-                selectedResumeId = applyContext.Resumes.FirstOrDefault(resume => resume.IsPrimary)?.Id
-                    ?? applyContext.Resumes[0].Id;
+                var userId = await GetUserIdAsync();
+                if (string.IsNullOrWhiteSpace(userId))
+                    return;
+
+                var result = await ApplicationService.GetApplyContextAsync(userId, job.Id);
+                if (!result.Success || result.Data is null)
+                {
+                    applyError = result.Errors.FirstOrDefault() ?? "We could not check your applications.";
+                    return;
+                }
+
+                applyContext = result.Data;
+                if (applyContext.Resumes.Count > 0)
+                {
+                    selectedResumeId = applyContext.Resumes.FirstOrDefault(resume => resume.IsPrimary)?.Id
+                        ?? applyContext.Resumes[0].Id;
+                }
             }
-        }
-        catch (Exception exception)
-        {
-            applyError = exception.Message;
+            catch (Exception exception)
+            {
+                applyError = exception.Message;
+            }
+            finally
+            {
+                applyContextLoading = false;
+            }
         }
         finally
         {
-            applyContextLoading = false;
+            loadGate.Release();
         }
     }
 
     private async Task LoadMatchAsync()
     {
-        matchScore = null;
-        advancedMatch = null;
-        matchError = null;
-        advancedError = null;
-        isPremium = false;
-
-        if (job is null || job.Skills.Count == 0
-            || applyContext is null || applyContext.Resumes.Count == 0)
-        {
-            return;
-        }
-
-        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
-        {
-            return;
-        }
-
-        if (matchResumeId <= 0 || applyContext.Resumes.All(resume => resume.Id != matchResumeId))
-        {
-            matchResumeId = applyContext.Resumes.FirstOrDefault(resume => resume.IsPrimary)?.Id
-                ?? applyContext.Resumes[0].Id;
-        }
-
-        var userId = await GetUserIdAsync();
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return;
-        }
-
-        matchLoading = true;
+        await loadGate.WaitAsync();
         try
         {
-            var result = await MatchScoreService.GetAsync(userId, job.Id, matchResumeId);
-            if (!result.Success || result.Data is null)
-            {
-                matchError = result.Errors.FirstOrDefault() ?? "We could not calculate your match.";
-                return;
-            }
+            matchScore = null;
+            advancedMatch = null;
+            matchError = null;
+            advancedError = null;
+            isPremium = false;
 
-            matchScore = result.Data;
-            if (!matchScore.Available)
-            {
-                return;
-            }
-
-            isPremium = await CandidatePremiumService.IsPremiumAsync(userId);
-            if (!isPremium)
+            if (job is null || job.Skills.Count == 0
+                || applyContext is null || applyContext.Resumes.Count == 0)
             {
                 return;
             }
 
-            var advanced = await MatchScoreService.GetAdvancedAsync(userId, job.Id, matchResumeId);
-            if (advanced.Success)
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
             {
-                advancedMatch = advanced.Data;
+                return;
             }
-            else
+
+            if (matchResumeId <= 0 || applyContext.Resumes.All(resume => resume.Id != matchResumeId))
             {
-                advancedError = advanced.Errors.FirstOrDefault() ?? "Advanced analysis is unavailable right now.";
+                matchResumeId = applyContext.Resumes.FirstOrDefault(resume => resume.IsPrimary)?.Id
+                    ?? applyContext.Resumes[0].Id;
             }
-        }
-        catch (Exception exception)
-        {
-            matchError = exception.Message;
+
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            matchLoading = true;
+            try
+            {
+                var result = await MatchScoreService.GetAsync(userId, job.Id, matchResumeId);
+                if (!result.Success || result.Data is null)
+                {
+                    matchError = result.Errors.FirstOrDefault() ?? "We could not calculate your match.";
+                    return;
+                }
+
+                matchScore = result.Data;
+                if (!matchScore.Available)
+                {
+                    return;
+                }
+
+                isPremium = await CandidatePremiumService.IsPremiumAsync(userId);
+                if (!isPremium)
+                {
+                    return;
+                }
+
+                var advanced = await MatchScoreService.GetAdvancedAsync(userId, job.Id, matchResumeId);
+                if (advanced.Success)
+                {
+                    advancedMatch = advanced.Data;
+                }
+                else
+                {
+                    advancedError = advanced.Errors.FirstOrDefault() ?? "Advanced analysis is unavailable right now.";
+                }
+            }
+            catch (Exception exception)
+            {
+                matchError = exception.Message;
+            }
+            finally
+            {
+                matchLoading = false;
+            }
         }
         finally
         {
-            matchLoading = false;
+            loadGate.Release();
         }
     }
 

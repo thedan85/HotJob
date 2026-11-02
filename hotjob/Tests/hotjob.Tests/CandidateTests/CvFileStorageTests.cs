@@ -45,6 +45,26 @@ public sealed class CvFileStorageTests
         }
     }
 
+    [Fact]
+    public async Task SaveAsync_RejectsPdfExtensionWithNonPdfContent()
+    {
+        var root = NewRoot();
+        try
+        {
+            await using var content = new MemoryStream("MZ not a pdf"u8.ToArray());
+            var result = await NewStorage(root).SaveAsync(1, "cv.pdf", content.Length, content);
+
+            Assert.False(result.Success);
+            Assert.Equal(ServiceErrorType.Validation, result.ErrorType);
+            Assert.Contains("not a valid", Assert.Single(result.Errors));
+            Assert.False(Directory.Exists(root));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("cv.exe")]
     [InlineData("cv.txt")]

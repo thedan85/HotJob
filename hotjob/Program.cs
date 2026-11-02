@@ -231,6 +231,7 @@ builder.Services.AddSingleton<IMatchModelStore>(services => new MatchModelStore(
     builder.Environment.ContentRootPath,
     services.GetRequiredService<ILogger<MatchModelStore>>()));
 builder.Services.AddScoped<IMatchScoreService, MatchScoreService>();
+builder.Services.AddScoped<ISyntheticMatchTrainingService, SyntheticMatchTrainingService>();
 builder.Services.AddScoped<IJobAlertService, JobAlertService>();
 
 var app = builder.Build();
