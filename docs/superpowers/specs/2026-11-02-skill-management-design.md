@@ -2,99 +2,137 @@
 
 ## Overview
 
-Add two capabilities:
-1. **Admin Skills CRUD** - Admin endpoints to create, update, delete, and list skills
-2. **Candidate Skill-Based Job Search** - Find jobs matching a resume's skills
+Add two API capabilities:
+
+1. **Admin Skills CRUD** - Admin endpoints to create, update, delete, and list skills.
+2. **Candidate Skill-Based Job Search** - Find published jobs matching a resume's skills.
+
+This phase is API-only. Existing Blazor pages stay unchanged. The endpoints serve Swagger and external API clients. No new admin or candidate UI is in scope.
 
 ## Goals
 
-- Admin can manage the Skills catalog (create, rename, delete, list)
-- Candidates can search jobs that match their resume skills
-- Maintain data integrity (prevent orphaned references, duplicate skills)
-- Follow existing codebase patterns (REST API, service layer, DTOs)
+- Admin can manage the Skills catalog through the API (create, rename, delete, list, search).
+- Candidates can search published jobs that match their resume skills.
+- Maintain data integrity: unique skill names, no deletion while referenced, no orphaned references.
+- Follow existing codebase patterns: REST controllers, service layer, `ServiceResult`, `ApiResponse`, DTOs, pagination.
+- Keep the change small: no new columns, no new tables, no new authorization policy.
 
 ## Non-Goals
 
-- Skill recommendation engine
-- Skill taxonomy/hierarchy
-- Bulk import/export
-- Skill versioning
+- Blazor admin or candidate pages for this feature.
+- Skill recommendation engine.
+- Skill taxonomy or hierarchy.
+- Bulk import/export.
+- Skill versioning.
+- Skill synonyms or aliases.
+- Skill proficiency levels or endorsements.
 
 ## Technical Approach
 
-- New `AdminController` at `/api/admin/skills/*` for Skills CRUD
-- New endpoint on existing job search: `/api/jobs/matching-resume/{resumeId}`
-- Extend `IAdminService` and `IJobService` interfaces
-- Reuse existing `Skill` entity, add DTOs for requests/responses
-- Authorization: admin endpoints require admin role; candidate search requires authentication
+- New `AdminSkillsController` at `/api/admin/skills`, deriving `ApiControllerBase`.
+- New `JobSearchController` at `/api/jobs`, deriving `ApiControllerBase`.
+- Extend `IAdminService` and `IJobService`.
+- Reuse the existing `Skill` entity and the existing `ResumeSkill` / `JobSkill` join rows.
+- Reuse `PagedResponse<T>`, `ApiResponse<T>`, and `ServiceResult`.
+- Opt both new controllers into `ApiValidationEnvelopeAttribute` so automatic body/query validation also returns the envelope, without changing unrelated controllers.
+- Admin endpoints use the existing role attribute pattern:
+  `[Authorize(Roles = "Admin", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]`.
+- Candidate search uses `[Authorize]` and verifies resume ownership in the service.
+- Do not add a custom authorization policy and do not change `Program.cs`.
 
 ## Admin Skills CRUD
 
 ### Endpoints
 
+Action responses use the existing envelope, except successful deletes return an empty `204` response:
+
+```json
+{ "success": true, "data": { }, "errors": [] }
+```
+
+Action errors and automatic model-validation errors use:
+
+```json
+{ "success": false, "data": null, "errors": ["..."] }
+```
+
+Framework authentication/authorization challenges keep the existing empty-body `401`/`403` behavior.
+
 #### 1. List All Skills
 
 **GET** `/api/admin/skills`
 
-**Auth:** Admin role required
+**Auth:** Admin role required.
 
 **Query params:**
-- `search` (optional): filter by Name (case-insensitive LIKE)
-- `category` (optional): filter by exact Category
-- `page` (default: 1)
-- `pageSize` (default: 50, max: 200)
+- `search` (optional): case-insensitive Name filter.
+- `category` (optional): exact Category filter.
+- `page` (default: 1, minimum: 1).
+- `pageSize` (default: 50, minimum: 1, maximum: 200).
+
+**Ordering:** `Name` ascending, then `Id` ascending. This makes pagination stable.
 
 **Response 200:**
+
 ```json
 {
-  "items": [
-    {
-      "id": 1,
-      "name": "C#",
-      "category": "Backend",
-      "resumeCount": 45,
-      "jobCount": 23,
-      "createdAt": "2026-01-15T10:00:00Z"
-    }
-  ],
-  "totalCount": 120,
-  "page": 1,
-  "pageSize": 50
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "name": "C#",
+        "category": "Backend",
+        "resumeCount": 45,
+        "jobCount": 23
+      }
+    ],
+    "totalCount": 120,
+    "page": 1,
+    "pageSize": 50,
+    "totalPages": 3
+  },
+  "errors": []
 }
 ```
 
-**Response 401:** Not authenticated  
-**Response 403:** Not admin
+**Response 401:** Not authenticated.
+**Response 403:** Not admin.
 
 #### 2. Get Single Skill
 
 **GET** `/api/admin/skills/{id}`
 
-**Auth:** Admin role required
+**Auth:** Admin role required.
 
 **Response 200:**
+
 ```json
 {
-  "id": 1,
-  "name": "C#",
-  "category": "Backend",
-  "resumeCount": 45,
-  "jobCount": 23,
-  "createdAt": "2026-01-15T10:00:00Z"
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "C#",
+    "category": "Backend``",
+    "resumeCount": 45,
+    "jobCount": 23
+  },
+  "errors": []
 }
 ```
 
-**Response 401:** Not authenticated  
-**Response 403:** Not admin  
-**Response 404:** Skill not found
+**Response 401:** Not authenticated.
+**Response 403:** Not admin.
+**Response 404:** Skill not found.
 
 #### 3. Create Skill
 
 **POST** `/api/admin/skills`
 
-**Auth:** Admin role required
+**Auth:** Admin role required.
 
 **Request body:**
+
 ```json
 {
   "name": "Rust",
@@ -103,34 +141,40 @@ Add two capabilities:
 ```
 
 **Validation:**
-- `name`: required, 1-100 chars, trimmed
-- `category`: optional, max 100 chars, trimmed
-- Case-insensitive duplicate check: reject if `Name.ToLower()` exists
+- `name`: required, trimmed, 1-100 characters.
+- `category`: optional, trimmed, maximum 100 characters. Empty becomes `null`.
+- Duplicate check is case-insensitive.
+- Validation lives in `AdminService`, not only in DTO annotations.
 
 **Response 201:**
+
 ```json
 {
-  "id": 125,
-  "name": "Rust",
-  "category": "Backend",
-  "resumeCount": 0,
-  "jobCount": 0,
-  "createdAt": "2026-11-02T07:30:00Z"
+  "success": true,
+  "data": {
+    "id": 125,
+    "name": "Rust",
+    "category": "Backend",
+    "resumeCount": 0,
+    "jobCount": 0
+  },
+  "errors": []
 }
 ```
 
-**Response 400:** Validation errors  
-**Response 401:** Not authenticated  
-**Response 403:** Not admin  
-**Response 409:** Skill name already exists (case-insensitive)
+**Response 400:** Validation errors.
+**Response 401:** Not authenticated.
+**Response 403:** Not admin.
+**Response 409:** Skill name already exists (case-insensitive).
 
 #### 4. Update Skill
 
 **PUT** `/api/admin/skills/{id}`
 
-**Auth:** Admin role required
+**Auth:** Admin role required.
 
 **Request body:**
+
 ```json
 {
   "name": "C# / .NET",
@@ -139,120 +183,117 @@ Add two capabilities:
 ```
 
 **Validation:**
-- Same as Create
-- If name changed: case-insensitive duplicate check excluding current skill
-- Name change updates all `ResumeSkill` and `JobSkill` references (via navigation property)
+- Same as Create.
+- If the name changes, duplicate check excludes the current skill.
+- No `ResumeSkill` or `JobSkill` rows need updating. Both join rows reference `Skill.Id`; renaming the skill keeps every reference valid.
 
 **Response 200:**
+
 ```json
 {
-  "id": 1,
-  "name": "C# / .NET",
-  "category": "Backend",
-  "resumeCount": 45,
-  "jobCount": 23,
-  "createdAt": "2026-01-15T10:00:00Z"
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "C# / .NET",
+    "category": "Backend",
+    "resumeCount": 45,
+    "jobCount": 23
+  },
+  "errors": []
 }
 ```
 
-**Response 400:** Validation errors  
-**Response 401:** Not authenticated  
-**Response 403:** Not admin  
-**Response 404:** Skill not found  
-**Response 409:** New name conflicts with existing skill
+**Response 400:** Validation errors.
+**Response 401:** Not authenticated.
+**Response 403:** Not admin.
+**Response 404:** Skill not found.
+**Response 409:** New name conflicts with an existing skill.
 
 #### 5. Delete Skill
 
 **DELETE** `/api/admin/skills/{id}`
 
-**Auth:** Admin role required
+**Auth:** Admin role required.
 
 **Behavior:**
-- Check if skill is referenced in `ResumeSkills` or `JobSkills`
-- If referenced: return 409 Conflict with usage counts
-- If not referenced: hard delete
+- Check `ResumeSkills` and `JobSkills` counts.
+- If either count is greater than zero, return `409 Conflict` with both counts.
+- If both are zero, delete the skill.
+- The database FK is `ON DELETE RESTRICT` for both skill join tables. A concurrent insert after the count check cannot cause a cascade delete. A foreign-key violation is caught and returned as `409 Conflict`.
 
-**Response 204:** Deleted successfully
+**Response 204:** Deleted successfully.
 
-**Response 401:** Not authenticated  
-**Response 403:** Not admin  
-**Response 404:** Skill not found  
-**Response 409:** Skill is in use
+**Response 401:** Not authenticated.
+**Response 403:** Not admin.
+**Response 404:** Skill not found.
+**Response 409:** Skill is in use.
+
 ```json
 {
+  "success": false,
+  "data": null,
   "errors": ["Cannot delete skill 'C#': used in 45 resumes and 23 job postings."]
 }
 ```
 
 ### DTOs
 
-**AdminSkillListItemDto:**
+Only one skill response DTO is needed. List and detail fields are identical.
+
 ```csharp
-public sealed record AdminSkillListItemDto(
+public sealed record AdminSkillDto(
     int Id,
     string Name,
     string? Category,
     int ResumeCount,
-    int JobCount,
-    DateTime CreatedAt);
+    int JobCount);
 ```
 
-**AdminSkillDetailDto:**
-```csharp
-public sealed record AdminSkillDetailDto(
-    int Id,
-    string Name,
-    string? Category,
-    int ResumeCount,
-    int JobCount,
-    DateTime CreatedAt);
-```
-
-**CreateSkillRequest:**
 ```csharp
 public sealed class CreateSkillRequest
 {
-    [Required, MaxLength(100)]
+    [Required]
     public string Name { get; set; } = string.Empty;
 
-    [MaxLength(100)]
     public string? Category { get; set; }
 }
 ```
 
-**UpdateSkillRequest:**
 ```csharp
 public sealed class UpdateSkillRequest
 {
-    [Required, MaxLength(100)]
+    [Required]
     public string Name { get; set; } = string.Empty;
 
-    [MaxLength(100)]
     public string? Category { get; set; }
 }
 ```
+
+There is no `CreatedAt` field. The `Skills` table has no such column, and this feature adds no columns.
+
+Validate lengths only after service normalization. Raw DTO length annotations would reject a padded 100-character name or a whitespace-only category before trimming.
 
 ### Service Interface
 
 Extend `IAdminService`:
 
 ```csharp
-Task<ServiceResult<PagedResponse<AdminSkillListItemDto>>> GetSkillsAsync(
+Task<ServiceResult<PagedResponse<AdminSkillDto>>> GetSkillsAsync(
     string? search,
     string? category,
     int page,
     int pageSize,
     CancellationToken cancellationToken = default);
 
-Task<ServiceResult<AdminSkillDetailDto>> GetSkillAsync(
+Task<ServiceResult<AdminSkillDto>> GetSkillAsync(
     int skillId,
     CancellationToken cancellationToken = default);
 
-Task<ServiceResult<AdminSkillDetailDto>> CreateSkillAsync(
+Task<ServiceResult<AdminSkillDto>> CreateSkillAsync(
     CreateSkillRequest request,
     CancellationToken cancellationToken = default);
 
-Task<ServiceResult<AdminSkillDetailDto>> UpdateSkillAsync(
+Task<ServiceResult<AdminSkillDto>> UpdateSkillAsync(
     int skillId,
     UpdateSkillRequest request,
     CancellationToken cancellationToken = default);
@@ -264,33 +305,113 @@ Task<ServiceResult> DeleteSkillAsync(
 
 ### Implementation Notes
 
-**Duplicate check:**
-```csharp
-var normalized = request.Name.Trim().ToLowerInvariant();
-var exists = await dbContext.Skills
-    .AnyAsync(s => s.Name.ToLower() == normalized, cancellationToken);
-```
+**Normalization and validation:**
 
-**Usage counts:**
 ```csharp
-var skill = await dbContext.Skills
-    .Include(s => s.ResumeSkills)
-    .Include(s => s.JobSkills)
-    .FirstOrDefaultAsync(s => s.Id == skillId, cancellationToken);
-
-var resumeCount = skill.ResumeSkills.Count;
-var jobCount = skill.JobSkills.Count;
-```
-
-**Delete validation:**
-```csharp
-if (resumeCount > 0 || jobCount > 0)
+private static (string Name, string? Category, string[] Errors) NormalizeSkillInput(
+    string? name,
+    string? category)
 {
-    return ServiceResult.Fail(
-        ServiceErrorType.Conflict,
-        $"Cannot delete skill '{skill.Name}': used in {resumeCount} resumes and {jobCount} job postings.");
+    var errors = new List<string>();
+    var normalizedName = name?.Trim() ?? string.Empty;
+    var normalizedCategory = string.IsNullOrWhiteSpace(category) ? null : category.Trim();
+
+    if (normalizedName.Length == 0)
+        errors.Add("Skill name is required.");
+
+    if (normalizedName.Length > 100)
+        errors.Add("Skill name must be 100 characters or fewer.");
+
+    if (normalizedCategory is { Length: > 100 })
+        errors.Add("Skill category must be 100 characters or fewer.");
+
+    return (normalizedName, normalizedCategory, errors.ToArray());
 }
 ```
+
+**List query:** project counts so the query does not load every join row.
+
+```csharp
+page = Math.Max(page, 1);
+pageSize = Math.Clamp(pageSize, 1, 200);
+
+var query = dbContext.Skills.AsNoTracking();
+
+if (!string.IsNullOrWhiteSpace(search))
+{
+    var term = search.Trim();
+    query = query.Where(skill => EF.Functions.Like(skill.Name, $"%{term}%"));
+}
+
+if (!string.IsNullOrWhiteSpace(category))
+{
+    var term = category.Trim();
+    query = query.Where(skill => skill.Category == term);
+}
+
+var total = await query.CountAsync(cancellationToken);
+var offset = (long)(page - 1) * pageSize;
+if (offset >= total)
+{
+    return ServiceResult<PagedResponse<AdminSkillDto>>.Ok(
+        new PagedResponse<AdminSkillDto> { TotalCount = total, Page = page, PageSize = pageSize });
+}
+
+var items = await query
+    .OrderBy(skill => skill.Name)
+    .ThenBy(skill => skill.Id)
+    .Skip((int)offset)
+    .Take(pageSize)
+    .Select(skill => new AdminSkillDto(
+        skill.Id,
+        skill.Name,
+        skill.Category,
+        skill.ResumeSkills.Count,
+        skill.JobSkills.Count))
+    .ToListAsync(cancellationToken);
+```
+
+**Duplicate check:**
+
+```csharp
+var normalizedName = request.Name.Trim();
+var exists = await dbContext.Skills
+    .AnyAsync(
+        skill => skill.Id != excludedSkillId
+            && skill.Name.ToLower() == normalizedName.ToLower(),
+        cancellationToken);
+```
+
+For create, use `excludedSkillId = 0`. For update, exclude the current skill.
+
+**Create:**
+
+- Normalize and validate.
+- Run duplicate check.
+- Add the entity.
+- Save changes.
+- Catch `DbUpdateException` from the unique `Name` index and return `Conflict`.
+- Return `AdminSkillDto` with zero counts.
+
+**Update:**
+
+- Load the skill; missing returns `NotFound`.
+- Normalize and validate.
+- Run duplicate check excluding `skillId`.
+- Assign `Name` and `Category`.
+- Save changes.
+- Catch `DbUpdateException` from the unique index and return `Conflict`.
+- Return the DTO with current counts.
+
+**Delete:**
+
+- Load the skill; missing returns `NotFound`.
+- Count `ResumeSkills` and `JobSkills` with projection or `CountAsync`.
+- Non-zero counts return `Conflict` with the spec message.
+- Remove and save.
+- Catch `DbUpdateException` from the restricted FK and return `Conflict` with a generic in-use message.
+
+Use catch filters for expected constraint violations only. MySQL `DuplicateKeyEntry` maps to a name conflict and `RowIsReferenced2` maps to a restricted-delete conflict. Recognize the equivalent SQLite constraint failures for the existing test provider. Unrelated storage and concurrency exceptions propagate to the existing server-error handler.
 
 ## Candidate Skill-Based Job Search
 
@@ -298,74 +419,90 @@ if (resumeCount > 0 || jobCount > 0)
 
 **GET** `/api/jobs/matching-resume/{resumeId}`
 
-**Auth:** Authenticated candidate, must own the resume
+**Auth:** Authenticated user; must own the resume.
 
 **Path params:**
-- `resumeId`: int (required)
+- `resumeId`: int, required.
 
 **Query params:**
-- `city` (optional): filter by company location
-- `jobType` (optional): FullTime, PartTime, Contract, Internship
-- `minSkillMatches` (optional, default: 1): minimum overlapping skills
-- `page` (default: 1)
-- `pageSize` (default: 20, max: 100)
+- `city` (optional): case-insensitive filter on `Company.Location`.
+- `jobType` (optional): one of `FullTime`, `PartTime`, `Contract`, `Internship`, `Freelance`, `Remote`.
+- `minSkillMatches` (optional, default: 1, clamped to 1-50).
+- `page` (default: 1, clamped to minimum 1).
+- `pageSize` (default: 20, clamped to 1-100).
 
 **Response 200:**
+
 ```json
 {
-  "items": [
-    {
-      "id": 42,
-      "title": "Senior .NET Developer",
-      "companyName": "Acme Corp",
-      "location": "Hanoi",
-      "salaryMin": 2000,
-      "salaryMax": 3500,
-      "experienceRequired": 5,
-      "jobType": "FullTime",
-      "expiryDate": "2026-12-31T00:00:00Z",
-      "matchedSkillCount": 4,
-      "matchedSkills": [
-        { "skillId": 1, "skillName": "C#" },
-        { "skillId": 2, "skillName": "SQL" },
-        { "skillId": 5, "skillName": "Azure" },
-        { "skillId": 8, "skillName": "React" }
-      ],
-      "matchPercentage": 87.5,
-      "createdAt": "2026-10-15T10:00:00Z",
-      "featuredUntil": null
-    }
-  ],
-  "totalCount": 18,
-  "page": 1,
-  "pageSize": 20
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": 42,
+        "title": "Senior .NET Developer",
+        "companyName": "Acme Corp",
+        "location": "Hanoi",
+        "salaryMin": 2000,
+        "salaryMax": 3500,
+        "experienceRequired": 5,
+        "jobType": 0,
+        "expiryDate": "2026-12-31T00:00:00Z",
+        "matchedSkillCount": 4,
+        "matchedSkills": [
+          { "skillId": 1, "skillName": "C#" },
+          { "skillId": 2, "skillName": "SQL" },
+          { "skillId": 5, "skillName": "Azure" },
+          { "skillId": 8, "skillName": "React" }
+        ],
+        "matchPercentage": 87.5,
+        "createdAt": "2026-10-15T10:00:00Z",
+        "featuredUntil": null
+      }
+    ],
+    "totalCount": 18,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 1
+  },
+  "errors": []
 }
 ```
 
-**Response 401:** Not authenticated  
-**Response 403:** Resume does not belong to current user  
-**Response 404:** Resume not found
+`matchPercentage` is the stored `MatchScore.MatchPercentage` for `(resumeId, jobId)`, or `null` when no score exists. It is not computed from `matchedSkillCount`.
+
+`jobType` uses the existing numeric JSON serialization (`FullTime` is `0`). Do not add an enum converter.
+
+**Response 401:** Not authenticated.
+**Response 404:** Resume not found or not owned by the current user. A non-owned resume returns `404`, not `403`, to avoid revealing that the resume exists. This matches the existing resume service behavior.
 
 ### Matching Logic
 
-1. Load resume's `ResumeSkills` (skill IDs)
-2. Query `JobPostings` where:
-   - Status = Published
-   - ExpiryDate is null OR > UtcNow
-   - Company.Status = Approved
-   - JobSkills has ANY skill ID in resume's skill IDs
-3. For each job, count matched skills: `job.JobSkills.Count(js => resumeSkillIds.Contains(js.SkillId))`
-4. Filter: `matchedSkillCount >= minSkillMatches`
-5. Load existing `MatchScore` for (resumeId, jobId) pairs if available
-6. Sort by:
-   - matchedSkillCount DESC
-   - matchPercentage DESC (if MatchScore exists)
-   - createdAt DESC
-7. Paginate
+1. Load the resume with its candidate.
+2. Return `404` if the resume does not exist or `resume.Candidate.UserId != userId`.
+3. Load the resume's `ResumeSkills` skill IDs.
+4. If there are no skill IDs, return an empty page.
+5. Query `JobPostings` where:
+   - `Status == Published`
+   - `ExpiryDate is null OR ExpiryDate > UtcNow`
+   - `Company.Status == Approved`
+   - `JobSkills` contains at least one resume skill ID
+6. Apply `city` and `jobType` filters.
+7. Project `MatchedSkillCount` and the stored `MatchPercentage`.
+8. Filter `MatchedSkillCount >= minSkillMatches`.
+9. Count the filtered rows before paging.
+10. Sort by:
+    - `MatchedSkillCount` descending
+    - `MatchPercentage` descending, null treated as 0
+    - `CreatedAt` descending
+    - `Id` descending
+11. Page the rows.
+12. Load matched skills for the page in one query.
+13. Group matched skills by job and order each group by skill name.
+14. Map to `SkillMatchJobListItemDto`.
 
 ### DTOs
 
-**SkillMatchJobListItemDto:**
 ```csharp
 public sealed record SkillMatchJobListItemDto(
     int Id,
@@ -404,261 +541,375 @@ Task<ServiceResult<PagedResponse<SkillMatchJobListItemDto>>> GetJobsMatchingResu
 
 ### Implementation Notes
 
-**Authorization check:**
+**Ownership check:**
+
 ```csharp
 var resume = await dbContext.Resumes
-    .Include(r => r.Candidate)
+    .AsNoTracking()
     .FirstOrDefaultAsync(r => r.Id == resumeId, cancellationToken);
 
-if (resume is null)
-    return ServiceResult<...>.Fail(ServiceErrorType.NotFound, "Resume not found.");
+if (resume is null || resume.CandidateId == 0)
+    return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Fail(
+        ServiceErrorType.NotFound,
+        "Resume not found.");
 
-if (resume.Candidate.UserId != userId)
-    return ServiceResult<...>.Fail(ServiceErrorType.Unauthorized, "Resume does not belong to you.");
+var ownerUserId = await dbContext.Candidates
+    .Where(candidate => candidate.Id == resume.CandidateId)
+    .Select(candidate => candidate.UserId)
+    .FirstOrDefaultAsync(cancellationToken);
+
+if (ownerUserId != userId)
+    return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Fail(
+        ServiceErrorType.NotFound,
+        "Resume not found.");
 ```
 
-**Load resume skill IDs:**
+**Bounds:**
+
 ```csharp
+page = Math.Max(page, 1);
+pageSize = Math.Clamp(pageSize, 1, 100);
+minSkillMatches = Math.Clamp(minSkillMatches, 1, 50);
+```
+
+**Base query and projection:** use explicit scalar fields. Do not project an entity or use `Include` with a projection.
+
+```csharp
+var now = DateTime.UtcNow;
 var resumeSkillIds = await dbContext.ResumeSkills
-    .Where(rs => rs.ResumeId == resumeId)
-    .Select(rs => rs.SkillId)
+    .AsNoTracking()
+    .Where(resumeSkill => resumeSkill.ResumeId == resumeId)
+    .Select(resumeSkill => resumeSkill.SkillId)
     .ToListAsync(cancellationToken);
 
 if (resumeSkillIds.Count == 0)
-    return ServiceResult<...>.Success(new PagedResponse<...>(Array.Empty<...>(), 0, page, pageSize));
-```
+{
+    return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Ok(
+        new PagedResponse<SkillMatchJobListItemDto>
+        {
+            Items = Array.Empty<SkillMatchJobListItemDto>(),
+            TotalCount = 0,
+            Page = page,
+            PageSize = pageSize
+        });
+}
 
-**Query matching jobs:**
-```csharp
-var now = DateTime.UtcNow;
 var query = dbContext.JobPostings
     .AsNoTracking()
-    .Include(j => j.Company)
-    .Include(j => j.JobSkills).ThenInclude(js => js.Skill)
-    .Where(j => j.Status == JobStatus.Published
-        && (j.ExpiryDate == null || j.ExpiryDate > now)
-        && j.Company.Status == CompanyStatus.Approved
-        && j.JobSkills.Any(js => resumeSkillIds.Contains(js.SkillId)));
+    .Where(job => job.Status == JobStatus.Published
+        && (job.ExpiryDate == null || job.ExpiryDate > now)
+        && job.Company.Status == CompanyStatus.Approved
+        && job.JobSkills.Any(jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)));
 
 if (!string.IsNullOrWhiteSpace(city))
 {
     var term = city.Trim();
-    query = query.Where(j => j.Company.Location != null 
-        && EF.Functions.Like(j.Company.Location, $"%{term}%"));
+    query = query.Where(job => job.Company.Location != null
+        && EF.Functions.Like(job.Company.Location, $"%{term}%"));
 }
 
 if (jobType.HasValue)
-    query = query.Where(j => j.JobType == jobType.Value);
-```
-
-**Project with matched skill count:**
-```csharp
-var projected = query.Select(j => new
 {
-    Job = j,
-    MatchedSkillCount = j.JobSkills.Count(js => resumeSkillIds.Contains(js.SkillId)),
-    MatchedSkills = j.JobSkills
-        .Where(js => resumeSkillIds.Contains(js.SkillId))
-        .Select(js => new { js.SkillId, js.Skill.Name })
-        .ToList()
-})
-.Where(x => x.MatchedSkillCount >= minSkillMatches);
-```
+    query = query.Where(job => job.JobType == jobType.Value);
+}
 
-**Load MatchScores:**
-```csharp
-var jobIds = items.Select(x => x.Job.Id).ToList();
-var matchScores = await dbContext.MatchScores
-    .Where(ms => ms.ResumeId == resumeId && jobIds.Contains(ms.JobPostingId))
-    .ToDictionaryAsync(ms => ms.JobPostingId, ms => ms.MatchPercentage, cancellationToken);
-```
+var projected = query
+    .Select(job => new
+    {
+        job.Id,
+        job.Title,
+        CompanyName = job.Company.CompanyName,
+        Location = job.Company.Location,
+        job.SalaryMin,
+        job.SalaryMax,
+        job.ExperienceRequired,
+        job.JobType,
+        job.ExpiryDate,
+        MatchedSkillCount = job.JobSkills.Count(
+            jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)),
+        MatchPercentage = job.MatchScores
+            .Where(score => score.ResumeId == resumeId)
+            .Select(score => (double?)score.MatchPercentage)
+            .FirstOrDefault(),
+        job.CreatedAt,
+        job.FeaturedUntil
+    })
+    .Where(row => row.MatchedSkillCount >= minSkillMatches);
 
-**Sort and paginate:**
-```csharp
-var sorted = projected
-    .OrderByDescending(x => x.MatchedSkillCount)
-    .ThenByDescending(x => matchScores.ContainsKey(x.Job.Id) ? matchScores[x.Job.Id] : 0)
-    .ThenByDescending(x => x.Job.CreatedAt);
+var total = await projected.CountAsync(cancellationToken);
+var offset = (long)(page - 1) * pageSize;
+if (offset >= total)
+{
+    return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Ok(
+        new PagedResponse<SkillMatchJobListItemDto> { TotalCount = total, Page = page, PageSize = pageSize });
+}
 
-var total = await sorted.CountAsync(cancellationToken);
-var items = await sorted
-    .Skip((page - 1) * pageSize)
+var rows = await projected
+    .OrderByDescending(row => row.MatchedSkillCount)
+    .ThenByDescending(row => row.MatchPercentage ?? 0)
+    .ThenByDescending(row => row.CreatedAt)
+    .ThenByDescending(row => row.Id)
+    .Skip((int)offset)
     .Take(pageSize)
     .ToListAsync(cancellationToken);
 ```
+
+**Matched skills for the page:** one query, then group in memory.
+
+```csharp
+var jobIds = rows.Select(row => row.Id).ToList();
+
+var matchedSkillRows = await dbContext.JobSkills
+    .AsNoTracking()
+    .Where(jobSkill => jobIds.Contains(jobSkill.JobPostingId)
+        && resumeSkillIds.Contains(jobSkill.SkillId))
+    .Select(jobSkill => new
+    {
+        jobSkill.JobPostingId,
+        jobSkill.SkillId,
+        SkillName = jobSkill.Skill.Name
+    })
+    .ToListAsync(cancellationToken);
+
+var skillsByJob = matchedSkillRows
+    .GroupBy(row => row.JobPostingId)
+    .ToDictionary(
+        group => group.Key,
+        group => (IReadOnlyList<MatchedSkillDto>)group
+            .OrderBy(row => row.SkillName)
+            .Select(row => new MatchedSkillDto(row.SkillId, row.SkillName))
+            .ToList());
+
+var items = rows
+    .Select(row => new SkillMatchJobListItemDto(
+        row.Id,
+        row.Title,
+        row.CompanyName,
+        row.Location,
+        row.SalaryMin,
+        row.SalaryMax,
+        row.ExperienceRequired,
+        row.JobType,
+        row.ExpiryDate,
+        row.MatchedSkillCount,
+        skillsByJob.GetValueOrDefault(row.Id) ?? Array.Empty<MatchedSkillDto>(),
+        row.MatchPercentage,
+        row.CreatedAt,
+        row.FeaturedUntil))
+    .ToList();
+```
+
+Do not load `MatchScore` rows into a dictionary before sorting. The score must be part of the SQL query so ordering and pagination are correct.
 
 ## Authorization
 
 ### Admin Role Check
 
-Create `[Authorize(Roles = "Admin")]` attribute or custom policy.
-
-Implementation options:
-1. **Role claim:** Check `User.IsInRole("Admin")`
-2. **Custom claim:** Check `User.HasClaim("IsAdmin", "true")`
-3. **Policy:** Define policy in `Program.cs`:
+Use the existing controller pattern:
 
 ```csharp
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("AdminOnly", policy =>
-        policy.RequireRole("Admin"));
-});
-```
-
-Apply to controller:
-```csharp
-[Authorize(Policy = "AdminOnly")]
 [ApiController]
+[ApiValidationEnvelope]
 [Route("api/admin/skills")]
-public class AdminController : ControllerBase
+[Authorize(Roles = "Admin", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+public sealed class AdminSkillsController(IAdminService adminService) : ApiControllerBase
 ```
+
+No custom policy is needed. JWT access tokens already include role claims.
 
 ### Candidate Resume Ownership
 
-Check in service layer:
-```csharp
-var resume = await dbContext.Resumes
-    .Include(r => r.Candidate)
-    .FirstOrDefaultAsync(r => r.Id == resumeId, cancellationToken);
-
-if (resume?.Candidate.UserId != userId)
-    return Fail(Unauthorized, "Resume not found or access denied.");
-```
+Return `404 NotFound` for a missing resume and for a resume owned by another user. Do not return `403`. This matches `ResumeService` and avoids leaking resume existence.
 
 ## Validation Rules
 
 ### Skill Name
-- Required
-- 1-100 characters
-- Trimmed before save
-- Case-insensitive uniqueness (compare `ToLower()`)
-- No leading/trailing whitespace preserved
+- Required.
+- Trimmed before validation and save.
+- 1-100 characters after trimming.
+- Case-insensitive uniqueness.
+- No leading or trailing whitespace preserved.
 
 ### Skill Category
-- Optional
-- Max 100 characters
-- Trimmed before save
-- Freeform text (no enum/validation)
+- Optional.
+- Trimmed before save.
+- Empty or whitespace becomes `null`.
+- Maximum 100 characters.
+- Freeform text; no enum.
 
-### minSkillMatches
-- Default: 1
-- Range: 1-50
-- If resume has fewer skills than minSkillMatches, return empty result
+### Pagination
+- Admin: `page >= 1`; `pageSize` clamped to 1-200.
+- Candidate search: `page >= 1`; `pageSize` clamped to 1-100.
+- `minSkillMatches` clamped to 1-50.
+- Calculate offsets as `long`; return an empty page when the offset is outside the counted results before casting to `int` for `Skip`.
+
+Validation runs in the service layer. DTO annotations also apply through the API pipeline, but service validation is the source of truth.
 
 ## Error Handling
 
 ### Conflict (409)
-- Skill name already exists
-- Skill in use (cannot delete)
+- Skill name already exists.
+- Skill is in use and cannot be deleted.
+- Unique-index or restricted-FK race.
 
 ### Not Found (404)
-- Skill ID doesn't exist
-- Resume ID doesn't exist
+- Skill ID does not exist.
+- Resume ID does not exist.
+- Resume is owned by another user.
 
 ### Unauthorized (401)
-- Not authenticated
+- Not authenticated.
 
 ### Forbidden (403)
-- Not admin (for admin endpoints)
-- Resume doesn't belong to user (for candidate search)
+- Not admin, for admin endpoints.
 
 ### Validation (400)
-- Empty/invalid name
-- Name too long
-- Category too long
-- Invalid minSkillMatches range
+- Empty or whitespace-only name.
+- Name longer than 100 characters.
+- Category longer than 100 characters.
+- Invalid request body or query binding.
 
 ## Database Changes
 
-**None required.** `Skills` table already has:
-- `Id` (PK, identity)
-- `Name` (nvarchar(100), unique index)
-- `Category` (nvarchar(100), nullable)
+No new columns and no new tables.
 
-Navigation properties exist:
-- `Skill.ResumeSkills`
-- `Skill.JobSkills`
+One migration changes the delete behavior of these foreign keys from `Cascade` to `Restrict`:
 
-Schema migration NOT needed.
+- `ResumeSkills.SkillId -> Skills.Id`
+- `JobSkills.SkillId -> Skills.Id`
+
+Reason: an admin delete must never silently remove skill links from resumes or jobs because of a race between the count check and the delete. With `Restrict`, the database rejects the delete, and the service maps the failure to `409 Conflict`.
+
+Existing schema details:
+
+- `Skills.Id` is the primary key.
+- `Skills.Name` is `varchar(100)` with a unique index.
+- `Skills.Category` is `varchar(100)`, nullable.
+- `ResumeSkills` and `JobSkills` already reference `Skill.Id`.
+- `MatchScores` has a composite key `(JobPostingId, ResumeId)`.
 
 ## Testing Strategy
 
-### Unit Tests
+Tests use the existing SQLite `TestFixture`. Controller action mappings use stub services. `SkillApiValidationTests` hosts a small real MVC/Kestrel pipeline on a dynamic loopback port to verify automatic validation and normalized input without adding dependencies or running application seeding.
 
-**AdminService Tests (`AdminServiceTests.cs`):**
-- `CreateSkillAsync_ValidRequest_ReturnsSkill`
+### AdminService Tests
+
+File: `hotjob/Tests/hotjob.Tests/AdminTests/AdminSkillServiceTests.cs`
+
+- `CreateSkillAsync_ValidRequest_TrimsAndReturnsSkill`
 - `CreateSkillAsync_DuplicateName_ReturnsConflict`
 - `CreateSkillAsync_CaseInsensitiveDuplicate_ReturnsConflict`
-- `UpdateSkillAsync_ValidRequest_ReturnsUpdatedSkill`
+- `CreateSkillAsync_WhitespaceName_ReturnsValidation`
+- `CreateSkillAsync_NameTooLong_ReturnsValidation`
+- `UpdateSkillAsync_Rename_KeepsResumeAndJobLinks`
 - `UpdateSkillAsync_DuplicateName_ReturnsConflict`
-- `DeleteSkillAsync_UnusedSkill_ReturnsSuccess`
+- `UpdateSkillAsync_SameNameDifferentCase_AllowsUpdate`
+- `DeleteSkillAsync_UnusedSkill_Deletes`
 - `DeleteSkillAsync_SkillInUse_ReturnsConflict`
-- `GetSkillsAsync_WithFilters_ReturnsPaginated`
+- `GetSkillsAsync_FiltersAndOrdersByName`
+- `GetSkillsAsync_ClampsPageAndPageSize`
+- `GetSkillAsync_Missing_ReturnsNotFound`
+- `GetSkillsAsync_LargePage_ReturnsEmptyWithoutOverflow`
+- `SkillWrite_UnrelatedSaveFailure_Propagates`
+- `SkillWrite_RacingDuplicate_ReturnsConflict`
+- `DeleteSkillAsync_ReferenceInsertedAfterCounts_ReturnsConflict`
 
-**JobService Tests (extend `JobServiceTests.cs` or new file):**
-- `GetJobsMatchingResumeAsync_ResumeWithSkills_ReturnsMatchingJobs`
-- `GetJobsMatchingResumeAsync_NoMatchingJobs_ReturnsEmpty`
-- `GetJobsMatchingResumeAsync_MinSkillMatchesFilter_FiltersCorrectly`
-- `GetJobsMatchingResumeAsync_SortsByMatchCount_Correct`
-- `GetJobsMatchingResumeAsync_OtherUserResume_ReturnsUnauthorized`
-- `GetJobsMatchingResumeAsync_CityFilter_FiltersCorrectly`
+### JobService Tests
 
-### Integration Tests
+File: `hotjob/Tests/hotjob.Tests/JobTests/JobSkillMatchTests.cs`
 
-- Admin creates skill → appears in list
-- Admin updates skill → ResumeSkills/JobSkills still linked
-- Admin deletes unused skill → removed from DB
-- Admin tries delete used skill → 409
-- Candidate searches with resume → returns jobs with overlapping skills
-- Candidate searches other's resume → 403
+- `GetJobsMatchingResumeAsync_ReturnsMatchingJobsWithSkills`
+- `GetJobsMatchingResumeAsync_ResumeWithNoSkills_ReturnsEmpty`
+- `GetJobsMatchingResumeAsync_MinSkillMatchesFilters`
+- `GetJobsMatchingResumeAsync_SortsByMatchedCountThenScore`
+- `GetJobsMatchingResumeAsync_OtherUserResume_ReturnsNotFound`
+- `GetJobsMatchingResumeAsync_MissingResume_ReturnsNotFound`
+- `GetJobsMatchingResumeAsync_ExpiredJobExcluded`
+- `GetJobsMatchingResumeAsync_PendingCompanyExcluded`
+- `GetJobsMatchingResumeAsync_NoMatchScore_ReturnsNullPercentage`
+- `GetJobsMatchingResumeAsync_CityAndJobTypeFilters`
+- `GetJobsMatchingResumeAsync_ClampsPageAndMinMatches`
+- `GetJobsMatchingResumeAsync_LargePage_ReturnsEmptyWithoutOverflow`
+
+### Controller Tests
+
+Files:
+- `hotjob/Tests/hotjob.Tests/AdminTests/AdminSkillsControllerTests.cs`
+- `hotjob/Tests/hotjob.Tests/JobTests/JobSearchControllerTests.cs`
+- `hotjob/Tests/hotjob.Tests/AdminTests/SkillApiValidationTests.cs`
+
+Controller tests cover:
+- List success returns 200 with the `ApiResponse` envelope.
+- Create success returns 201.
+- Delete success returns 204.
+- Delete conflict returns 409.
+- Missing skill or resume returns 404.
+- Missing authenticated user returns 401.
+- Automatic validation returns enveloped 400 responses for malformed JSON, missing/whitespace names, and malformed query values.
+- Both POST and PUT accept normalized boundary-length input and reject genuinely overlong names/categories.
+- Unrelated controllers retain their existing automatic-validation response shape.
 
 ## File Changes Summary
 
 **New files:**
-- `hotjob/Controllers/AdminController.cs` (admin skills CRUD)
-- `hotjob/DTOs/Admin/SkillDtos.cs` (skill request/response DTOs)
-- `hotjob/DTOs/Job/SkillMatchDtos.cs` (candidate search DTOs)
+- `hotjob/Controllers/AdminSkillsController.cs`
+- `hotjob/Controllers/JobSearchController.cs`
+- `hotjob/Controllers/ApiValidationEnvelopeAttribute.cs`
+- `hotjob/DTOs/Admin/SkillDtos.cs`
+- `hotjob/DTOs/Job/SkillMatchDtos.cs`
 - `hotjob/Tests/hotjob.Tests/AdminTests/AdminSkillServiceTests.cs`
+- `hotjob/Tests/hotjob.Tests/AdminTests/AdminSkillsControllerTests.cs`
+- `hotjob/Tests/hotjob.Tests/AdminTests/SkillApiValidationTests.cs`
 - `hotjob/Tests/hotjob.Tests/JobTests/JobSkillMatchTests.cs`
+- `hotjob/Tests/hotjob.Tests/JobTests/JobSearchControllerTests.cs`
+- One EF Core migration for the FK delete behavior change.
 
 **Modified files:**
+- `hotjob/Data/ApplicationDbContext.cs` (two `OnDelete` calls: `Cascade` to `Restrict`)
 - `hotjob/Services/Admin/IAdminService.cs` (add 5 skill methods)
 - `hotjob/Services/Admin/AdminService.cs` (implement skill CRUD)
-- `hotjob/Services/Job/IJobService.cs` (add GetJobsMatchingResumeAsync)
+- `hotjob/Services/Job/IJobService.cs` (add `GetJobsMatchingResumeAsync`)
 - `hotjob/Services/Job/JobService.cs` (implement candidate search)
-- `hotjob/Controllers/EmployerJobsController.cs` OR new `hotjob/Controllers/JobSearchController.cs` (add candidate search endpoint)
-- `hotjob/Program.cs` (register admin policy if needed)
+
+**Not modified:**
+- `hotjob/Program.cs`
+- Existing Blazor pages
+- Existing public job browse behavior
 
 ## Security Considerations
 
-1. **Admin authorization:** Enforce on every admin endpoint, fail closed
-2. **Resume ownership:** Always verify userId owns resumeId before returning data
-3. **SQL injection:** Use parameterized queries (EF Core handles this)
-4. **Rate limiting:** Consider rate limit on candidate search (prevent abuse)
-5. **Input sanitization:** Trim and validate all string inputs
+1. **Admin authorization:** Enforce on the controller with the existing JWT role attribute.
+2. **Resume ownership:** Verify the resume belongs to the current user before returning any data. Use `404` for non-owned resumes.
+3. **SQL injection:** Use EF Core parameterization and `EF.Functions.Like`.
+4. **Delete safety:** Use `ON DELETE RESTRICT` plus a service conflict response. Never rely on a count check alone.
+5. **Input sanitization:** Trim and validate all string inputs in the service.
+6. **Rate limiting:** Out of scope; no rate limiter exists in the project.
 
 ## Performance Considerations
 
-1. **Skill list pagination:** Default pageSize=50, max=200
-2. **Candidate search:** Index on `JobSkills.SkillId` exists (FK), query efficient
-3. **Usage counts:** Use `Include()` + `.Count` on collections (single query)
-4. **MatchScore lookup:** Dictionary lookup after batch load (avoid N+1)
-5. **Resume skill IDs:** Single query, in-memory list for `Contains()` filter
+1. **Skill list:** project `ResumeSkills.Count` and `JobSkills.Count`; do not `Include` join rows.
+2. **Skill list pagination:** default 50, maximum 200; order by `Name`, then `Id`.
+3. **Candidate search:** filter published jobs, expiry, approved companies, and overlapping skills in SQL.
+4. **Matched skill count:** computed in SQL; do not load all job skills for every candidate job.
+5. **Match score:** correlated subquery on the composite key; no N+1 query.
+6. **Matched skills:** one additional query for the current page only.
+7. **Indexes:** `Skills.Name` is unique; `JobSkills` and `ResumeSkills` have indexes on `SkillId`; `MatchScores` has `(JobPostingId, ResumeId)` as its key.
 
 ## Future Enhancements (Out of Scope)
 
-- Skill synonyms/aliases (e.g., "JavaScript" = "JS")
-- Skill proficiency levels
-- Skill endorsements
-- Auto-suggest skills from resume file parsing
-- Skill trending/popularity stats
-- Batch skill import (CSV/JSON)
-- Skill hierarchy (parent/child relationships)
+- Blazor admin and candidate pages.
+- Skill synonyms/aliases.
+- Skill proficiency levels.
+- Skill endorsements.
+- Auto-suggest skills from resume file parsing.
+- Skill trending/popularity stats.
+- Batch skill import (CSV/JSON).
+- Skill hierarchy.
 
 ## Success Metrics
 
-- Admins can manage skills without database access
-- Candidates find relevant jobs faster via skill-based search
-- Skill deduplication prevents catalog bloat
-- Zero orphaned skill references after renames
+- Admins can manage the skill catalog through the API without database access.
+- Candidates can find matching published jobs through the API.
+- Duplicate skill names are rejected case-insensitively.
+- Deleting a referenced skill returns `409`; no resume or job skill links are removed by the delete.
+- Renaming a skill keeps every resume and job link valid because links reference `Skill.Id`.
