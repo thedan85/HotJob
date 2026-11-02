@@ -57,6 +57,16 @@ public interface IJobService
         int pageSize,
         CancellationToken cancellationToken = default);
 
+    Task<ServiceResult<PagedResponse<SkillMatchJobListItemDto>>> GetJobsMatchingResumeAsync(
+        string userId,
+        int resumeId,
+        string? city,
+        JobType? jobType,
+        int minSkillMatches,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
     Task<ServiceResult<JobDetailResponse>> GetPublishedAsync(
         int id,
         CancellationToken cancellationToken = default);

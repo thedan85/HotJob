@@ -618,6 +618,171 @@ public sealed class JobService(
             job.JobSkills.Select(jobSkill => jobSkill.Skill?.Name ?? string.Empty).Where(name => name.Length > 0).ToList(),
             job.FeaturedUntil);
 
+    public async Task<ServiceResult<PagedResponse<SkillMatchJobListItemDto>>> GetJobsMatchingResumeAsync(
+        string userId,
+        int resumeId,
+        string? city,
+        JobType? jobType,
+        int minSkillMatches,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        minSkillMatches = Math.Clamp(minSkillMatches, 1, 50);
+
+        var resume = await dbContext.Resumes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == resumeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (resume is null || resume.CandidateId == 0)
+        {
+            return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Fail(
+                ServiceErrorType.NotFound,
+                "Resume not found.");
+        }
+
+        var ownerUserId = await dbContext.Candidates
+            .Where(candidate => candidate.Id == resume.CandidateId)
+            .Select(candidate => candidate.UserId)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (ownerUserId != userId)
+        {
+            return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Fail(
+                ServiceErrorType.NotFound,
+                "Resume not found.");
+        }
+
+        var now = DateTime.UtcNow;
+        var resumeSkillIds = await dbContext.ResumeSkills
+            .AsNoTracking()
+            .Where(resumeSkill => resumeSkill.ResumeId == resumeId)
+            .Select(resumeSkill => resumeSkill.SkillId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (resumeSkillIds.Count == 0)
+        {
+            return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Ok(
+                new PagedResponse<SkillMatchJobListItemDto>
+                {
+                    Items = Array.Empty<SkillMatchJobListItemDto>(),
+                    TotalCount = 0,
+                    Page = page,
+                    PageSize = pageSize
+                });
+        }
+
+        var query = dbContext.JobPostings
+            .AsNoTracking()
+            .Where(job => job.Status == JobStatus.Published
+                && (job.ExpiryDate == null || job.ExpiryDate > now)
+                && job.Company.Status == CompanyStatus.Approved
+                && job.JobSkills.Any(jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)));
+
+        if (!string.IsNullOrWhiteSpace(city))
+        {
+            var term = city.Trim();
+            query = query.Where(job => job.Company.Location != null
+                && EF.Functions.Like(job.Company.Location, $"%{term}%"));
+        }
+
+        if (jobType.HasValue)
+        {
+            query = query.Where(job => job.JobType == jobType.Value);
+        }
+
+        var projected = query
+            .Select(job => new
+            {
+                job.Id,
+                job.Title,
+                CompanyName = job.Company.CompanyName,
+                Location = job.Company.Location,
+                job.SalaryMin,
+                job.SalaryMax,
+                job.ExperienceRequired,
+                job.JobType,
+                job.ExpiryDate,
+                MatchedSkillCount = job.JobSkills.Count(
+                    jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)),
+                MatchPercentage = job.MatchScores
+                    .Where(score => score.ResumeId == resumeId)
+                    .Select(score => (double?)score.MatchPercentage)
+                    .FirstOrDefault(),
+                job.CreatedAt,
+                job.FeaturedUntil
+            })
+            .Where(row => row.MatchedSkillCount >= minSkillMatches);
+
+        var total = await projected.CountAsync(cancellationToken).ConfigureAwait(false);
+
+        var rows = await projected
+            .OrderByDescending(row => row.MatchedSkillCount)
+            .ThenByDescending(row => row.MatchPercentage ?? 0)
+            .ThenByDescending(row => row.CreatedAt)
+            .ThenByDescending(row => row.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var jobIds = rows.Select(row => row.Id).ToList();
+
+        var matchedSkillRows = await dbContext.JobSkills
+            .AsNoTracking()
+            .Where(jobSkill => jobIds.Contains(jobSkill.JobPostingId)
+                && resumeSkillIds.Contains(jobSkill.SkillId))
+            .Select(jobSkill => new
+            {
+                jobSkill.JobPostingId,
+                jobSkill.SkillId,
+                SkillName = jobSkill.Skill.Name
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var skillsByJob = matchedSkillRows
+            .GroupBy(row => row.JobPostingId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<MatchedSkillDto>)group
+                    .OrderBy(row => row.SkillName)
+                    .Select(row => new MatchedSkillDto(row.SkillId, row.SkillName))
+                    .ToList());
+
+        var items = rows
+            .Select(row => new SkillMatchJobListItemDto(
+                row.Id,
+                row.Title,
+                row.CompanyName,
+                row.Location,
+                row.SalaryMin,
+                row.SalaryMax,
+                row.ExperienceRequired,
+                row.JobType,
+                row.ExpiryDate,
+                row.MatchedSkillCount,
+                skillsByJob.GetValueOrDefault(row.Id) ?? Array.Empty<MatchedSkillDto>(),
+                row.MatchPercentage,
+                row.CreatedAt,
+                row.FeaturedUntil))
+            .ToList();
+
+        return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Ok(
+            new PagedResponse<SkillMatchJobListItemDto>
+            {
+                Items = items,
+                TotalCount = total,
+                Page = page,
+                PageSize = pageSize
+            });
+    }
+
     private static JobListItemResponse ToListItem(JobPosting job, int applicationsCount) =>
         new(
             job.Id,
