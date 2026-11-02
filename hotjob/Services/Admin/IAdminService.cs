@@ -25,4 +25,13 @@ public interface IAdminService
     Task<ServiceResult<AdminSkillDto>> GetSkillAsync(
         int skillId,
         CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<AdminSkillDto>> CreateSkillAsync(
+        CreateSkillRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<AdminSkillDto>> UpdateSkillAsync(
+        int skillId,
+        UpdateSkillRequest request,
+        CancellationToken cancellationToken = default);
 }

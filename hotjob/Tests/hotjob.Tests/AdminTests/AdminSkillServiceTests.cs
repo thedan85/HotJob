@@ -122,4 +122,117 @@ public sealed class AdminSkillServiceTests
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
     }
+
+    [Fact]
+    public async Task CreateSkillAsync_ValidRequest_TrimsAndReturnsSkill()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+
+        var result = await CreateService(fx).CreateSkillAsync(
+            new CreateSkillRequest { Name = "  Rust  ", Category = "  Backend  " });
+
+        Assert.True(result.Success);
+        Assert.Equal("Rust", result.Data!.Name);
+        Assert.Equal("Backend", result.Data.Category);
+        Assert.Equal(0, result.Data.ResumeCount);
+        Assert.Equal(0, result.Data.JobCount);
+    }
+
+    [Fact]
+    public async Task CreateSkillAsync_DuplicateName_ReturnsConflict()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await SeedSkillAsync(fx, "C#");
+
+        var result = await CreateService(fx).CreateSkillAsync(
+            new CreateSkillRequest { Name = "C#" });
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task CreateSkillAsync_CaseInsensitiveDuplicate_ReturnsConflict()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await SeedSkillAsync(fx, "C#");
+
+        var result = await CreateService(fx).CreateSkillAsync(
+            new CreateSkillRequest { Name = "c#" });
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task CreateSkillAsync_WhitespaceName_ReturnsValidation()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+
+        var result = await CreateService(fx).CreateSkillAsync(
+            new CreateSkillRequest { Name = "   " });
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Validation, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task CreateSkillAsync_NameTooLong_ReturnsValidation()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+
+        var result = await CreateService(fx).CreateSkillAsync(
+            new CreateSkillRequest { Name = new string('a', 101) });
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Validation, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task UpdateSkillAsync_Rename_KeepsResumeAndJobLinks()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var skill = await SeedSkillAsync(fx, "C#");
+        await AddUsageAsync(fx, skill.Id);
+
+        var result = await CreateService(fx).UpdateSkillAsync(
+            skill.Id,
+            new UpdateSkillRequest { Name = "C# / .NET", Category = "Backend" });
+
+        Assert.True(result.Success);
+        Assert.Equal("C# / .NET", result.Data!.Name);
+        Assert.Equal(1, result.Data.ResumeCount);
+        Assert.Equal(1, result.Data.JobCount);
+        Assert.Equal(1, await fx.Db.ResumeSkills.CountAsync());
+        Assert.Equal(1, await fx.Db.JobSkills.CountAsync());
+    }
+
+    [Fact]
+    public async Task UpdateSkillAsync_DuplicateName_ReturnsConflict()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var first = await SeedSkillAsync(fx, "C#");
+        await SeedSkillAsync(fx, "SQL");
+
+        var result = await CreateService(fx).UpdateSkillAsync(
+            first.Id,
+            new UpdateSkillRequest { Name = "SQL" });
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task UpdateSkillAsync_SameNameDifferentCase_AllowsUpdate()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var skill = await SeedSkillAsync(fx, "C#");
+
+        var result = await CreateService(fx).UpdateSkillAsync(
+            skill.Id,
+            new UpdateSkillRequest { Name = "c#" });
+
+        Assert.True(result.Success);
+        Assert.Equal("c#", result.Data!.Name);
+    }
 }

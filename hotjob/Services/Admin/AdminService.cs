@@ -275,5 +275,116 @@ public sealed class AdminService(
             ? ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.NotFound, "Skill not found.")
             : ServiceResult<AdminSkillDto>.Ok(dto);
     }
+
+    public async Task<ServiceResult<AdminSkillDto>> CreateSkillAsync(
+        CreateSkillRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Validation, "Skill data is required.");
+
+        var (name, category, errors) = NormalizeSkillInput(request.Name, request.Category);
+        if (errors.Length > 0)
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Validation, errors);
+
+        var normalizedName = name.ToLower();
+        var exists = await dbContext.Skills
+            .AnyAsync(skill => skill.Name.ToLower() == normalizedName, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (exists)
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
+
+        var entity = new Skill { Name = name, Category = category };
+        dbContext.Skills.Add(entity);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
+        }
+
+        return ServiceResult<AdminSkillDto>.Ok(
+            new AdminSkillDto(entity.Id, entity.Name, entity.Category, 0, 0));
+    }
+
+    public async Task<ServiceResult<AdminSkillDto>> UpdateSkillAsync(
+        int skillId,
+        UpdateSkillRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await dbContext.Skills
+            .FirstOrDefaultAsync(skill => skill.Id == skillId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.NotFound, "Skill not found.");
+
+        if (request is null)
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Validation, "Skill data is required.");
+
+        var (name, category, errors) = NormalizeSkillInput(request.Name, request.Category);
+        if (errors.Length > 0)
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Validation, errors);
+
+        var normalizedName = name.ToLower();
+        var exists = await dbContext.Skills
+            .AnyAsync(
+                skill => skill.Id != skillId && skill.Name.ToLower() == normalizedName,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (exists)
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
+
+        entity.Name = name;
+        entity.Category = category;
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
+        }
+
+        var dto = await dbContext.Skills
+            .AsNoTracking()
+            .Where(skill => skill.Id == skillId)
+            .Select(skill => new AdminSkillDto(
+                skill.Id,
+                skill.Name,
+                skill.Category,
+                skill.ResumeSkills.Count,
+                skill.JobSkills.Count))
+            .FirstAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<AdminSkillDto>.Ok(dto);
+    }
+
+    private static (string Name, string? Category, string[] Errors) NormalizeSkillInput(
+        string? name,
+        string? category)
+    {
+        var errors = new List<string>();
+        var normalizedName = name?.Trim() ?? string.Empty;
+        var normalizedCategory = string.IsNullOrWhiteSpace(category) ? null : category.Trim();
+
+        if (normalizedName.Length == 0)
+            errors.Add("Skill name is required.");
+
+        if (normalizedName.Length > 100)
+            errors.Add("Skill name must be 100 characters or fewer.");
+
+        if (normalizedCategory is { Length: > 100 })
+            errors.Add("Skill category must be 100 characters or fewer.");
+
+        return (normalizedName, normalizedCategory, errors.ToArray());
+    }
 }
 
