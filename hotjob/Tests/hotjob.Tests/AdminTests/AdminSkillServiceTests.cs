@@ -8,6 +8,7 @@ using hotjob.Services.Admin;
 using hotjob.Services.Common;
 using hotjob.Tests.Support;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace hotjob.Tests.AdminTests;
 
@@ -110,6 +111,22 @@ public sealed class AdminSkillServiceTests
         Assert.True(result.Success);
         Assert.Equal(1, result.Data!.ResumeCount);
         Assert.Equal(1, result.Data.JobCount);
+    }
+
+    [Theory]
+    [InlineData(1073741825, 20)]
+    [InlineData(int.MaxValue, 200)]
+    public async Task GetSkillsAsync_LargePage_ReturnsEmptyWithoutOverflow(int page, int pageSize)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await SeedSkillAsync(fx, "C#");
+
+        var result = await CreateService(fx).GetSkillsAsync(null, null, page, pageSize);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, result.Data!.TotalCount);
+        Assert.Equal(page, result.Data.Page);
+        Assert.Empty(result.Data.Items);
     }
 
     [Fact]
@@ -262,5 +279,102 @@ public sealed class AdminSkillServiceTests
         Assert.NotNull(await fx.Db.Skills.FindAsync(skill.Id));
         Assert.Equal(1, await fx.Db.ResumeSkills.CountAsync());
         Assert.Equal(1, await fx.Db.JobSkills.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("create", false)]
+    [InlineData("update", false)]
+    [InlineData("delete", false)]
+    [InlineData("create", true)]
+    [InlineData("update", true)]
+    [InlineData("delete", true)]
+    public async Task SkillWrite_UnrelatedSaveFailure_Propagates(string operation, bool concurrencyFailure)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var skill = await SeedSkillAsync(fx, "Existing");
+        DbUpdateException failure = concurrencyFailure
+            ? new DbUpdateConcurrencyException("The row changed concurrently.")
+            : new DbUpdateException("Storage unavailable.", new IOException("Disk failure."));
+        await using var db = CreateInterceptedDb(fx, () => throw failure);
+        var service = new AdminService(db, fx.UserManager, fx.RoleManager);
+
+        var thrown = await Record.ExceptionAsync(() => WriteSkillAsync(service, operation, skill.Id));
+
+        Assert.Same(failure, thrown);
+    }
+
+    [Theory]
+    [InlineData("create")]
+    [InlineData("update")]
+    public async Task SkillWrite_RacingDuplicate_ReturnsConflict(string operation)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var skill = await SeedSkillAsync(fx, "Existing");
+        await using var db = CreateInterceptedDb(fx, async () =>
+        {
+            await SeedSkillAsync(fx, "Rust");
+        });
+        var service = new AdminService(db, fx.UserManager, fx.RoleManager);
+
+        var result = await WriteSkillAsync(service, operation, skill.Id);
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+        Assert.Equal(1, await fx.Db.Skills.CountAsync(row => row.Name == "Rust"));
+        Assert.Equal("Existing", (await fx.Db.Skills.AsNoTracking().SingleAsync(row => row.Id == skill.Id)).Name);
+    }
+
+    [Theory]
+    [InlineData("resume")]
+    [InlineData("job")]
+    public async Task DeleteSkillAsync_ReferenceInsertedAfterCounts_ReturnsConflict(string link)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var skill = await SeedSkillAsync(fx, "C#");
+        var (_, resume) = await MatchTestData.CreateCandidateAsync(fx, "race@example.com");
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, []);
+        await using var db = CreateInterceptedDb(fx, async () =>
+        {
+            if (link == "resume")
+                fx.Db.ResumeSkills.Add(new ResumeSkill { ResumeId = resume.Id, SkillId = skill.Id });
+            else
+                fx.Db.JobSkills.Add(new JobSkill { JobPostingId = job.Id, SkillId = skill.Id });
+            await fx.Db.SaveChangesAsync();
+        });
+        var service = new AdminService(db, fx.UserManager, fx.RoleManager);
+
+        var result = await service.DeleteSkillAsync(skill.Id);
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+        Assert.True(await fx.Db.Skills.AsNoTracking().AnyAsync(row => row.Id == skill.Id));
+        Assert.Equal(link == "resume" ? 1 : 0, await fx.Db.ResumeSkills.CountAsync());
+        Assert.Equal(link == "job" ? 1 : 0, await fx.Db.JobSkills.CountAsync());
+    }
+
+    private static ApplicationDbContext CreateInterceptedDb(TestFixture fx, Func<Task> beforeSave) =>
+        new(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(fx.Connection)
+            .AddInterceptors(new BeforeSaveInterceptor(beforeSave))
+            .Options);
+
+    private static async Task<ServiceResult> WriteSkillAsync(AdminService service, string operation, int skillId) =>
+        operation switch
+        {
+            "create" => await service.CreateSkillAsync(new CreateSkillRequest { Name = "Rust" }),
+            "update" => await service.UpdateSkillAsync(skillId, new UpdateSkillRequest { Name = "Rust" }),
+            "delete" => await service.DeleteSkillAsync(skillId),
+            _ => throw new ArgumentOutOfRangeException(nameof(operation))
+        };
+
+    private sealed class BeforeSaveInterceptor(Func<Task> beforeSave) : SaveChangesInterceptor
+    {
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            await beforeSave();
+            return result;
+        }
     }
 }

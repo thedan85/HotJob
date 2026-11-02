@@ -9,20 +9,19 @@ public sealed record AdminSkillDto(
     int ResumeCount,
     int JobCount);
 
+// Length validation belongs in AdminService, after trimming.
 public sealed class CreateSkillRequest
 {
-    [Required, MaxLength(100)]
+    [Required]
     public string Name { get; set; } = string.Empty;
 
-    [MaxLength(100)]
     public string? Category { get; set; }
 }
 
 public sealed class UpdateSkillRequest
 {
-    [Required, MaxLength(100)]
+    [Required]
     public string Name { get; set; } = string.Empty;
 
-    [MaxLength(100)]
     public string? Category { get; set; }
 }

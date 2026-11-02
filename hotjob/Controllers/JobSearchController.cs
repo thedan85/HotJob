@@ -11,6 +11,7 @@ namespace hotjob.Controllers;
 
 /// <summary>Skill-based job search for a resume owned by the caller.</summary>
 [ApiController]
+[ApiValidationEnvelope]
 [Route("api/jobs")]
 [Authorize]
 public sealed class JobSearchController(IJobService jobService) : ApiControllerBase

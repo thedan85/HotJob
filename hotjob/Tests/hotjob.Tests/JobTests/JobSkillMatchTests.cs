@@ -256,4 +256,22 @@ public sealed class JobSkillMatchTests
         Assert.Equal(100, result.Data.PageSize);
         Assert.Single(result.Data.Items);
     }
+
+    [Theory]
+    [InlineData(1073741825, 20)]
+    [InlineData(int.MaxValue, 100)]
+    public async Task GetJobsMatchingResumeAsync_LargePage_ReturnsEmptyWithoutOverflow(int page, int pageSize)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, resumeId) = await SeedCandidateWithSkillsAsync(fx, "C#");
+        await SeedJobAsync(fx, "One match", ["C#"]);
+
+        var result = await CreateService(fx).GetJobsMatchingResumeAsync(
+            userId, resumeId, null, null, 1, page, pageSize);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, result.Data!.TotalCount);
+        Assert.Equal(page, result.Data.Page);
+        Assert.Empty(result.Data.Items);
+    }
 }

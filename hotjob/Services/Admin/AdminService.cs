@@ -1,3 +1,4 @@
+using System.Data.Common;
 using hotjob.Data;
 using hotjob.DTOs.Admin;
 using hotjob.DTOs.Job;
@@ -7,6 +8,7 @@ using hotjob.Models.Users;
 using hotjob.Services.Common;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 
 namespace hotjob.Services.Admin;
 
@@ -230,11 +232,22 @@ public sealed class AdminService(
         }
 
         var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        var offset = (long)(page - 1) * pageSize;
+        if (offset >= total)
+        {
+            return ServiceResult<PagedResponse<AdminSkillDto>>.Ok(
+                new PagedResponse<AdminSkillDto>
+                {
+                    TotalCount = total,
+                    Page = page,
+                    PageSize = pageSize
+                });
+        }
 
         var items = await query
             .OrderBy(skill => skill.Name)
             .ThenBy(skill => skill.Id)
-            .Skip((page - 1) * pageSize)
+            .Skip((int)offset)
             .Take(pageSize)
             .Select(skill => new AdminSkillDto(
                 skill.Id,
@@ -302,7 +315,7 @@ public sealed class AdminService(
         {
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception) when (IsSkillNameConflict(exception))
         {
             return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
         }
@@ -347,7 +360,7 @@ public sealed class AdminService(
         {
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception) when (IsSkillNameConflict(exception))
         {
             return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
         }
@@ -399,13 +412,25 @@ public sealed class AdminService(
         {
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception) when (IsSkillReferenceConflict(exception))
         {
             return ServiceResult.Fail(ServiceErrorType.Conflict, "Cannot delete skill: it is in use.");
         }
 
         return ServiceResult.Ok();
     }
+
+    // Classify only expected constraints; unrelated storage and concurrency errors must propagate.
+    // MySQL codes: https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
+    private static bool IsSkillNameConflict(DbUpdateException exception) =>
+        exception.InnerException is MySqlException { ErrorCode: MySqlErrorCode.DuplicateKeyEntry } ||
+        exception.InnerException is DbException databaseException &&
+        databaseException.Message.Contains("UNIQUE constraint failed: Skills.Name", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSkillReferenceConflict(DbUpdateException exception) =>
+        exception.InnerException is MySqlException { ErrorCode: MySqlErrorCode.RowIsReferenced2 } ||
+        exception.InnerException is DbException databaseException &&
+        databaseException.Message.Contains("FOREIGN KEY constraint failed", StringComparison.OrdinalIgnoreCase);
 
     private static (string Name, string? Category, string[] Errors) NormalizeSkillInput(
         string? name,

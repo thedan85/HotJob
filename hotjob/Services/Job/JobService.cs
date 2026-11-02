@@ -720,13 +720,24 @@ public sealed class JobService(
             .Where(row => row.MatchedSkillCount >= minSkillMatches);
 
         var total = await projected.CountAsync(cancellationToken).ConfigureAwait(false);
+        var offset = (long)(page - 1) * pageSize;
+        if (offset >= total)
+        {
+            return ServiceResult<PagedResponse<SkillMatchJobListItemDto>>.Ok(
+                new PagedResponse<SkillMatchJobListItemDto>
+                {
+                    TotalCount = total,
+                    Page = page,
+                    PageSize = pageSize
+                });
+        }
 
         var rows = await projected
             .OrderByDescending(row => row.MatchedSkillCount)
             .ThenByDescending(row => row.MatchPercentage ?? 0)
             .ThenByDescending(row => row.CreatedAt)
             .ThenByDescending(row => row.Id)
-            .Skip((page - 1) * pageSize)
+            .Skip((int)offset)
             .Take(pageSize)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

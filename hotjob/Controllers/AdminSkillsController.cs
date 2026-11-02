@@ -10,6 +10,7 @@ namespace hotjob.Controllers;
 
 /// <summary>Admin skill catalogue CRUD.</summary>
 [ApiController]
+[ApiValidationEnvelope]
 [Route("api/admin/skills")]
 [Authorize(Roles = "Admin", AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public sealed class AdminSkillsController(IAdminService adminService) : ApiControllerBase
