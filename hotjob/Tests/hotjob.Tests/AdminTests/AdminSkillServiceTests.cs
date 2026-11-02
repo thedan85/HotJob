@@ -235,4 +235,32 @@ public sealed class AdminSkillServiceTests
         Assert.True(result.Success);
         Assert.Equal("c#", result.Data!.Name);
     }
+
+    [Fact]
+    public async Task DeleteSkillAsync_UnusedSkill_Deletes()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var skill = await SeedSkillAsync(fx, "Rust");
+
+        var result = await CreateService(fx).DeleteSkillAsync(skill.Id);
+
+        Assert.True(result.Success);
+        Assert.Null(await fx.Db.Skills.FindAsync(skill.Id));
+    }
+
+    [Fact]
+    public async Task DeleteSkillAsync_SkillInUse_ReturnsConflict()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var skill = await SeedSkillAsync(fx, "C#");
+        await AddUsageAsync(fx, skill.Id);
+
+        var result = await CreateService(fx).DeleteSkillAsync(skill.Id);
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+        Assert.NotNull(await fx.Db.Skills.FindAsync(skill.Id));
+        Assert.Equal(1, await fx.Db.ResumeSkills.CountAsync());
+        Assert.Equal(1, await fx.Db.JobSkills.CountAsync());
+    }
 }

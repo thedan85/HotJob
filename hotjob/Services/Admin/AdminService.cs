@@ -367,6 +367,46 @@ public sealed class AdminService(
         return ServiceResult<AdminSkillDto>.Ok(dto);
     }
 
+    public async Task<ServiceResult> DeleteSkillAsync(
+        int skillId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await dbContext.Skills
+            .FirstOrDefaultAsync(skill => skill.Id == skillId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+            return ServiceResult.Fail(ServiceErrorType.NotFound, "Skill not found.");
+
+        var resumeCount = await dbContext.ResumeSkills
+            .CountAsync(link => link.SkillId == skillId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var jobCount = await dbContext.JobSkills
+            .CountAsync(link => link.SkillId == skillId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (resumeCount > 0 || jobCount > 0)
+        {
+            return ServiceResult.Fail(
+                ServiceErrorType.Conflict,
+                $"Cannot delete skill '{entity.Name}': used in {resumeCount} resumes and {jobCount} job postings.");
+        }
+
+        dbContext.Skills.Remove(entity);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            return ServiceResult.Fail(ServiceErrorType.Conflict, "Cannot delete skill: it is in use.");
+        }
+
+        return ServiceResult.Ok();
+    }
+
     private static (string Name, string? Category, string[] Errors) NormalizeSkillInput(
         string? name,
         string? category)

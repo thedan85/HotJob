@@ -1350,7 +1350,7 @@ namespace hotjob.Migrations
                     b.HasOne("hotjob.Models.Skill", "Skill")
                         .WithMany("JobSkills")
                         .HasForeignKey("SkillId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("JobPosting");
@@ -1438,7 +1438,7 @@ namespace hotjob.Migrations
                     b.HasOne("hotjob.Models.Skill", "Skill")
                         .WithMany("ResumeSkills")
                         .HasForeignKey("SkillId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Resume");

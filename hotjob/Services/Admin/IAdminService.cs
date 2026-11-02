@@ -34,4 +34,8 @@ public interface IAdminService
         int skillId,
         UpdateSkillRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<ServiceResult> DeleteSkillAsync(
+        int skillId,
+        CancellationToken cancellationToken = default);
 }

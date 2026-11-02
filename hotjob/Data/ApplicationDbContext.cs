@@ -66,7 +66,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<ResumeSkill>().HasKey(x => new { x.ResumeId, x.SkillId });
         modelBuilder.Entity<ResumeSkill>().HasOne(x => x.Resume).WithMany(x => x.ResumeSkills).HasForeignKey(x => x.ResumeId).OnDelete(DeleteBehavior.Cascade);
-        modelBuilder.Entity<ResumeSkill>().HasOne(x => x.Skill).WithMany(x => x.ResumeSkills).HasForeignKey(x => x.SkillId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ResumeSkill>().HasOne(x => x.Skill).WithMany(x => x.ResumeSkills).HasForeignKey(x => x.SkillId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Skill>().HasIndex(x => x.Name).IsUnique();
         modelBuilder.Entity<JobCategory>().HasIndex(x => x.Name).IsUnique();
@@ -82,7 +82,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<JobSkill>().HasKey(x => new { x.JobPostingId, x.SkillId });
         modelBuilder.Entity<JobSkill>().HasOne(x => x.JobPosting).WithMany(x => x.JobSkills).HasForeignKey(x => x.JobPostingId).OnDelete(DeleteBehavior.Cascade);
-        modelBuilder.Entity<JobSkill>().HasOne(x => x.Skill).WithMany(x => x.JobSkills).HasForeignKey(x => x.SkillId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<JobSkill>().HasOne(x => x.Skill).WithMany(x => x.JobSkills).HasForeignKey(x => x.SkillId).OnDelete(DeleteBehavior.Restrict);
 
         // ponytail: unique per (Job, Candidate) — same candidate re-applying with another resume is still one application.
         modelBuilder.Entity<Application>().HasOne(x => x.JobPosting).WithMany(x => x.Applications).HasForeignKey(x => x.JobPostingId).OnDelete(DeleteBehavior.Cascade);
