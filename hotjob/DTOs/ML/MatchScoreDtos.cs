@@ -43,6 +43,17 @@ public sealed record AdvancedMatchScoreDto(
     bool HasAllRequired,
     IReadOnlyList<string> ImprovementHints);
 
+/// <summary>Seed counts plus the training run produced by the dev-only synthetic demo.</summary>
+public sealed record SyntheticMatchTrainingResultDto(
+    int CandidateCount,
+    int CandidateCreated,
+    int ApplicationCount,
+    int ApplicationCreated,
+    int OfferedCount,
+    int RejectedCount,
+    int WithdrawnCount,
+    MatchTrainingResultDto Training);
+
 /// <summary>Outcome of one model training run, shaped for a future admin screen.</summary>
 public sealed record MatchTrainingResultDto(
     bool Trained,

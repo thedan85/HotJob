@@ -276,14 +276,21 @@ public sealed class ResumeService(
         var candidate = await ResolveCandidateAsync(userId, cancellationToken);
         if (!candidate.Success)
             return ServiceResult<ResumeDetailDto>.Fail(candidate.ErrorType!.Value, candidate.Errors);
+        if (length > CvFileStorage.MaxFileSizeBytes)
+        {
+            return ServiceResult<ResumeDetailDto>.Fail(
+                ServiceErrorType.Validation, "CV files must be 5 MB or smaller.");
+        }
 
-        var resume = await dbContext.Resumes.FirstOrDefaultAsync(
-            row => row.Id == resumeId && row.CandidateId == candidate.Data,
-            cancellationToken);
+        var resume = await dbContext.Resumes
+            .FirstOrDefaultAsync(
+                row => row.Id == resumeId && row.CandidateId == candidate.Data,
+                cancellationToken);
         if (resume is null)
             return ServiceResult<ResumeDetailDto>.Fail(ServiceErrorType.NotFound, "Resume not found.");
 
-        var stored = await fileStorage.SaveAsync(candidate.Data, fileName, length, content, cancellationToken);
+        var stored = await fileStorage.SaveAsync(
+            candidate.Data, fileName, length, content, cancellationToken);
         if (!stored.Success)
             return ServiceResult<ResumeDetailDto>.Fail(stored.ErrorType!.Value, stored.Errors);
 
@@ -501,6 +508,9 @@ public sealed class ResumeService(
             if (entry.StartDate.HasValue && entry.EndDate.HasValue && entry.EndDate < entry.StartDate)
                 errors.Add($"{label}: end date cannot be before the start date.");
         }
+
+        if (input.Skills.Count == 0)
+            errors.Add("At least one skill is required.");
 
         var duplicateSkillIds = input.Skills
             .GroupBy(skill => skill.SkillId)

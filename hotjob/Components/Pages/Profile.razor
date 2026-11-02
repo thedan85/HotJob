@@ -96,14 +96,105 @@ else
                     <div class="profile-resume-alert" role="alert">@resumeError</div>
                 }
 
+                @if (showCreateChoice)
+                {
+                    <div class="cv-create-choice" role="group" aria-label="Create a new CV">
+                        <div class="cv-create-option">
+                            <h3>Upload CV</h3>
+                            <p>Already have a CV? Upload the file and add at least one skill.</p>
+                            <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="StartUploadResume">
+                                Upload CV
+                            </button>
+                        </div>
+                        <div class="cv-create-option">
+                            <h3>Build CV</h3>
+                            <p>No file? Enter your details and add at least one skill.</p>
+                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="StartCreateResume">
+                                Build CV
+                            </button>
+                        </div>
+                        <button class="cv-remove cv-choice-close" type="button" aria-label="Close create CV options" @onclick="CancelCreate">×</button>
+                    </div>
+                }
+
+                @if (showUploadForm)
+                {
+                    <div class="cv-form">
+                        <div class="cv-form-heading">
+                            <h3>Upload a new CV</h3>
+                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="CancelCreate">Cancel</button>
+                        </div>
+                        <EditForm Model="uploadForm" OnValidSubmit="CreateFromUploadAsync">
+                            <DataAnnotationsValidator />
+                            <div class="profile-form-grid">
+                                <label>
+                                    CV title (required)
+                                    <InputText @bind-Value="uploadForm.Title" placeholder="e.g. Backend Engineer CV" />
+                                    <ValidationMessage For="() => uploadForm.Title" />
+                                </label>
+                                <label class="profile-field-wide">
+                                    CV file (required)
+                                    <InputFile OnChange="OnUploadFileSelected" accept=".pdf,.doc,.docx" />
+                                    @if (uploadFile is not null)
+                                    {
+                                        <span class="cv-form-hint">@uploadFile.Name · @FormatBytes(uploadFile.Size)</span>
+                                    }
+                                </label>
+                            </div>
+                            <fieldset class="cv-fieldset">
+                                <legend>Skills</legend>
+                                @if (uploadForm.Skills.Count == 0)
+                                {
+                                    <p class="cv-form-hint">At least one skill is required. Add the skills this resume should match against jobs.</p>
+                                }
+                                else
+                                {
+                                    @for (var index = 0; index < uploadForm.Skills.Count; index++)
+                                    {
+                                        var row = index;
+                                        <div class="cv-skill-row" @key="row">
+                                            <span class="profile-badge">@SkillName(uploadForm.Skills[row].SkillId)</span>
+                                            <label class="cv-years">Years <InputNumber @bind-Value="uploadForm.Skills[row].YearsOfExperience" min="0" max="50" /></label>
+                                            <button class="cv-remove" type="button" aria-label="Remove skill" @onclick="() => RemoveUploadSkill(row)">×</button>
+                                        </div>
+                                    }
+                                }
+                                <div class="cv-skill-picker">
+                                    <label>
+                                        Skill
+                                        <select @bind="uploadSkillPickerId">
+                                            <option value="0">Choose a skill</option>
+                                            @foreach (var skill in AvailableUploadSkills)
+                                            {
+                                                <option value="@skill.Id">@skill.Name</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label>
+                                        Years
+                                        <input type="number" min="0" max="50" @bind="uploadSkillPickerYears" />
+                                    </label>
+                                    <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="AddUploadSkill">Add skill</button>
+                                </div>
+                            </fieldset>
+                            <p class="cv-form-hint">PDF, DOC or DOCX only. Maximum 5 MB.</p>
+                            <div class="cv-form-actions">
+                                <button class="profile-btn profile-btn-primary" type="submit" disabled="@isUploadingCv">
+                                    @(isUploadingCv ? "Uploading..." : "Create CV")
+                                </button>
+                            </div>
+                        </EditForm>
+                    </div>
+                }
+
                 @if (resumes.Count == 0)
                 {
                     <div class="profile-upload">
                         <div class="profile-upload-icon">↑</div>
                         <h3>Create your first resume</h3>
-                        <p>Add your experience and skills, then attach a PDF, DOC or DOCX file (max 5 MB).</p>
-                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="StartCreateResume" disabled="@(showResumeForm)">
-                            Create resume
+                        <p>Upload an existing CV, or build one with your experience and skills.</p>
+                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="OpenCreateChoice" disabled="@(showResumeForm || showUploadForm)">
+                            Create a new CV
                         </button>
                     </div>
                 }
@@ -111,9 +202,9 @@ else
                 {
                     <div class="cv-toolbar">
                         <p>Upload a file from each resume card. New uploads replace the previous file for that resume.</p>
-                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="StartCreateResume"
-                                disabled="@(showResumeForm || resumes.Count >= 5)">
-                            Add resume
+                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="OpenCreateChoice"
+                                disabled="@(showResumeForm || showUploadForm || resumes.Count >= 5)">
+                            Add CV
                         </button>
                     </div>
                     <div class="cv-list">
@@ -187,7 +278,11 @@ else
                         <EditForm Model="resumeForm" OnValidSubmit="SaveResumeAsync">
                             <DataAnnotationsValidator />
                             <div class="profile-form-grid">
-                                <label>Resume title <InputText @bind-Value="resumeForm.Title" placeholder="e.g. Backend Engineer CV" /></label>
+                                <label>
+                                    Resume title (required)
+                                    <InputText @bind-Value="resumeForm.Title" placeholder="e.g. Backend Engineer CV" />
+                                    <ValidationMessage For="() => resumeForm.Title" />
+                                </label>
                                 <label class="profile-field-wide">Professional summary <InputTextArea @bind-Value="resumeForm.Summary" placeholder="A short pitch for this resume" /></label>
                             </div>
 
@@ -228,7 +323,7 @@ else
                                 <legend>Skills</legend>
                                 @if (resumeForm.Skills.Count == 0)
                                 {
-                                    <p class="cv-form-hint">No skills yet. Add the skills this resume should match against jobs.</p>
+                                    <p class="cv-form-hint">At least one skill is required. Add the skills this resume should match against jobs.</p>
                                 }
                                 else
                                 {
@@ -303,6 +398,11 @@ else
     private ResumeInput resumeForm = new();
     private int? editingResumeId;
     private bool showResumeForm;
+    private bool showCreateChoice;
+    private bool showUploadForm;
+    private ResumeInput uploadForm = new();
+    private IBrowserFile? uploadFile;
+    private bool isUploadingCv;
     private bool isSavingResume;
     private string? resumeMessage;
     private string? resumeError;
@@ -311,12 +411,17 @@ else
     private int? primaryUpdatingId;
     private int skillPickerId;
     private int skillPickerYears;
+    private int uploadSkillPickerId;
+    private int uploadSkillPickerYears;
 
     private string DisplayName => string.IsNullOrWhiteSpace(profileForm.FullName) ? "Your profile" : profileForm.FullName;
     private string Initials => string.Join("", DisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
 
     private IEnumerable<SkillOptionDto> AvailableSkills =>
         skillOptions.Where(option => resumeForm.Skills.All(skill => skill.SkillId != option.Id));
+
+    private IEnumerable<SkillOptionDto> AvailableUploadSkills =>
+        skillOptions.Where(option => uploadForm.Skills.All(skill => skill.SkillId != option.Id));
 
     protected override async Task OnInitializedAsync()
     {
@@ -464,8 +569,153 @@ else
         saveIsError = !result.Success;
     }
 
+    private void OpenCreateChoice()
+    {
+        showResumeForm = false;
+        showUploadForm = false;
+        showCreateChoice = true;
+        uploadForm = new ResumeInput();
+        uploadFile = null;
+        uploadSkillPickerId = 0;
+        uploadSkillPickerYears = 0;
+        resumeError = null;
+        resumeMessage = null;
+    }
+
+    private void StartUploadResume()
+    {
+        showCreateChoice = false;
+        showUploadForm = true;
+        uploadForm = new ResumeInput();
+        uploadFile = null;
+        uploadSkillPickerId = 0;
+        uploadSkillPickerYears = 0;
+        resumeError = null;
+        resumeMessage = null;
+    }
+
+    private void CancelCreate()
+    {
+        showCreateChoice = false;
+        showUploadForm = false;
+        uploadForm = new ResumeInput();
+        uploadFile = null;
+        uploadSkillPickerId = 0;
+        uploadSkillPickerYears = 0;
+        resumeError = null;
+    }
+
+    private void OnUploadFileSelected(InputFileChangeEventArgs args)
+    {
+        resumeError = null;
+        uploadFile = null;
+        var file = args.File;
+        if (file.Size <= 0)
+        {
+            resumeError = "The selected file is empty.";
+            return;
+        }
+        if (file.Size > MaxCvBytes)
+        {
+            resumeError = "CV files must be 5 MB or smaller.";
+            return;
+        }
+
+        var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (extension is not (".pdf" or ".doc" or ".docx"))
+        {
+            resumeError = "Only PDF, DOC and DOCX files are supported.";
+            return;
+        }
+
+        uploadFile = file;
+    }
+
+    private async Task CreateFromUploadAsync()
+    {
+        if (isUploadingCv) return;
+
+        resumeError = null;
+        resumeMessage = null;
+        if (uploadFile is null)
+        {
+            resumeError = "Choose a CV file to upload.";
+            return;
+        }
+        if (uploadForm.Skills.Count == 0)
+        {
+            resumeError = "Add at least one skill before creating a CV.";
+            return;
+        }
+        if (resumes.Count >= 5)
+        {
+            resumeError = "You can keep up to 5 resumes. Delete one before adding another.";
+            return;
+        }
+
+        isUploadingCv = true;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            var created = await ResumeService.CreateAsync(userId, uploadForm);
+            if (!created.Success || created.Data is null)
+            {
+                resumeError = string.Join(" ", created.Errors);
+                return;
+            }
+
+            var resumeId = created.Data.Id;
+            try
+            {
+                await using var stream = uploadFile.OpenReadStream(MaxCvBytes);
+                var uploaded = await ResumeService.UploadFileAsync(
+                    userId, resumeId, uploadFile.Name, uploadFile.Size, stream);
+                if (!uploaded.Success)
+                {
+                    await ResumeService.DeleteAsync(userId, resumeId);
+                    resumeError = uploaded.Errors.FirstOrDefault() ?? "We could not upload this file.";
+                    return;
+                }
+
+                resumeMessage = "CV uploaded.";
+            }
+            catch
+            {
+                await ResumeService.DeleteAsync(userId, resumeId);
+                throw;
+            }
+
+            showCreateChoice = false;
+            showUploadForm = false;
+            uploadForm = new ResumeInput();
+            uploadFile = null;
+            uploadSkillPickerId = 0;
+            uploadSkillPickerYears = 0;
+            await ReloadResumesAsync();
+        }
+        catch (IOException)
+        {
+            resumeError = "CV files must be 5 MB or smaller.";
+        }
+        catch (Exception exception)
+        {
+            resumeError = exception.Message;
+        }
+        finally
+        {
+            isUploadingCv = false;
+        }
+    }
+
+    private static string FormatBytes(long bytes) =>
+        bytes >= 1024 * 1024
+            ? $"{bytes / (1024d * 1024d):0.#} MB"
+            : $"{Math.Max(1, bytes / 1024)} KB";
+
     private void StartCreateResume()
     {
+        showCreateChoice = false;
+        showUploadForm = false;
         editingResumeId = null;
         resumeForm = new ResumeInput();
         skillPickerId = 0;
@@ -533,9 +783,15 @@ else
     {
         if (isSavingResume) return;
 
-        isSavingResume = true;
         resumeError = null;
         resumeMessage = null;
+        if (resumeForm.Skills.Count == 0)
+        {
+            resumeError = "Add at least one skill before saving a CV.";
+            return;
+        }
+
+        isSavingResume = true;
         try
         {
             var userId = await GetUserIdAsync();
@@ -592,7 +848,7 @@ else
                 return;
             }
 
-            resumeMessage = "CV file uploaded.";
+            resumeMessage = "CV uploaded.";
             await ReloadResumesAsync();
         }
         catch (IOException)
@@ -713,6 +969,37 @@ else
     }
 
     private void RemoveSkill(int index) => resumeForm.Skills.RemoveAt(index);
+
+    private void AddUploadSkill()
+    {
+        resumeError = null;
+        resumeMessage = null;
+        if (uploadSkillPickerId <= 0)
+        {
+            resumeError = "Choose a skill to add.";
+            return;
+        }
+        if (uploadForm.Skills.Any(skill => skill.SkillId == uploadSkillPickerId))
+        {
+            resumeError = "That skill is already on this resume.";
+            return;
+        }
+        if (uploadSkillPickerYears is < 0 or > 50)
+        {
+            resumeError = "Skill experience must be between 0 and 50 years.";
+            return;
+        }
+
+        uploadForm.Skills.Add(new ResumeSkillInput
+        {
+            SkillId = uploadSkillPickerId,
+            YearsOfExperience = uploadSkillPickerYears
+        });
+        uploadSkillPickerId = 0;
+        uploadSkillPickerYears = 0;
+    }
+
+    private void RemoveUploadSkill(int index) => uploadForm.Skills.RemoveAt(index);
 
     private string SkillName(int skillId) =>
         skillOptions.FirstOrDefault(option => option.Id == skillId)?.Name ?? $"Skill #{skillId}";

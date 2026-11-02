@@ -40,6 +40,27 @@ public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger
             return ServiceResult<string>.Fail(validation.ErrorType!.Value, validation.Errors);
 
         var extension = Path.GetExtension(fileName!.Trim()).ToLowerInvariant();
+
+        var header = new byte[8];
+        var headerLength = 0;
+        while (headerLength < header.Length)
+        {
+            var read = await content.ReadAsync(
+                header.AsMemory(headerLength, header.Length - headerLength), cancellationToken);
+            if (read == 0)
+                break;
+            headerLength += read;
+        }
+
+        if (headerLength == 0)
+            return ServiceResult<string>.Fail(ServiceErrorType.Validation, "The selected file is empty.");
+        if (!HasValidSignature(extension, header.AsSpan(0, headerLength)))
+        {
+            return ServiceResult<string>.Fail(
+                ServiceErrorType.Validation,
+                "The selected file is not a valid PDF, DOC or DOCX file.");
+        }
+
         var directory = Path.Combine(fullRoot, candidateId.ToString(CultureInfo.InvariantCulture));
         Directory.CreateDirectory(directory);
 
@@ -47,11 +68,12 @@ public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger
         var fullPath = Path.Combine(directory, safeName);
         var relativeUrl = $"{PublicPrefix}{candidateId.ToString(CultureInfo.InvariantCulture)}/{safeName}";
 
-        var written = 0L;
+        var written = (long)headerLength;
         try
         {
             await using var target = new FileStream(
                 fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await target.WriteAsync(header.AsMemory(0, headerLength), cancellationToken);
             var buffer = new byte[81920];
             int read;
             while ((read = await content.ReadAsync(buffer, cancellationToken)) > 0)
@@ -117,6 +139,20 @@ public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger
 
         return Task.CompletedTask;
     }
+
+    private static readonly byte[] PdfSignature = "%PDF-"u8.ToArray();
+    private static readonly byte[] DocxSignature = [0x50, 0x4B, 0x03, 0x04];
+    private static readonly byte[] DocxEmptySignature = [0x50, 0x4B, 0x05, 0x06];
+    private static readonly byte[] DocSignature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+
+    private static bool HasValidSignature(string extension, ReadOnlySpan<byte> header) =>
+        extension switch
+        {
+            ".pdf" => header.StartsWith(PdfSignature),
+            ".docx" => header.StartsWith(DocxSignature) || header.StartsWith(DocxEmptySignature),
+            ".doc" => header.StartsWith(DocSignature),
+            _ => false
+        };
 
     private static ServiceResult ValidateFileName(string? fileName)
     {
