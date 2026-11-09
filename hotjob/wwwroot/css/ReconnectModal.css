@@ -1,3 +1,5 @@
+/* Blazor reconnect modal — Quiet Signal theme. */
+
 .components-reconnect-first-attempt-visible,
 .components-reconnect-repeated-attempt-visible,
 .components-reconnect-failed-visible,
@@ -19,40 +21,43 @@
     display: block;
 }
 
-
 #components-reconnect-modal {
-    background-color: white;
-    width: 20rem;
+    width: min(100% - 32px, 22rem);
     margin: 20vh auto;
-    padding: 2rem;
-    border: 0;
-    border-radius: 0.5rem;
-    box-shadow: 0 3px 6px 2px rgba(0, 0, 0, 0.3);
+    padding: 28px;
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-lg);
+    background: var(--hj-surface);
+    color: var(--hj-ink);
+    box-shadow: var(--hj-shadow-lg);
+    font-family: var(--hj-font);
     opacity: 0;
-    transition: display 0.5s allow-discrete, overlay 0.5s allow-discrete;
-    animation: components-reconnect-modal-fadeOutOpacity 0.5s both;
-    &[open]
+    transition: display .4s allow-discrete, overlay .4s allow-discrete;
+    animation: components-reconnect-modal-fadeOutOpacity .4s both;
+}
 
-{
-    animation: components-reconnect-modal-slideUp 1.5s cubic-bezier(.05, .89, .25, 1.02) 0.3s, components-reconnect-modal-fadeInOpacity 0.5s ease-in-out 0.3s;
+#components-reconnect-modal[open] {
+    animation:
+        components-reconnect-modal-slideUp .5s cubic-bezier(.22, .61, .36, 1) .1s,
+        components-reconnect-modal-fadeInOpacity .35s ease-out .1s;
     animation-fill-mode: both;
 }
 
-}
-
 #components-reconnect-modal::backdrop {
-    background-color: rgba(0, 0, 0, 0.4);
-    animation: components-reconnect-modal-fadeInOpacity 0.5s ease-in-out;
+    background-color: rgba(21, 23, 26, .46);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    animation: components-reconnect-modal-fadeInOpacity .35s ease-out;
     opacity: 1;
 }
 
 @keyframes components-reconnect-modal-slideUp {
     0% {
-        transform: translateY(30px) scale(0.95);
+        transform: translateY(18px) scale(.98);
     }
 
     100% {
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
     }
 }
 
@@ -80,29 +85,59 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
-}
-
-#components-reconnect-modal p {
-    margin: 0;
+    gap: 16px;
     text-align: center;
 }
 
-#components-reconnect-modal button {
-    border: 0;
-    background-color: var(--hj-primary);
-    color: white;
-    padding: 4px 24px;
-    border-radius: 4px;
+#components-reconnect-modal p {
+    max-width: 30ch;
+    margin: 0;
+    color: var(--hj-muted);
+    font-size: 13.5px;
+    line-height: 1.6;
 }
 
-    #components-reconnect-modal button:hover {
-        background-color: #3b6ea2;
-    }
+#components-reconnect-modal .components-reconnect-first-attempt-visible {
+    color: var(--hj-ink);
+    font-family: var(--hj-font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
 
-    #components-reconnect-modal button:active {
-        background-color: var(--hj-primary);
-    }
+#components-reconnect-modal button {
+    min-height: 42px;
+    padding: 0 22px;
+    border: 1px solid var(--hj-primary);
+    border-radius: 10px;
+    background: var(--hj-primary);
+    color: #fff;
+    font-family: var(--hj-font);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -.005em;
+    transition:
+        background var(--hj-transition),
+        border-color var(--hj-transition),
+        box-shadow var(--hj-transition),
+        transform var(--hj-transition);
+}
+
+#components-reconnect-modal button:hover {
+    border-color: var(--hj-primary-hover);
+    background: var(--hj-primary-hover);
+    box-shadow: 0 12px 24px -18px rgba(14, 59, 46, .9);
+}
+
+#components-reconnect-modal button:active {
+    transform: translateY(1px);
+}
+
+#components-reconnect-modal button:focus-visible {
+    outline: 3px solid rgba(228, 87, 46, .55);
+    outline-offset: 2px;
+}
 
 .components-rejoining-animation {
     position: relative;
@@ -110,17 +145,18 @@
     height: 80px;
 }
 
-    .components-rejoining-animation div {
-        position: absolute;
-        border: 3px solid #0087ff;
-        opacity: 1;
-        border-radius: 50%;
-        animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;
-    }
+.components-rejoining-animation div {
+    position: absolute;
+    border: 2px solid var(--hj-primary);
+    opacity: 1;
+    border-radius: 50%;
+    animation: components-rejoining-animation 1.5s cubic-bezier(0, .2, .8, 1) infinite;
+}
 
-        .components-rejoining-animation div:nth-child(2) {
-            animation-delay: -0.5s;
-        }
+.components-rejoining-animation div:nth-child(2) {
+    border-color: var(--hj-accent);
+    animation-delay: -.5s;
+}
 
 @keyframes components-rejoining-animation {
     0% {
@@ -148,10 +184,26 @@
     }
 
     100% {
-        top: 0px;
-        left: 0px;
+        top: 0;
+        left: 0;
         width: 80px;
         height: 80px;
         opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .components-rejoining-animation {
+        display: none !important;
+    }
+
+    #components-reconnect-modal,
+    #components-reconnect-modal[open],
+    #components-reconnect-modal::backdrop {
+        animation: none;
+    }
+
+    #components-reconnect-modal[open] {
+        opacity: 1;
     }
 }

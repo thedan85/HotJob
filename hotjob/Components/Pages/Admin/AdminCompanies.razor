@@ -21,7 +21,7 @@
             @if (isLoading)
             {
                 <section class="workspace-card" aria-busy="true" aria-label="Loading companies">
-                    <p>Loading companies…</p>
+                    <p class="workspace-sub">Loading companies…</p>
                 </section>
             }
             else if (errorMessage is not null)
@@ -30,45 +30,55 @@
             }
             else
             {
-                <section class="workspace-card">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Company</th>
-                                <th>Status</th>
-                                <th>Industry</th>
-                                <th>Location</th>
-                                <th>Verified</th>
-                                <th>Members</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var company in companies)
-                            {
+                <section class="workspace-card" aria-labelledby="admin-companies-heading">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2 id="admin-companies-heading">All companies</h2>
+                            <p class="workspace-sub">@companies.Count total</p>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table class="admin-table">
+                            <thead>
                                 <tr>
-                                    <td>@company.CompanyName</td>
-                                    <td>
-                                        <span class="workspace-badge @StatusClass(company.Status)">@company.Status</span>
-                                    </td>
-                                    <td>@(string.IsNullOrWhiteSpace(company.Industry) ? "-" : company.Industry)</td>
-                                    <td>@(string.IsNullOrWhiteSpace(company.Location) ? "-" : company.Location)</td>
-                                    <td>@(company.VerifiedAt is null ? "Unverified" : company.VerifiedAt.Value.ToString("dd MMM yyyy"))</td>
-                                    <td>@company.EmployerCount</td>
-                                    <td>
-                                        @if (company.Status != CompanyStatus.Approved)
-                                        {
-                                            <button class="workspace-btn workspace-btn-primary" type="button" @onclick="() => ApproveCompany(company.Id)">Approve</button>
-                                        }
-                                        @if (company.Status != CompanyStatus.Rejected)
-                                        {
-                                            <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="() => RejectCompany(company.Id)">Reject</button>
-                                        }
-                                    </td>
+                                    <th>Company</th>
+                                    <th>Status</th>
+                                    <th>Industry</th>
+                                    <th>Location</th>
+                                    <th>Verified</th>
+                                    <th>Members</th>
+                                    <th>Action</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach (var company in companies)
+                                {
+                                    <tr>
+                                        <td>@company.CompanyName</td>
+                                        <td>
+                                            <span class="workspace-badge is-@(StatusClass(company.Status))">@company.Status</span>
+                                        </td>
+                                        <td>@(string.IsNullOrWhiteSpace(company.Industry) ? "-" : company.Industry)</td>
+                                        <td>@(string.IsNullOrWhiteSpace(company.Location) ? "-" : company.Location)</td>
+                                        <td>@(company.VerifiedAt is null ? "Unverified" : company.VerifiedAt.Value.ToString("dd MMM yyyy"))</td>
+                                        <td>@company.EmployerCount</td>
+                                        <td>
+                                            <div class="workspace-toolbar-actions">
+                                                @if (company.Status != CompanyStatus.Approved)
+                                                {
+                                                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" @onclick="() => ApproveCompany(company.Id)">Approve</button>
+                                                }
+                                                @if (company.Status != CompanyStatus.Rejected)
+                                                {
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => RejectCompany(company.Id)">Reject</button>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             }
         </div>

@@ -28,7 +28,7 @@ else if (!string.IsNullOrWhiteSpace(errorMessage))
 else
 {
     <section class="profile-page-header">
-        <div>
+        <div class="profile-header-copy">
             <p class="profile-eyebrow">Candidate workspace</p>
             <h1>Your profile</h1>
             <p>Keep your details current so employers see the right experience, and choose the CV we share with them.</p>
@@ -190,7 +190,7 @@ else
                 @if (resumes.Count == 0)
                 {
                     <div class="profile-upload">
-                        <div class="profile-upload-icon">↑</div>
+                        <div class="profile-upload-icon" aria-hidden="true">↑</div>
                         <h3>Create your first resume</h3>
                         <p>Upload an existing CV, or build one with your experience and skills.</p>
                         <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="OpenCreateChoice" disabled="@(showResumeForm || showUploadForm)">

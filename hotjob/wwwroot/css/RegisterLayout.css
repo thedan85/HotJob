@@ -1,87 +1,16 @@
-html, body {
-    margin: 0;
-    min-width: 320px;
-    background: var(--hj-page-bg);
-    color: var(--hj-ink);
-    font-family: var(--hj-font);
-}
-
-body {
-    overflow-x: hidden;
-}
+/* Auth layout shell. Nav and footer carry their own theme. */
 
 .register-shell {
-    min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background: linear-gradient(180deg, var(--hj-page-bg) 0%, #EFF6FB 68%, #E8F1F7 100%);
+    min-height: 100vh;
 }
 
 .register-content {
     flex: 1;
-    display: flex;
-    align-items: stretch;
-    justify-content: stretch;
-    padding: 0;
+    padding: clamp(16px, 3vw, 36px) 20px clamp(40px, 6vw, 72px);
 }
 
-.register-content > * {
-    flex: 1;
-    min-width: 0;
-}
-
-.register-footer {
-    display: grid;
-    grid-template-columns: 1.3fr 1fr 1fr 1.35fr;
-    gap: 30px;
-    position: relative;
-    padding: 34px 6vw 52px;
-    background: var(--hj-gradient-dark);
-    color: rgba(255, 255, 255, .68);
-}
-
-.register-footer strong {
-    display: block;
-    margin-bottom: 13px;
-    color: white;
-    font-size: .78rem;
-    letter-spacing: .02em;
-}
-
-.register-footer a {
-    display: block;
-    width: fit-content;
-    margin-bottom: 10px;
-    color: rgba(255, 255, 255, .68);
-    font-size: .7rem;
-    text-decoration: none;
-    transition: color var(--hj-transition);
-}
-
-.register-footer a:hover {
-    color: var(--hj-primary-light);
-}
-
-.footer-bottom {
-    grid-column: 1 / -1;
-    padding-top: 17px;
-    border-top: 1px solid rgba(255, 255, 255, .1);
-    font-size: .62rem;
-}
-
-@media (max-width: 720px) {
-    .register-footer {
-        grid-template-columns: 1fr 1fr;
-        padding: 27px 22px 35px;
-    }
-}
-
-@media (max-width: 420px) {
-    .register-footer {
-        grid-template-columns: 1fr;
-    }
-
-    .footer-bottom {
-        grid-column: auto;
-    }
+@media (max-width: 520px) {
+    .register-content { padding: 14px 16px 40px; }
 }

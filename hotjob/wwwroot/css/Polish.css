@@ -125,7 +125,7 @@
 /* ---------- Jobs ---------- */
 
 .jobs-skeleton-card { pointer-events: none; }
-.jobs-skeleton-card .job-logo { background: #DBEAFE; color: transparent; }
+.jobs-skeleton-card .job-logo { background: var(--hj-surface-muted); color: transparent; }
 .job-salary-locked {
     font-size: 13px;
     font-weight: 700;

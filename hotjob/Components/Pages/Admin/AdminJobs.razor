@@ -20,7 +20,7 @@
             @if (isLoading)
             {
                 <section class="workspace-card" aria-busy="true" aria-label="Loading job postings">
-                    <p>Loading job postings…</p>
+                    <p class="workspace-sub">Loading job postings…</p>
                 </section>
             }
             else if (errorMessage is not null)
@@ -29,36 +29,46 @@
             }
             else
             {
-                <section class="workspace-card">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th>Company</th>
-                                <th>Location</th>
-                                <th>Status</th>
-                                <th>Created</th>
-                                <th>Applications</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var job in jobs)
-                            {
+                <section class="workspace-card" aria-labelledby="admin-jobs-heading">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2 id="admin-jobs-heading">All job postings</h2>
+                            <p class="workspace-sub">@jobs.Count total</p>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table class="admin-table">
+                            <thead>
                                 <tr>
-                                    <td>@job.Title</td>
-                                    <td>@job.CompanyName</td>
-                                    <td>@(string.IsNullOrWhiteSpace(job.CompanyLocation) ? "-" : job.CompanyLocation)</td>
-                                    <td>@job.Status</td>
-                                    <td>@job.CreatedAt.ToString("dd MMM yyyy")</td>
-                                    <td>@job.ApplicationCount</td>
-                                    <td>
-                                        <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="() => DeleteJob(job.Id)">Delete</button>
-                                    </td>
+                                    <th>Title</th>
+                                    <th>Company</th>
+                                    <th>Location</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Applications</th>
+                                    <th>Action</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach (var job in jobs)
+                                {
+                                    <tr>
+                                        <td>@job.Title</td>
+                                        <td>@job.CompanyName</td>
+                                        <td>@(string.IsNullOrWhiteSpace(job.CompanyLocation) ? "-" : job.CompanyLocation)</td>
+                                        <td>
+                                            <span class="workspace-badge is-@(job.Status.ToString().ToLowerInvariant())">@job.Status</span>
+                                        </td>
+                                        <td>@job.CreatedAt.ToString("dd MMM yyyy")</td>
+                                        <td>@job.ApplicationCount</td>
+                                        <td>
+                                            <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => DeleteJob(job.Id)">Delete</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             }
         </div>

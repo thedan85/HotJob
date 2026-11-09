@@ -12,9 +12,9 @@
 <div class="register-card">
     <section class="register-form-panel" aria-labelledby="register-title">
         <div class="form-inner">
-            <div class="eyebrow"><span class="spark" aria-hidden="true">✦</span> Candidate Account Creation</div>
-            <h1 id="register-title">Create Your Account</h1>
-            <p class="intro">Access 1,000+ top job opportunities across industries.</p>
+            <div class="eyebrow">Candidate account</div>
+            <h1 id="register-title">Create your account.</h1>
+            <p class="intro">See match scores, save roles and track every application in one place.</p>
 
             <EditForm Model="form" OnValidSubmit="SubmitAsync" class="registration-form">
                 <DataAnnotationsValidator />
@@ -76,12 +76,6 @@
                     </div>
                 }
             </div>
-
-            <blockquote>
-                <div class="stars" aria-label="Rated 5 out of 5">★★★★★</div>
-                "@panel.Quote"
-                <cite>— @panel.QuoteAuthor</cite>
-            </blockquote>
         </div>
     </aside>
 </div>
@@ -99,16 +93,14 @@
     };
 
     private PanelContent panel => new(
-            "Join a Community of <span>70,000+ Talents</span>",
-            "Find your ideal career destination with premier benefits from HotJob.",
+            "Everything you need to find a role that <span>fits</span>",
+            "One account keeps your profile, applications and alerts together.",
             new[]
             {
-                new Benefit("⚡", "AI-Powered Job Matching", "Smart resume analysis and real-time match percentage calculation for each open role."),
-                new Benefit("🔒", "Confidential Passive Search", "Browse incognito with stealth mode, proactively shielding your profile from current employers."),
-                new Benefit("📊", "Transparent Salary Reports", "Access verified compensation benchmarks categorized by specialized role and years of experience.")
-            },
-            "Thanks to the AI Matching feature, I quickly connected with tailored roles matching my actual background with an immediate 35% compensation increase.",
-            "Hoang Nam, Marketing Manager");
+                new Benefit("01", "Match score", "See how your CV lines up with each open role before you apply."),
+                new Benefit("02", "Application tracking", "Follow every application from submitted to offer."),
+                new Benefit("03", "Job alerts", "Get notified when a role matches what you are looking for.")
+            });
 
     private void TogglePassword() => showPassword = !showPassword;
 
@@ -159,7 +151,5 @@
     private sealed record PanelContent(
         string HeadingHtml,
         string Subheading,
-        IReadOnlyList<Benefit> Benefits,
-        string Quote,
-        string QuoteAuthor);
+        IReadOnlyList<Benefit> Benefits);
 }

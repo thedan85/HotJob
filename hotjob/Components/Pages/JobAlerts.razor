@@ -19,7 +19,7 @@
                 <div class="workspace-header-copy">
                     <p class="workspace-eyebrow">Candidate workspace</p>
                     <h1>Job alerts</h1>
-                    <p class="workspace-lede">New roles that match your CV, flagged the moment an employer publishes them.</p>
+                    <p class="workspace-lede">Roles that match your CV, collected here when employers publish them.</p>
                 </div>
                 <div class="workspace-actions">
                     @if (!isLoading && feed is { Alerts.Count: > 0 })
@@ -94,7 +94,6 @@
                             <p>
                                 When an employer publishes a job that scores at least
                                 @MinMatchPercent% against one of your CVs, it will appear here.
-                                A stronger CV is the fastest way to get noticed.
                             </p>
                             <a class="workspace-btn workspace-btn-primary workspace-btn-small" href="/profile">Improve your CV</a>
                         </div>

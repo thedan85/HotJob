@@ -1,89 +1,201 @@
-/* Employer billing page */
+/* Employer billing page. Shared primitives live in Workspace.css and Theme.css. */
+
 .eb-summary {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 1.5rem;
+    gap: 20px;
     flex-wrap: wrap;
 }
 
+.eb-summary-copy {
+    min-width: 0;
+    max-width: 720px;
+}
+
+.workspace-card.eb-summary h2 {
+    margin: 0 0 6px;
+    font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+    letter-spacing: -.02em;
+}
+
 .eb-meter {
-    height: 8px;
     width: min(360px, 100%);
-    border-radius: 999px;
-    background: #e8ebf2;
+    height: 6px;
+    margin-top: 14px;
     overflow: hidden;
-    margin-top: .75rem;
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface-muted);
 }
 
 .eb-meter span {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #ff7a18, #ff4d00);
+    background: var(--hj-primary);
+    transition: width var(--hj-transition-slow);
 }
+
+/* ---------- Plans ---------- */
 
 .eb-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
 }
 
-.eb-plan {
+.workspace-card.eb-plan {
     display: flex;
     flex-direction: column;
-    gap: .75rem;
+    gap: 12px;
+    padding: clamp(20px, 2.4vw, 26px);
+    transition: border-color var(--hj-transition), box-shadow var(--hj-transition);
+}
+
+.eb-plan:hover {
+    border-color: var(--hj-border-strong);
+    box-shadow: var(--hj-shadow-md);
 }
 
 .eb-plan.is-current {
-    border: 2px solid #ff7a18;
+    border-color: var(--hj-primary);
+    box-shadow: 0 0 0 3px rgba(14, 59, 46, .08), var(--hj-shadow-sm);
 }
 
 .eb-plan-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: .5rem;
+    gap: 10px;
 }
 
 .eb-plan-head h3 {
     margin: 0;
+    font-size: 16.5px;
+    letter-spacing: -.01em;
 }
 
 .eb-price {
-    font-size: 1.75rem;
-    font-weight: 800;
     margin: 0;
+    color: var(--hj-ink);
+    font-family: var(--hj-font-display);
+    font-size: clamp(2.2rem, 4vw, 2.8rem);
+    font-weight: 400;
+    letter-spacing: -.03em;
+    line-height: 1;
 }
 
 .eb-price span {
-    font-size: .9rem;
-    font-weight: 600;
-    color: #667085;
+    color: var(--hj-muted);
+    font-family: var(--hj-font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    vertical-align: .35em;
 }
 
 .eb-features {
-    list-style: none;
-    padding: 0;
-    margin: 0;
     display: grid;
-    gap: .4rem;
-    color: #475467;
     flex: 1;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
-.eb-featured {
+.eb-features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+    border-top: 1px solid var(--hj-border);
+    color: var(--hj-ink-soft);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.eb-features li:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.eb-features li::before {
+    margin-top: 1px;
+    color: var(--hj-success);
+    content: "✓";
+    font-size: 10px;
+    line-height: 1.6;
+}
+
+.eb-features strong {
+    color: var(--hj-ink);
+}
+
+.eb-plan .workspace-btn {
+    width: 100%;
+    margin-top: auto;
+}
+
+/* ---------- Featured jobs ---------- */
+
+.workspace-card.eb-featured {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1.5rem;
+    gap: 20px;
     flex-wrap: wrap;
-    margin-top: 1rem;
+}
+
+.eb-featured h2 {
+    margin: 0 0 3px;
+    font-size: 17px;
 }
 
 .eb-featured-action {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.eb-featured-action strong {
+    color: var(--hj-ink);
+    font-family: var(--hj-font-display);
+    font-size: 24px;
+    font-weight: 400;
+    letter-spacing: -.02em;
+    white-space: nowrap;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 760px) {
+    .eb-summary {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .workspace-card.eb-featured {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .eb-featured-action {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+@media (max-width: 520px) {
+    .eb-summary > .workspace-btn,
+    .eb-featured-action > .workspace-btn {
+        width: 100%;
+    }
+
+    .eb-featured-action {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
 }

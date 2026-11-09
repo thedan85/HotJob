@@ -22,7 +22,7 @@
             @if (isLoading)
             {
                 <section class="workspace-card" aria-busy="true" aria-label="Loading admin dashboard">
-                    <p>Loading dashboard…</p>
+                    <p class="workspace-sub">Loading dashboard…</p>
                 </section>
             }
             else if (errorMessage is not null)
@@ -33,50 +33,72 @@
             {
                 <section class="workspace-metrics" aria-label="Admin dashboard overview">
                     <div class="workspace-stat">
+                        <span class="workspace-stat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3 19c.8-3 3.1-4.5 6-4.5s5.2 1.5 6 4.5" /><path d="M16 8h5M18.5 5.5v5" /></svg>
+                        </span>
                         <span class="workspace-stat-label">Users</span>
                         <span class="workspace-stat-value">@dashboard.TotalUsers</span>
                         <span class="workspace-stat-hint">@dashboard.ActiveUsers active</span>
                     </div>
                     <div class="workspace-stat">
+                        <span class="workspace-stat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v15" /><path d="M15 9h4a1 1 0 0 1 1 1v10" /><path d="M8 8h3M8 12h3M8 16h3M18 13h.01M18 17h.01" /><path d="M2 20h20" /></svg>
+                        </span>
                         <span class="workspace-stat-label">Companies</span>
                         <span class="workspace-stat-value">@dashboard.TotalCompanies</span>
                         <span class="workspace-stat-hint">@dashboard.PendingCompanies pending</span>
                     </div>
                     <div class="workspace-stat">
+                        <span class="workspace-stat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" /></svg>
+                        </span>
                         <span class="workspace-stat-label">Jobs</span>
                         <span class="workspace-stat-value">@dashboard.TotalJobs</span>
                         <span class="workspace-stat-hint">@dashboard.PublishedJobs published</span>
                     </div>
                     <div class="workspace-stat">
+                        <span class="workspace-stat-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" /><path d="M9 12l2 2 4-4" /></svg>
+                        </span>
                         <span class="workspace-stat-label">Roles</span>
                         <span class="workspace-stat-value">@dashboard.AdminUsers</span>
                         <span class="workspace-stat-hint">Admins</span>
                     </div>
                 </section>
 
-                <section class="workspace-card admin-grid">
-                    <div>
-                        <h2>Summary</h2>
+                <div class="admin-grid">
+                    <section class="workspace-card" aria-labelledby="admin-summary-heading">
+                        <div class="workspace-section-head">
+                            <div>
+                                <h2 id="admin-summary-heading">Summary</h2>
+                                <p class="workspace-sub">Accounts and listings at a glance.</p>
+                            </div>
+                        </div>
                         <ul class="admin-summary-list">
-                            <li><strong>Admins:</strong> @dashboard.AdminUsers</li>
-                            <li><strong>Candidates:</strong> @dashboard.CandidateUsers</li>
-                            <li><strong>Employers:</strong> @dashboard.EmployerUsers</li>
-                            <li><strong>Approved companies:</strong> @dashboard.ApprovedCompanies</li>
-                            <li><strong>Rejected companies:</strong> @dashboard.RejectedCompanies</li>
-                            <li><strong>Published jobs:</strong> @dashboard.PublishedJobs</li>
-                            <li><strong>Draft jobs:</strong> @dashboard.DraftJobs</li>
-                            <li><strong>Closed jobs:</strong> @dashboard.ClosedJobs</li>
+                            <li><strong>Admins:</strong><span>@dashboard.AdminUsers</span></li>
+                            <li><strong>Candidates:</strong><span>@dashboard.CandidateUsers</span></li>
+                            <li><strong>Employers:</strong><span>@dashboard.EmployerUsers</span></li>
+                            <li><strong>Approved companies:</strong><span>@dashboard.ApprovedCompanies</span></li>
+                            <li><strong>Rejected companies:</strong><span>@dashboard.RejectedCompanies</span></li>
+                            <li><strong>Published jobs:</strong><span>@dashboard.PublishedJobs</span></li>
+                            <li><strong>Draft jobs:</strong><span>@dashboard.DraftJobs</span></li>
+                            <li><strong>Closed jobs:</strong><span>@dashboard.ClosedJobs</span></li>
                         </ul>
-                    </div>
-                    <div>
-                        <h2>Quick actions</h2>
-                        <nav class="admin-links">
-                            <a href="/admin/accounts">Account management</a>
-                            <a href="/admin/companies">Company management</a>
-                            <a href="/admin/jobs">Job posting management</a>
+                    </section>
+                    <section class="workspace-card" aria-labelledby="admin-actions-heading">
+                        <div class="workspace-section-head">
+                            <div>
+                                <h2 id="admin-actions-heading">Quick actions</h2>
+                                <p class="workspace-sub">Open a console section.</p>
+                            </div>
+                        </div>
+                        <nav class="admin-links" aria-label="Admin quick actions">
+                            <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/admin/accounts">Account management</a>
+                            <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/admin/companies">Company management</a>
+                            <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/admin/jobs">Job posting management</a>
                         </nav>
-                    </div>
-                </section>
+                    </section>
+                </div>
             }
         </div>
     </Authorized>

@@ -1,51 +1,127 @@
-/* Employer jobs page. Shared primitives live in Workspace.css. */
+/* Employer jobs + candidate search. Shared primitives live in Workspace.css and Theme.css. */
 
 .ej-page {
-    width: min(1300px, calc(100% - 40px));
-    margin: 28px auto 64px;
+    width: 100%;
 }
+
+/* ---------- Plan usage ---------- */
+
+.ej-usage {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.ej-usage-copy {
+    min-width: 0;
+    max-width: 720px;
+}
+
+.ej-usage h2 {
+    margin: 0 0 6px;
+    font-size: clamp(1.15rem, 2.2vw, 1.45rem);
+    letter-spacing: -.02em;
+}
+
+.ej-usage-meter {
+    width: min(420px, 100%);
+    height: 6px;
+    margin-top: 14px;
+    overflow: hidden;
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface-muted);
+}
+
+.ej-usage-meter span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--hj-primary);
+    transition: width var(--hj-transition-slow);
+}
+
+/* ---------- Loading ---------- */
 
 .ej-skeleton-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px;
+    gap: 12px;
 }
 
-.ej-rules { border-color: var(--hj-border); }
-.ej-rules .workspace-details-body p { margin: 0 0 8px; }
-.ej-rules .workspace-details-body p:last-child { margin-bottom: 0; }
+.ej-skeleton-stat {
+    height: 110px;
+}
 
-.ej-table-card { padding: 20px; }
-.ej-table-scroll { overflow-x: auto; }
+.ej-skeleton-table {
+    height: 260px;
+    margin-top: 16px;
+}
+
+.ej-cand-skeleton-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.ej-skeleton-candidate {
+    height: 140px;
+}
+
+/* ---------- Rules ---------- */
+
+.ej-rules .workspace-details-body p {
+    margin: 0 0 8px;
+}
+
+.ej-rules .workspace-details-body p:last-child {
+    margin-bottom: 0;
+}
+
+/* ---------- Form ---------- */
+
+.ej-form .workspace-fieldset {
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-md);
+    background: var(--hj-surface-muted);
+}
+
+.ej-form .workspace-fieldset legend {
+    color: var(--hj-accent-text);
+    font-family: var(--hj-font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .12em;
+}
+
+/* ---------- Postings table ---------- */
+
+.workspace-card.ej-table-card {
+    padding: clamp(16px, 2.2vw, 24px);
+}
+
+.ej-table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
 
 .ej-table {
-    width: 100%;
-    min-width: 780px;
-    border-collapse: collapse;
-    font-size: 13px;
+    min-width: 840px;
 }
 
-.ej-table th {
-    padding: 0 12px 10px;
-    border-bottom: 1px solid var(--hj-border);
-    color: var(--hj-muted);
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: .07em;
-    text-align: left;
-    text-transform: uppercase;
+.ej-table tbody tr {
+    transition: background var(--hj-transition);
 }
 
-.ej-table td {
-    padding: 14px 12px;
-    border-top: 1px solid var(--hj-border);
-    color: var(--hj-ink);
-    vertical-align: top;
+.ej-table tbody tr.is-selected,
+.ej-table tbody tr.is-selected:hover {
+    background: var(--hj-surface-tint);
 }
 
-.ej-table tbody tr { transition: background .15s ease; }
-.ej-table tbody tr:hover { background: var(--hj-surface-muted); }
-.ej-table tbody tr.is-selected { background: var(--hj-info-bg); }
+.ej-table td:first-child {
+    min-width: 250px;
+}
 
 .ej-title-button {
     padding: 0;
@@ -53,21 +129,28 @@
     background: transparent;
     color: var(--hj-ink);
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 600;
     line-height: 1.4;
     text-align: left;
 }
 
-.ej-title-button:hover { color: var(--hj-primary); text-decoration: underline; }
+.ej-title-button:hover {
+    color: var(--hj-primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
 
 .ej-job-meta {
     margin: 4px 0 0;
     color: var(--hj-muted);
-    font-size: 12px;
-    line-height: 1.5;
+    font-family: var(--hj-font-mono);
+    font-size: 10px;
+    line-height: 1.6;
 }
 
-.ej-job-chips { margin-top: 7px; }
+.ej-job-chips {
+    margin-top: 8px;
+}
 
 .ej-applicant-link {
     display: inline-flex;
@@ -77,9 +160,25 @@
     text-decoration: none;
 }
 
-.ej-applicant-link strong { font-size: 16px; line-height: 1.1; }
-.ej-applicant-link span { color: var(--hj-muted); font-size: 11px; font-weight: 600; }
-.ej-applicant-link:hover span { color: var(--hj-primary); text-decoration: underline; }
+.ej-applicant-link strong {
+    font-family: var(--hj-font-display);
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1.1;
+}
+
+.ej-applicant-link span {
+    color: var(--hj-muted);
+    font-family: var(--hj-font-mono);
+    font-size: 9px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.ej-applicant-link:hover span {
+    color: var(--hj-primary);
+    text-decoration: underline;
+}
 
 .ej-row-actions {
     display: flex;
@@ -91,53 +190,230 @@
 .ej-page-count {
     padding: 0 4px;
     color: var(--hj-muted);
-    font-size: 12px;
+    font-family: var(--hj-font-mono);
+    font-size: 10px;
     white-space: nowrap;
 }
 
-.ej-detail-meta { margin: 16px 0 18px; }
-.ej-detail-chips { margin-bottom: 16px; }
+.ej-detail-meta {
+    margin: 16px 0 18px;
+}
+
+.ej-detail-chips {
+    margin-bottom: 16px;
+}
 
 .ej-detail-desc {
     padding-top: 16px;
     border-top: 1px solid var(--hj-border);
-    color: var(--hj-ink);
+    color: var(--hj-ink-soft);
     font-size: 14px;
-    line-height: 1.7;
+    line-height: 1.75;
     white-space: pre-wrap;
     word-break: break-word;
 }
 
+/* ---------- Candidate search ---------- */
+
+.workspace-card.ej-cand-filters {
+    padding: clamp(18px, 2.4vw, 24px);
+}
+
+.ej-cand-filter-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.6fr) minmax(180px, .9fr) 120px auto;
+    gap: 12px;
+    align-items: end;
+}
+
+.ej-cand-filter-row .workspace-btn {
+    min-height: 44px;
+}
+
+.ej-cand-filters select[multiple] {
+    min-height: 96px;
+    padding: 8px 10px;
+}
+
+.ej-cand-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ej-cand {
+    padding: 18px 0;
+    border-top: 1px solid var(--hj-border);
+}
+
+.ej-cand:first-child {
+    padding-top: 4px;
+    border-top: 0;
+}
+
+.ej-cand-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: start;
+}
+
+.ej-cand-info {
+    min-width: 0;
+}
+
+.ej-cand-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.ej-cand-title h3 {
+    margin: 0;
+    color: var(--hj-ink);
+    font-size: 15.5px;
+    letter-spacing: -.01em;
+}
+
+.ej-cand-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ej-cand-position {
+    margin: 3px 0 0;
+    color: var(--hj-primary);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.ej-cand-summary {
+    max-width: 72ch;
+    margin: 8px 0 0;
+    color: var(--hj-muted);
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.ej-cand-years {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    padding-left: 16px;
+    border-left: 1px solid var(--hj-border);
+    white-space: nowrap;
+}
+
+.ej-cand-years-value {
+    color: var(--hj-ink);
+    font-family: var(--hj-font-display);
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.1;
+}
+
+.ej-cand-years-label {
+    color: var(--hj-muted);
+    font-family: var(--hj-font-mono);
+    font-size: 9px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.ej-cand-skills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding-left: 54px;
+}
+
+.ej-cand-skills-label {
+    margin-right: 2px;
+    color: var(--hj-muted);
+    font-family: var(--hj-font-mono);
+    font-size: 9px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 1100px) {
+    .ej-cand-filter-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .ej-cand-filter-row .workspace-btn {
+        justify-self: start;
+    }
+}
+
 @media (max-width: 900px) {
-    .ej-skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ej-skeleton-grid,
+    .ej-cand-skeleton-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 820px) {
-    .ej-page { width: min(100% - 32px, 1300px); margin-top: 20px; }
-    .ej-table-card { padding: 16px; }
-    .ej-table-scroll { overflow: visible; }
-    .ej-table { min-width: 0; }
-    .ej-table thead { display: none; }
+    .ej-usage {
+        align-items: flex-start;
+    }
+
+    .workspace-card.ej-table-card {
+        padding: 16px;
+    }
+
+    .ej-table-scroll {
+        overflow: visible;
+    }
+
+    .ej-table {
+        min-width: 0;
+    }
+
+    .ej-table thead {
+        display: none;
+    }
 
     .ej-table,
     .ej-table tbody,
     .ej-table tr,
-    .ej-table td { display: block; width: 100%; }
+    .ej-table td {
+        display: block;
+        width: 100%;
+    }
 
     .ej-table tbody tr {
         margin-bottom: 10px;
-        padding: 13px;
+        padding: 14px;
         border: 1px solid var(--hj-border);
-        border-radius: var(--hj-radius-sm);
-        background: #fff;
+        border-radius: var(--hj-radius-md);
+        background: var(--hj-surface);
     }
 
-    .ej-table tbody tr:hover { background: #fff; }
-    .ej-table tbody tr.is-selected { border-color: var(--hj-accent-text); background: var(--hj-info-bg); }
+    .ej-table tbody tr:hover {
+        background: var(--hj-surface);
+    }
+
+    .ej-table tbody tr.is-selected {
+        border-color: var(--hj-primary);
+        background: var(--hj-surface-tint);
+    }
 
     .ej-table td {
         padding: 5px 0;
         border: 0;
+    }
+
+    .ej-table td:first-child {
+        min-width: 0;
     }
 
     .ej-table td::before {
@@ -145,25 +421,110 @@
         margin-bottom: 2px;
         color: var(--hj-muted);
         content: attr(data-label);
+        font-family: var(--hj-font-mono);
         font-size: 9px;
-        font-weight: 800;
-        letter-spacing: .07em;
+        font-weight: 500;
+        letter-spacing: .1em;
         text-transform: uppercase;
     }
 
-    .ej-table td[data-label="Role"]::before { display: none; }
+    .ej-table td[data-label="Role"]::before {
+        display: none;
+    }
+
     .ej-table td[data-label="Actions"] {
         margin-top: 8px;
         padding-top: 10px;
         border-top: 1px dashed var(--hj-border);
     }
 
-    .ej-row-actions { justify-content: flex-start; }
-    .ej-table td[colspan] { padding: 0; }
-    .ej-table td[colspan]::before { display: none; }
+    .ej-row-actions {
+        justify-content: flex-start;
+    }
+
+    .ej-table td[colspan] {
+        padding: 0;
+    }
+
+    .ej-table td[colspan]::before {
+        display: none;
+    }
+
+    .ej-cand-head {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .ej-cand-years {
+        grid-column: 2;
+        flex-direction: row;
+        align-items: baseline;
+        gap: 6px;
+        padding-left: 0;
+        border-left: 0;
+    }
+
+    .ej-cand-years-value {
+        font-size: 18px;
+    }
+
+    .ej-cand-skills {
+        padding-left: 54px;
+    }
+}
+
+@media (max-width: 760px) {
+    .ej-page .workspace-toolbar > .workspace-field {
+        flex: 1 1 100%;
+    }
+}
+
+@media (max-width: 640px) {
+    .ej-skeleton-grid,
+    .ej-cand-skeleton-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ej-cand-filter-row {
+        grid-template-columns: 1fr;
+    }
+
+    .ej-cand-filter-row .workspace-btn {
+        width: 100%;
+    }
+
+    .ej-cand-skills {
+        padding-left: 0;
+    }
 }
 
 @media (max-width: 520px) {
-    .ej-skeleton-grid { grid-template-columns: 1fr; }
-    .ej-page { width: min(100% - 24px, 1300px); }
+    .workspace-card.ej-table-card,
+    .workspace-card.ej-cand-filters {
+        padding: 14px;
+    }
+
+    .ej-table tbody tr {
+        padding: 12px;
+    }
+
+    .ej-row-actions .workspace-btn {
+        flex: 1 1 auto;
+    }
+
+    .ej-cand {
+        padding: 14px 0;
+    }
+
+    .ej-cand-head {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .ej-cand-years {
+        grid-column: 1 / -1;
+        margin-top: 2px;
+    }
+
+    .ej-usage .workspace-btn {
+        width: 100%;
+    }
 }

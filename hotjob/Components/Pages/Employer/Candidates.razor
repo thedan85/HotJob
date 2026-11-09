@@ -21,19 +21,19 @@
                     <h1>Candidate search</h1>
                     <p class="workspace-lede">Find opted-in candidates. Cards show name, headline, summary, skills and
                         years only — no contact details.</p>
-                    </div>
-                    <div class="workspace-actions">
-                        <a class="workspace-btn workspace-btn-primary" href="/employer/jobs">Back to jobs</a>
-                    </div>
-                </section>
+                </div>
+                <div class="workspace-actions">
+                    <a class="workspace-btn workspace-btn-primary" href="/employer/jobs">Back to jobs</a>
+                </div>
+            </section>
 
                 @if (isLoading)
                 {
                     <section class="workspace-card" aria-busy="true" aria-label="Loading candidates">
-                        <div class="ej-skeleton-grid">
-                            <div class="workspace-skeleton" style="height:140px"></div>
-                            <div class="workspace-skeleton" style="height:140px"></div>
-                            <div class="workspace-skeleton" style="height:140px"></div>
+                        <div class="ej-cand-skeleton-grid">
+                            <div class="workspace-skeleton ej-skeleton-candidate"></div>
+                            <div class="workspace-skeleton ej-skeleton-candidate"></div>
+                            <div class="workspace-skeleton ej-skeleton-candidate"></div>
                         </div>
                         <p class="visually-hidden" role="status">Loading candidates…</p>
                     </section>
@@ -44,7 +44,7 @@
                 }
                 else
                 {
-                    <section class="workspace-card ec-filter-card" aria-label="Candidate filters">
+                    <section class="workspace-card ej-cand-filters" aria-label="Candidate filters">
                         <div class="workspace-section-head">
                             <div>
                                 <h2>Filters</h2>
@@ -58,7 +58,7 @@
                         </div>
 
                         <EditForm Model="query">
-                            <div class="ec-filter-row">
+                            <div class="ej-cand-filter-row">
                                 <label class="workspace-field workspace-field-grow">
                                     <span>Keyword</span>
                                     <InputText @bind-Value="query.Keyword" placeholder="Position, summary or skill name" />
@@ -88,7 +88,7 @@
                         <div class="workspace-notice" role="status" aria-live="polite">@actionMessage</div>
                     }
 
-                    <section class="workspace-card ec-result-card" aria-label="Candidates">
+                    <section class="workspace-card" aria-label="Candidates">
                         <div class="workspace-section-head">
                             <div>
                                 <h2>Candidates</h2>
@@ -119,77 +119,78 @@
                         }
                         else
                         {
-                            <ul class="ec-candidate-list" aria-label="Candidate list">
+                            <ul class="ej-cand-list" aria-label="Candidate list">
                                 @foreach (var item in result.Items)
                                 {
-                                    <li class="ec-candidate">
-                                        <div class="ec-candidate-head">
-                                            <div class="ec-candidate-avatar">@Initials(item.DisplayName)</div>
-                                            <div class="ec-candidate-info">
-                                                <h3>@item.DisplayName</h3>
-                                                <p class="ec-position">@(string.IsNullOrWhiteSpace(item.Position) ? "Position not set" :
-                                                                                        item.Position)</p>
-                                                    @if (!string.IsNullOrWhiteSpace(item.Summary))
+                                    <li class="ej-cand">
+                                        <div class="ej-cand-head">
+                                            <span class="workspace-avatar" aria-hidden="true">@Initials(item.DisplayName)</span>
+                                            <div class="ej-cand-info">
+                                                <div class="ej-cand-title">
+                                                    <h3>@item.DisplayName</h3>
+                                                    @if (item.IsPremium || item.IsBoosted)
                                                     {
-                                                        <p class="ec-summary">@item.Summary</p>
+                                                        <span class="ej-cand-badges">
+                                                            @if (item.IsPremium)
+                                                            {
+                                                                <span class="workspace-badge is-published" title="Premium profile">Premium</span>
+                                                            }
+                                                            @if (item.IsBoosted)
+                                                            {
+                                                                <span class="workspace-badge is-info" title="Boosted profile">Boosted</span>
+                                                            }
+                                                        </span>
                                                     }
-                                                    <div class="ec-badges">
-                                                        @if (item.IsPremium)
-                                                        {
-                                                            <span class="workspace-badge is-published ec-badge-premium"
-                                                                  title="Premium profile">Premium</span>
-                                                        }
-                                                        @if (item.IsBoosted)
-                                                        {
-                                                            <span class="workspace-badge is-info ec-badge-boosted"
-                                                                  title="Boosted profile">Boosted</span>
-                                                        }
-                                                    </div>
                                                 </div>
-                                                <div class="ec-candidate-meta">
-                                                    <strong class="ec-years">@item.TotalYears yr<span
-                                                        class="visually-hidden">ears</span></strong>
-                                                        <span class="ec-years-label">total experience</span>
-                                                    </div>
-                                                </div>
-                                                @if (item.Skills.Count > 0)
+                                                <p class="ej-cand-position">@(string.IsNullOrWhiteSpace(item.Position) ? "Position not set" : item.Position)</p>
+                                                @if (!string.IsNullOrWhiteSpace(item.Summary))
                                                 {
-                                                    <div class="ec-skills">
-                                                        <span class="ec-skills-label">Skills</span>
-                                                        @foreach (var skill in item.Skills)
-                                                        {
-                                                            <span class="workspace-chip ec-chip">
-                                                                @skill.Name · @skill.YearsOfExperience yr
-                                                            </span>
-                                                        }
-                                                    </div>
+                                                    <p class="ej-cand-summary">@item.Summary</p>
                                                 }
-                                            </li>
-                                        }
-                                    </ul>
-
-                                    <div class="workspace-pagination">
-                                        <span>@(result.TotalCount == 0 ? "No candidates" : $"Showing {(query.Page - 1) * result.PageSize +
-                                                                    1}–{Math.Min(query.Page * result.PageSize, result.TotalCount)} of {result.TotalCount}")</span>
-                                            <div class="workspace-pagination-actions">
-                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
-                                                        disabled="@(query.Page <= 1)" @onclick="() => ChangePageAsync(query.Page - 1)">←
-                                                    Previous</button>
-                                                    <span class="ej-page-count">Page @query.Page of @Math.Max(result.TotalPages, 1)</span>
-                                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
-                                                            disabled="@(query.Page >= result.TotalPages)"
-                                                            @onclick="() => ChangePageAsync(query.Page + 1)">Next →</button>
-                                                </div>
+                                            </div>
+                                            <div class="ej-cand-years">
+                                                <strong class="ej-cand-years-value">@item.TotalYears yr<span class="visually-hidden">ears</span></strong>
+                                                <span class="ej-cand-years-label">total experience</span>
+                                            </div>
+                                        </div>
+                                        @if (item.Skills.Count > 0)
+                                        {
+                                            <div class="ej-cand-skills">
+                                                <span class="ej-cand-skills-label">Skills</span>
+                                                @foreach (var skill in item.Skills)
+                                                {
+                                                    <span class="workspace-chip">
+                                                        @skill.Name · @skill.YearsOfExperience yr
+                                                    </span>
+                                                }
                                             </div>
                                         }
-                                    </section>
+                                    </li>
                                 }
+                            </ul>
+
+                            <div class="workspace-pagination">
+                                <span>@(result.TotalCount == 0 ? "No candidates" : $"Showing {(query.Page - 1) * result.PageSize +
+                                                            1}–{Math.Min(query.Page * result.PageSize, result.TotalCount)} of {result.TotalCount}")</span>
+                                <div class="workspace-pagination-actions">
+                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                            disabled="@(query.Page <= 1)" @onclick="() => ChangePageAsync(query.Page - 1)">←
+                                        Previous</button>
+                                    <span class="ej-page-count">Page @query.Page of @Math.Max(result.TotalPages, 1)</span>
+                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                            disabled="@(query.Page >= result.TotalPages)"
+                                            @onclick="() => ChangePageAsync(query.Page + 1)">Next →</button>
+                                </div>
                             </div>
-                        </Authorized>
-                        <NotAuthorized>
-                            <RedirectToLogin />
-                        </NotAuthorized>
-                    </AuthorizeView>
+                        }
+                    </section>
+                }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     private CandidateSearchQuery query = new();

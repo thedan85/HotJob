@@ -1,44 +1,19 @@
+/* Sign-in page. Shared theme lives in Theme.css. */
+
 .login-card {
-    width: 100%;
-    min-height: 620px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    background: var(--hj-surface);
-    border: 1px solid var(--hj-border);
-    border-radius: var(--hj-radius-lg);
-    box-shadow: var(--hj-shadow-md);
-    overflow: hidden;
+    align-items: stretch;
+    min-height: 600px;
 }
 
 .login-form-panel {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: clamp(32px, 6vw, 72px) clamp(24px, 6vw, 80px);
-}
-
-.login-form-inner {
-    width: 100%;
-    max-width: 460px;
-}
-
-.login-form-panel h1 {
-    margin: 0 0 8px;
-    color: var(--hj-ink);
-    font-size: clamp(1.9rem, 3vw, 2.5rem);
-    letter-spacing: -.025em;
-    line-height: 1.15;
-}
-
-.login-form-panel .intro {
-    margin: 0 0 32px;
-    color: var(--hj-muted);
-    line-height: 1.6;
 }
 
 .login-form {
     display: grid;
-    gap: 22px;
+    gap: 18px;
 }
 
 .login-form .field-group {
@@ -47,119 +22,17 @@
     min-width: 0;
 }
 
-.login-form .field-group label,
-.field-label-row label {
-    margin-bottom: 8px;
-    color: var(--hj-ink);
-    font-size: 14px;
-    font-weight: 700;
-}
-
-.field-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-}
-
-.field-label-row a {
-    color: var(--hj-primary);
-    font-size: 12px;
-    font-weight: 700;
-    text-decoration: none;
-}
-
-.field-label-row a:hover { color: var(--hj-accent-text); text-decoration: underline; }
-
 .login-form input {
     width: 100%;
-    height: 50px;
-    padding: 0 16px;
-    border: 1px solid var(--hj-border-strong);
-    border-radius: var(--hj-radius-sm);
-    outline: none;
-    background: white;
-    color: var(--hj-ink);
-    font-size: 16px;
-    transition: border-color var(--hj-transition), box-shadow var(--hj-transition);
+    min-height: 46px;
 }
 
-.login-form input:focus {
-    border-color: var(--hj-accent-text);
-    box-shadow: var(--hj-focus);
-}
-
-.login-form input::placeholder { color: #94A3B8; }
 .login-form .password-wrap input { padding-right: 76px; }
-.login-form .validation-message { margin-top: 6px; }
 
-.google-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    width: 100%;
-    height: 50px;
-    border: 1px solid var(--hj-border-strong);
-    border-radius: var(--hj-radius-sm);
-    background: white;
-    color: var(--hj-ink);
-    font-size: 15px;
-    font-weight: 700;
-    text-decoration: none;
-    transition: border-color var(--hj-transition), box-shadow var(--hj-transition);
-}
+.field-label-row a { white-space: nowrap; }
 
-.google-button:hover {
-    border-color: var(--hj-accent-text);
-    box-shadow: var(--hj-focus);
-}
+.login-benefits-inner h2 span { color: #E8A08B; }
 
-.google-button svg { width: 20px; height: 20px; flex: none; }
-
-.auth-divider {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 18px 0 4px;
-    color: var(--hj-muted);
-    font-size: 12px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: var(--hj-border-strong);
-}
-
-.login-benefits-panel {
-    display: flex;
-    align-items: center;
-    padding: clamp(32px, 6vw, 72px);
-    background: var(--hj-gradient-dark);
-    color: white;
-}
-
-.login-benefits-inner { max-width: 430px; }
-.login-benefits-inner .panel-kicker { margin: 0 0 14px; color: var(--hj-primary-light); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-.login-benefits-inner h2 { margin: 0 0 16px; font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.025em; line-height: 1.1; }
-.login-benefits-inner > p:not(.panel-kicker) { margin: 0; color: #DCEFFA; line-height: 1.65; }
-.login-points { display: grid; gap: 16px; margin-top: 40px; }
-.login-points span { display: flex; align-items: center; gap: 14px; color: #DCEFFA; font-size: 14px; }
-.login-points strong { color: var(--hj-primary-light); font-size: 12px; letter-spacing: .08em; }
-
-@media (max-width: 860px) {
-    .login-card { grid-template-columns: 1fr; }
-    .login-benefits-panel { padding: 40px 32px; }
-    .login-benefits-inner { max-width: 600px; }
-}
-
-@media (max-width: 560px) {
-    .login-form-panel { padding: 32px 20px 40px; }
-    .login-benefits-panel { padding: 32px 20px 40px; }
-    .login-benefits-inner h2 { font-size: 2rem; }
+@media (max-width: 980px) {
+    .login-card { min-height: 0; }
 }

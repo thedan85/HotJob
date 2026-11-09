@@ -151,7 +151,13 @@ else
                             }
                             else if (matchScore is { Available: true })
                             {
-                                <p class="job-detail-match-value"><strong>@matchScore.MatchPercentage.ToString("0")%</strong> match</p>
+                                <div class="job-match-meter" style="@($"--match:{matchScore.MatchPercentage.ToString("0", System.Globalization.CultureInfo.InvariantCulture)}")">
+                                    <span class="job-match-meter-ring" aria-hidden="true"></span>
+                                    <span class="job-match-meter-copy">
+                                        <strong>@matchScore.MatchPercentage.ToString("0")%</strong>
+                                        <span>match</span>
+                                    </span>
+                                </div>
                                 <p class="job-detail-muted">Calculated with @MatchAlgorithmLabel(matchScore.AlgorithmUsed).</p>
 
                                 @if (advancedMatch is not null)

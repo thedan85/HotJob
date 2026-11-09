@@ -3,60 +3,139 @@
 <PageTitle>Find work that fits | HotJob</PageTitle>
 
 <section class="home-hero" aria-labelledby="home-title">
-	<div class="hero-copy">
-		<p class="eyebrow">Vietnam's tech career community</p>
-		<h1 id="home-title">Find work that fits.</h1>
-		<p class="hero-lede">Discover roles from teams building what is next, with salary clarity and smarter matching.</p>
-	</div>
+    <div class="hero-copy">
+        <p class="eyebrow">Vietnam's tech career community</p>
+        <h1 id="home-title">Find work that <em>fits.</em></h1>
+        <p class="hero-lede">Discover roles from teams building what is next. See salary, required skills and a match score before you apply.</p>
 
-	<form class="job-search" action="/it-jobs" method="get">
-		<label class="search-field">
-			<span>What are you looking for?</span>
-			<input type="search" name="keyword" placeholder="Job title, skill or company" />
-		</label>
-		<label class="search-field search-location">
-			<span>Where?</span>
-			<input type="search" name="city" placeholder="City or remote" />
-		</label>
-		<button type="submit" class="search-button">Search jobs <span aria-hidden="true">→</span></button>
-	</form>
+        <div class="hero-proof" aria-label="What HotJob includes">
+            <span>ML match score</span>
+            <span>Salary visibility</span>
+            <span>Application tracking</span>
+        </div>
 
-	<div class="trending" aria-label="Trending searches">
-		<span>Trending:</span>
-		<a href="/it-jobs?keyword=Java">Java</a>
-		<a href="/it-jobs?keyword=ReactJS">ReactJS</a>
-		<a href="/it-jobs?keyword=.NET">.NET</a>
-		<a href="/it-jobs?keyword=Tester">Tester</a>
-	</div>
+        <div class="trending" aria-label="Trending searches">
+            <span>Trending</span>
+            <a href="/it-jobs?keyword=Java">Java</a>
+            <a href="/it-jobs?keyword=ReactJS">ReactJS</a>
+            <a href="/it-jobs?keyword=.NET">.NET</a>
+            <a href="/it-jobs?keyword=Tester">Tester</a>
+        </div>
+    </div>
+
+    <div class="hero-search-panel">
+        <form class="job-search" action="/it-jobs" method="get">
+            <label class="search-field">
+                <span>What are you looking for?</span>
+                <input type="search" name="keyword" placeholder="Job title, skill or company" />
+            </label>
+            <label class="search-field search-location">
+                <span>Where?</span>
+                <input type="search" name="city" placeholder="City or remote" />
+            </label>
+            <button type="submit" class="search-button">Search jobs <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="hero-search-note">Only published, unexpired roles are listed. Salary appears after sign-in.</p>
+    </div>
 </section>
 
-<section class="home-section" aria-labelledby="shortcuts-title">
-	<div class="section-heading">
-		<div>
-			<p class="section-kicker">A better job search</p>
-			<h2 id="shortcuts-title">More than a job board</h2>
-		</div>
-		<a class="section-link" href="/register">Create your account <span aria-hidden="true">→</span></a>
-	</div>
+<div class="feature-ticker" aria-label="Platform features">
+    <div class="feature-ticker-track">
+        <div class="ticker-group">
+            <span>CV to role match score</span>
+            <span>Salary before applying</span>
+            <span>Application status timeline</span>
+            <span>Interview scheduling</span>
+            <span>Verified company profiles</span>
+            <span>Job alerts</span>
+            <span>Premium skill breakdown</span>
+        </div>
+        <div class="ticker-group" aria-hidden="true">
+            <span>CV to role match score</span>
+            <span>Salary before applying</span>
+            <span>Application status timeline</span>
+            <span>Interview scheduling</span>
+            <span>Verified company profiles</span>
+            <span>Job alerts</span>
+            <span>Premium skill breakdown</span>
+        </div>
+    </div>
+</div>
 
-	<div class="shortcut-grid">
-		<a class="shortcut-card" href="/register">
-			<span class="shortcut-number">01</span>
-			<h3>Get matched</h3>
-			<p>Build your profile and see roles that fit your experience.</p>
-			<span class="card-arrow" aria-hidden="true">↗</span>
-		</a>
-		<a class="shortcut-card" href="/companies">
-			<span class="shortcut-number">02</span>
-			<h3>Meet great teams</h3>
-			<p>Explore company culture, reviews and the work behind the roles.</p>
-			<span class="card-arrow" aria-hidden="true">↗</span>
-		</a>
-		<a class="shortcut-card shortcut-card-dark" href="/register">
-			<span class="shortcut-number">03</span>
-			<h3>Know your value</h3>
-			<p>Use transparent salary signals to make your next move count.</p>
-			<span class="card-arrow" aria-hidden="true">↗</span>
-		</a>
-	</div>
+<section class="home-section" aria-labelledby="shortcuts-title">
+    <div class="section-heading">
+        <div>
+            <p class="section-kicker">A better job search</p>
+            <h2 id="shortcuts-title">More than a job board</h2>
+        </div>
+        <a class="section-link" href="/register">Create your account <span aria-hidden="true">→</span></a>
+    </div>
+
+    <div class="shortcut-grid">
+        <a class="shortcut-card" href="/register">
+            <span class="shortcut-number">01</span>
+            <h3>Get matched</h3>
+            <p>Build a CV with skills and experience, then see a match score for every role.</p>
+            <span class="card-arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="shortcut-card" href="/companies">
+            <span class="shortcut-number">02</span>
+            <h3>Meet great teams</h3>
+            <p>Explore company profiles, reviews and the work behind each open role.</p>
+            <span class="card-arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="shortcut-card shortcut-card-dark" href="/it-jobs">
+            <span class="shortcut-number">03</span>
+            <h3>Know your value</h3>
+            <p>Use salary ranges and required skills to make your next move count.</p>
+            <span class="card-arrow" aria-hidden="true">↗</span>
+        </a>
+    </div>
+</section>
+
+<section class="home-section" aria-labelledby="paths-title">
+    <div class="section-heading">
+        <div>
+            <p class="section-kicker">Built for both sides</p>
+            <h2 id="paths-title">One place to move hiring forward</h2>
+        </div>
+    </div>
+
+    <div class="home-split">
+        <article class="home-panel">
+            <p class="eyebrow">For candidates</p>
+            <h2>A clearer path from CV to offer.</h2>
+            <p>Keep every application, score and interview in one workspace.</p>
+            <ul>
+                <li>Match score before you apply</li>
+                <li>Status timeline for every application</li>
+                <li>Interview schedule and notifications</li>
+                <li>Job alerts for the roles you want</li>
+            </ul>
+            <a class="workspace-btn workspace-btn-primary" href="/register">Create your profile</a>
+        </article>
+
+        <article class="home-panel home-panel-dark">
+            <p class="eyebrow">For employers</p>
+            <h2>Hiring signal, without the noise.</h2>
+            <p>Publish roles, review applicants and keep the pipeline moving.</p>
+            <ul>
+                <li>Publish and manage job postings</li>
+                <li>Review CVs and applicant status</li>
+                <li>Schedule interviews in one place</li>
+                <li>Plans and billing under one account</li>
+            </ul>
+            <a class="workspace-btn workspace-btn-secondary" href="/become-employer">Become an employer</a>
+        </article>
+    </div>
+</section>
+
+<section class="home-cta" aria-labelledby="home-cta-title">
+    <p class="eyebrow">Start with a signal</p>
+    <h2 id="home-cta-title">Your next role starts with a better match.</h2>
+    <p>Create an account, add your CV, and compare roles by fit, salary and team.</p>
+    <div class="home-cta-actions">
+        <a class="workspace-btn workspace-btn-primary" href="/it-jobs">Explore jobs</a>
+        <a class="workspace-btn workspace-btn-secondary" href="/register">Create account</a>
+    </div>
 </section>

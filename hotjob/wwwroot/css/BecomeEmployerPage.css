@@ -1,73 +1,82 @@
+/* Employer upgrade page. Shared theme lives in Theme.css. */
+
 .become-employer {
-    max-width: 680px;
+    max-width: 720px;
     margin: 0 auto;
-    padding: 48px 24px 72px;
-}
-
-.become-employer .eyebrow {
-    color: var(--hj-accent-text);
-    font-weight: 600;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    font-size: 12px;
-    margin: 0 0 8px;
-}
-
-.become-employer h1 {
-    margin: 0 0 12px;
-    font-size: 32px;
-    color: var(--hj-ink);
+    padding: clamp(8px, 2vw, 24px) 0 48px;
 }
 
 .be-lede {
+    max-width: 52ch;
+    margin: 14px 0 24px;
     color: var(--hj-muted);
-    margin: 0 0 28px;
+    font-size: 14px;
+    line-height: 1.65;
 }
 
 .be-notice {
-    background: var(--hj-surface);
-    border: 1px solid var(--hj-border);
-    border-radius: var(--hj-radius-md);
-    box-shadow: var(--hj-shadow-sm);
-    padding: 18px 20px;
-    color: var(--hj-ink);
+    padding: 16px 18px;
+    border: 1px solid rgba(30, 122, 75, .25);
+    border-radius: 10px;
+    background: var(--hj-success-bg);
+    color: var(--hj-success);
+    font-size: 13.5px;
+}
+
+.be-notice a {
+    color: var(--hj-primary);
+    font-weight: 600;
 }
 
 .be-form {
-    background: var(--hj-surface);
-    border: 1px solid var(--hj-border);
-    border-radius: var(--hj-radius-md);
-    box-shadow: var(--hj-shadow-sm);
-    padding: 28px;
     display: flex;
     flex-direction: column;
     gap: 18px;
+    padding: clamp(22px, 3vw, 32px);
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-lg);
+    background: var(--hj-surface);
+    box-shadow: var(--hj-shadow-sm);
 }
 
 .be-company {
-    border: 1px solid var(--hj-border);
-    border-radius: var(--hj-radius-sm);
-    padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+    margin: 0;
+    padding: 18px;
+    border: 1px solid var(--hj-border);
+    border-radius: 12px;
+    background: var(--hj-surface-muted);
 }
 
 .be-company legend {
-    font-weight: 600;
-    color: var(--hj-ink);
     padding: 0 6px;
+    color: var(--hj-muted);
+    font-family: var(--hj-font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .1em;
+    text-transform: uppercase;
 }
 
 .be-choice {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-height: 44px;
+    font-size: 13.5px;
     cursor: pointer;
 }
 
+.be-choice input { accent-color: var(--hj-primary); }
+
 .be-hint {
-    color: var(--hj-muted);
     margin: 0;
-    font-size: 14px;
+    color: var(--hj-muted);
+    font-size: 12.5px;
+}
+
+.be-form .validation-summary {
+    margin: 0;
 }

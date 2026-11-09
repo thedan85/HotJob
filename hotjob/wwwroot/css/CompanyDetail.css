@@ -1,107 +1,60 @@
-.company-detail-crumb {
-    margin: 4px 0 20px;
+/* Company detail. Shared theme lives in Theme.css. */
+
+.company-detail-status,
+.company-detail-empty {
+    max-width: 680px;
+    margin: 32px auto;
+    padding: 40px 28px;
+    border: 1px solid var(--hj-border);
+    border-radius: var(--hj-radius-lg);
+    background: var(--hj-surface);
+    color: var(--hj-muted);
+    font-size: 13.5px;
+    text-align: center;
 }
 
-.company-detail-crumb a {
+.company-detail-error {
+    border-color: rgba(179, 38, 30, .22);
+    background: var(--hj-danger-bg);
+    color: var(--hj-danger);
+}
+
+.company-detail-empty h1 {
+    margin: 0 0 8px;
+    font-family: var(--hj-font-display);
+    font-size: clamp(2.2rem, 4vw, 3.2rem);
+    font-weight: 400;
+}
+
+.company-detail-empty p {
+    margin: 0 0 18px;
+}
+
+.company-detail-back {
     color: var(--hj-primary);
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 600;
     text-decoration: none;
 }
 
-.company-detail-crumb a:hover {
-    color: var(--hj-accent-text);
-}
+.company-detail-back:hover { color: var(--hj-accent-text); }
 
-.company-detail {
-    padding: clamp(22px, 4vw, 32px);
+.company-detail-overview,
+.company-detail-about {
+    margin-top: 14px;
+    padding: clamp(22px, 3vw, 32px);
     border: 1px solid var(--hj-border);
-    border-radius: var(--hj-radius-md);
+    border-radius: var(--hj-radius-lg);
     background: var(--hj-surface);
     box-shadow: var(--hj-shadow-sm);
 }
 
-.company-detail-header {
-    display: flex;
-    align-items: flex-start;
-    gap: 18px;
-}
-
-.company-detail-logo,
-.company-detail-initials {
-    width: 72px;
-    height: 72px;
-    border-radius: 14px;
-    flex: 0 0 72px;
-}
-
-.company-detail-logo {
-    object-fit: cover;
-    border: 1px solid var(--hj-border);
-    background: #fff;
-}
-
-.company-detail-initials {
-    display: grid;
-    place-items: center;
-    background: linear-gradient(135deg, var(--hj-primary), var(--hj-accent));
-    color: #fff;
-    font-size: 26px;
-    font-weight: 800;
-}
-
-.company-detail-heading {
-    min-width: 0;
-}
-
-.company-detail-heading h1 {
-    margin: 0 0 10px;
-    color: var(--hj-ink);
-    font-size: clamp(1.5rem, 3.5vw, 2.2rem);
-    line-height: 1.1;
-    letter-spacing: -.03em;
-}
-
-.company-detail-overview {
-    margin-top: 28px;
-}
-
-.company-detail-overview h2 {
-    margin: 0 0 12px;
-    font-size: 1.05rem;
-}
-
 .company-detail-facts {
-    margin: 0;
-    display: grid;
-    gap: 10px;
-}
-
-.company-detail-fact {
-    display: grid;
-    grid-template-columns: 150px minmax(0, 1fr);
-    gap: 12px;
-    align-items: baseline;
-}
-
-.company-detail-fact dt {
-    color: var(--hj-muted);
-    font-size: 14px;
-    font-weight: 600;
-}
-
-.company-detail-fact dd {
-    margin: 0;
-    min-width: 0;
-    color: var(--hj-ink);
-    font-size: 15px;
-    line-height: 1.6;
-    word-break: break-word;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .company-detail-fact dd a {
     color: var(--hj-primary);
-    font-weight: 600;
     text-decoration: none;
     word-break: break-all;
 }
@@ -111,121 +64,38 @@
     text-decoration: underline;
 }
 
-.company-detail-about {
-    margin-top: 28px;
-}
-
-.company-detail-about h2 {
-    margin: 0 0 12px;
-    font-size: 1.05rem;
-}
-
-.company-detail-desc {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: var(--hj-ink);
-    font-size: 15px;
-    line-height: 1.7;
-}
-
-.company-detail-muted {
-    margin: 0;
-    color: var(--hj-muted);
-    font-size: 14px;
-}
-
 .company-detail-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 12px;
-    margin-top: 28px;
-    padding-top: 24px;
-    border-top: 1px solid var(--hj-border);
+    margin-top: 14px;
 }
 
 .company-detail-jobs {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 48px;
-    padding: 0 24px;
-    border-radius: var(--hj-radius-sm);
-    font-size: 15px;
-    font-weight: 800;
-    text-decoration: none;
-    white-space: nowrap;
-}
-
-.company-detail-jobs {
+    min-height: 46px;
+    padding: 0 22px;
+    border: 1px solid var(--hj-primary);
+    border-radius: 10px;
     background: var(--hj-primary);
     color: #fff;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background var(--hj-transition), border-color var(--hj-transition), transform var(--hj-transition);
 }
 
 .company-detail-jobs:hover {
-    background: var(--hj-ink);
+    border-color: var(--hj-primary-hover);
+    background: var(--hj-primary-hover);
+    color: #fff;
+    transform: translateY(-1px);
 }
 
-.company-detail-jobs:focus-visible {
-    outline: 3px solid rgba(14, 165, 233, .35);
-    outline-offset: 2px;
-}
-
-.company-detail-status {
-    color: var(--hj-muted);
-    padding: 32px 0;
-}
-
-.company-detail-error {
-    color: var(--hj-danger);
-}
-
-.company-detail-empty {
-    max-width: 640px;
-    margin: 32px auto;
-    padding: 32px 24px;
-    border: 1px dashed var(--hj-border);
-    border-radius: var(--hj-radius-md);
-    background: var(--hj-surface);
-    text-align: center;
-}
-
-.company-detail-empty h1 {
-    margin: 0 0 8px;
-}
-
-.company-detail-empty p {
-    margin: 0 0 16px;
-    color: var(--hj-muted);
-}
-
-.company-detail-back {
-    color: var(--hj-primary);
-    font-size: 14px;
-    font-weight: 700;
-    text-decoration: none;
-}
-
-.company-detail-back:hover {
-    color: var(--hj-accent-text);
-}
-
-.company-detail-owner {
-    margin: 12px 0 0;
-    color: var(--hj-muted);
-    font-size: 14px;
-}
-
-.company-detail-owner strong {
-    color: var(--hj-ink);
-}
-
-.company-detail-reviews {
-    margin-top: 28px;
-    padding-top: 24px;
-    border-top: 1px solid var(--hj-border);
-}
+.company-detail-reviews { margin-top: 14px; }
 
 .company-detail-reviews-head {
     display: flex;
@@ -235,117 +105,44 @@
     margin-bottom: 14px;
 }
 
-.company-detail-reviews-head h2 {
-    margin: 0;
-    font-size: 1.05rem;
-}
+.company-detail-reviews-head h2 { margin: 0; }
 
 .company-detail-rating {
     color: var(--hj-muted);
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.review-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 12px;
-}
-
-.review-card {
-    padding: 16px 18px;
-    border: 1px solid var(--hj-border);
-    border-radius: var(--hj-radius-sm);
-    background: #FFFFFF;
-}
-
-.review-head {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.review-avatar {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--hj-primary), var(--hj-accent));
-    color: #fff;
-    font-size: 15px;
-    font-weight: 800;
+    font-family: var(--hj-font-mono);
+    font-size: 9.5px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
 }
 
 .review-author {
     margin: 0;
     color: var(--hj-ink);
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .review-date {
-    margin: 0;
+    margin: 2px 0 0;
     color: var(--hj-muted);
-    font-size: 12px;
-}
-
-.review-stars {
-    margin-left: auto;
-    color: #F59E0B;
-    font-size: 15px;
-    letter-spacing: 2px;
-    white-space: nowrap;
+    font-family: var(--hj-font-mono);
+    font-size: 9px;
+    letter-spacing: .04em;
 }
 
 .review-text {
     margin: 12px 0 0;
-    color: var(--hj-ink);
-    font-size: 14.5px;
-    line-height: 1.65;
+    color: var(--hj-ink-soft);
+    font-size: 13.5px;
+    line-height: 1.7;
     white-space: pre-wrap;
     word-break: break-word;
 }
 
-.company-detail-reviews .pagination {
-    justify-content: flex-start;
-}
-
-.company-detail-reviews .page-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-}
-
-.company-detail-reviews .page-btn.disabled {
-    opacity: .45;
-    pointer-events: none;
-}
-
-.company-detail-reviews .page-info {
-    width: auto;
-    text-align: left;
-}
-
-.review-list + .pagination {
-    margin-top: 16px;
-}
+.review-stars { margin-left: auto; white-space: nowrap; }
 
 @media (max-width: 640px) {
-    .company-detail-header {
-        flex-direction: column;
-    }
-
-    .company-detail-jobs {
-        width: 100%;
-    }
-
-    .company-detail-fact {
-        grid-template-columns: 1fr;
-        gap: 2px;
-    }
+    .company-detail-header { flex-direction: column; align-items: flex-start; }
+    .company-detail-facts { grid-template-columns: 1fr; }
+    .company-detail-jobs { width: 100%; }
 }

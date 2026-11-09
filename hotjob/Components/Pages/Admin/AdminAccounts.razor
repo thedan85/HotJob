@@ -20,7 +20,7 @@
             @if (isLoading)
             {
                 <section class="workspace-card" aria-busy="true" aria-label="Loading accounts">
-                    <p>Loading accounts…</p>
+                    <p class="workspace-sub">Loading accounts…</p>
                 </section>
             }
             else if (errorMessage is not null)
@@ -29,42 +29,50 @@
             }
             else
             {
-                <section class="workspace-card">
-                    <table class="admin-table">
-                        <thead>
-                            <tr>
-                                <th>Email</th>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Roles</th>
-                                <th>Created</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var user in users)
-                            {
+                <section class="workspace-card" aria-labelledby="admin-accounts-heading">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2 id="admin-accounts-heading">All accounts</h2>
+                            <p class="workspace-sub">@users.Count total</p>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table class="admin-table">
+                            <thead>
                                 <tr>
-                                    <td>@user.Email</td>
-                                    <td>@(string.IsNullOrWhiteSpace(user.FullName) ? "-" : user.FullName)</td>
-                                    <td>@user.AccountType</td>
-                                    <td>@string.Join(", ", user.Roles)</td>
-                                    <td>@user.CreatedAt.ToString("dd MMM yyyy")</td>
-                                    <td>
-                                        <span class="workspace-badge @(user.IsActive ? "success" : "danger")">
-                                            @(user.IsActive ? "Active" : "Disabled")
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="() => ToggleUserAsync(user.UserId)">
-                                            @(user.IsActive ? "Disable" : "Enable")
-                                        </button>
-                                    </td>
+                                    <th>Email</th>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Roles</th>
+                                    <th>Created</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach (var user in users)
+                                {
+                                    <tr>
+                                        <td>@user.Email</td>
+                                        <td>@(string.IsNullOrWhiteSpace(user.FullName) ? "-" : user.FullName)</td>
+                                        <td>@user.AccountType</td>
+                                        <td>@string.Join(", ", user.Roles)</td>
+                                        <td>@user.CreatedAt.ToString("dd MMM yyyy")</td>
+                                        <td>
+                                            <span class="workspace-badge @(user.IsActive ? "is-success" : "is-danger")">
+                                                @(user.IsActive ? "Active" : "Disabled")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="workspace-btn workspace-btn-small @(user.IsActive ? "workspace-btn-danger" : "workspace-btn-secondary")" type="button" @onclick="() => ToggleUserAsync(user.UserId)">
+                                                @(user.IsActive ? "Disable" : "Enable")
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             }
         </div>

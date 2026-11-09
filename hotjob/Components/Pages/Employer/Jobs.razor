@@ -36,17 +36,20 @@
 
             @if (entitlement is not null && !isLoading)
             {
-                <section class="workspace-card" aria-label="Plan usage" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
-                    <div>
+                <section class="workspace-card ej-usage" aria-label="Plan usage">
+                    <div class="ej-usage-copy">
                         <p class="workspace-eyebrow">@entitlement.PlanName plan</p>
-                        <h2 style="margin:.15rem 0 .35rem">@entitlement.ActiveJobCount of @entitlement.JobQuota active job slots used</h2>
-                        <p class="workspace-sub" style="margin:0">
+                        <h2>@entitlement.ActiveJobCount of @entitlement.JobQuota active job slots used</h2>
+                        <p class="workspace-sub">
                             @if (entitlement.PlanExpiresAt is { } expiresAt)
                             {
                                 <span>Plan active until @expiresAt.ToString("dd MMM yyyy"). </span>
                             }
                             @(entitlement.RemainingSlots == 0 ? "Close a job or upgrade to post another." : $"{entitlement.RemainingSlots} slot(s) left.")
                         </p>
+                        <div class="ej-usage-meter" role="img" aria-label="@entitlement.ActiveJobCount of @entitlement.JobQuota active job slots used">
+                            <span style="width:@(entitlement.JobQuota <= 0 ? 0 : Math.Min(100, (int)Math.Round(entitlement.ActiveJobCount * 100.0 / entitlement.JobQuota)))%"></span>
+                        </div>
                     </div>
                     @if (entitlement.IsOwner)
                     {
@@ -59,12 +62,12 @@
             {
                 <section class="workspace-card" aria-busy="true" aria-label="Loading job postings">
                     <div class="ej-skeleton-grid">
-                        <div class="workspace-skeleton" style="height:110px"></div>
-                        <div class="workspace-skeleton" style="height:110px"></div>
-                        <div class="workspace-skeleton" style="height:110px"></div>
-                        <div class="workspace-skeleton" style="height:110px"></div>
+                        <div class="workspace-skeleton ej-skeleton-stat"></div>
+                        <div class="workspace-skeleton ej-skeleton-stat"></div>
+                        <div class="workspace-skeleton ej-skeleton-stat"></div>
+                        <div class="workspace-skeleton ej-skeleton-stat"></div>
                     </div>
-                    <div class="workspace-skeleton" style="height:260px;margin-top:16px"></div>
+                    <div class="workspace-skeleton ej-skeleton-table"></div>
                     <p class="visually-hidden" role="status">Loading your job postings…</p>
                 </section>
             }
@@ -150,7 +153,7 @@
 
                 @if (showForm)
                 {
-                    <section class="workspace-card" aria-label="@(editingId is null ? "Post a new job" : "Edit job")">
+                    <section class="workspace-card ej-form" aria-label="@(editingId is null ? "Post a new job" : "Edit job")">
                         <div class="workspace-section-head">
                             <div>
                                 <h2>@(editingId is null ? "Post a new job" : $"Edit job #{editingId}")</h2>

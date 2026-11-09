@@ -1,13 +1,15 @@
-/* Candidate job alerts page. Shared primitives live in Workspace.css. */
+/* Candidate job alerts — calm list with a clear unread state. */
 
 .ja-page {
-    width: min(1040px, calc(100% - 40px));
-    margin: 28px auto 64px;
+    width: 100%;
+    margin: 0;
 }
 
-.ja-card { padding: 20px; }
+.ja-card { min-width: 0; }
 
 .ja-list {
+    display: grid;
+    gap: 10px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -18,38 +20,53 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 18px;
-    padding: 16px 0;
-    border-top: 1px solid var(--hj-border);
+    padding: 16px 18px;
+    border: 1px solid var(--hj-border);
+    border-radius: 12px;
+    background: var(--hj-surface);
+    transition: border-color var(--hj-transition), box-shadow var(--hj-transition), background var(--hj-transition);
 }
 
-.ja-alert:first-child { padding-top: 2px; border-top: 0; }
-.ja-alert:last-child { padding-bottom: 0; }
+.ja-alert:hover {
+    border-color: var(--hj-border-strong);
+    box-shadow: var(--hj-shadow-sm);
+}
+
+.ja-alert.is-unread {
+    border-color: var(--hj-primary-light);
+    background: var(--hj-surface-tint);
+    box-shadow: inset 3px 0 0 var(--hj-accent);
+}
 
 .ja-alert-main { min-width: 0; }
 
 .ja-alert h3 {
     margin: 0;
     color: var(--hj-ink);
-    font-size: 15px;
+    font-size: 15.5px;
+    font-weight: 650;
+    letter-spacing: -.01em;
     line-height: 1.4;
 }
 
 .ja-alert.is-unread h3::before {
-    content: "";
     display: inline-block;
     width: 7px;
     height: 7px;
     margin-right: 8px;
     border-radius: 50%;
-    background: var(--hj-accent-text);
+    background: var(--hj-accent);
+    content: "";
     vertical-align: middle;
 }
 
 .ja-alert p {
+    max-width: 68ch;
     margin: 5px 0 0;
     color: var(--hj-muted);
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
 }
 
 .ja-alert-meta {
@@ -57,52 +74,30 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px 14px;
-    margin-top: 9px;
+    margin-top: 10px;
     color: var(--hj-muted);
-    font-size: 12px;
+    font-family: var(--hj-font-mono);
+    font-size: 9.5px;
+    letter-spacing: .03em;
 }
 
-.ja-alert-actions { flex: 0 0 auto; }
+.ja-alert-meta time { text-transform: uppercase; }
 
-.ja-upsell {
-    display: flex;
-    align-items: flex-start;
-    gap: 18px;
-    padding: 24px;
+.ja-alert-actions {
+    flex: 0 0 auto;
+    align-self: center;
 }
 
-.ja-upsell-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 46px;
-    height: 46px;
-    flex: 0 0 46px;
-    border-radius: 14px;
-    background: var(--hj-surface-tint);
-    color: var(--hj-accent-text);
-}
+@media (max-width: 760px) {
+    .ja-alert {
+        flex-direction: column;
+        gap: 12px;
+        padding: 15px;
+    }
 
-.ja-upsell-icon svg { width: 22px; height: 22px; }
-
-.ja-upsell h2 { margin: 0 0 6px; }
-
-.ja-upsell p {
-    margin: 0;
-    max-width: 640px;
-    color: var(--hj-muted);
-    font-size: 13px;
-    line-height: 1.6;
-}
-
-.ja-upsell-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 16px;
-}
-
-@media (max-width: 720px) {
-    .ja-alert { flex-direction: column; }
-    .ja-upsell { flex-direction: column; }
+    .ja-alert-actions {
+        align-self: flex-start;
+        width: 100%;
+        text-align: center;
+    }
 }
