@@ -83,16 +83,39 @@
         requestAnimationFrame(tick);
     }
 
+    function variantFor(element) {
+        if (element.matches('h1, h2')) return 'mask';
+
+        if (element.matches('.job-detail-side > *')) return 'edge-right';
+
+        if (element.matches('.shortcut-card, .job-card, .company-card, .workspace-card, .workspace-stat, .review-card, .premium-plan-card, .job-detail-apply, .job-detail-auth')) {
+            return 'scale';
+        }
+
+        if (element.closest('.benefits-inner, .login-benefits-inner')) return 'edge-right';
+        if (element.closest('.form-inner, .login-form-inner')) return 'edge-left';
+
+        if (element.matches('.home-panel')) {
+            const siblings = Array.from(element.parentElement?.children ?? []);
+            return siblings.indexOf(element) % 2 === 0 ? 'edge-left' : 'edge-right';
+        }
+
+        return '';
+    }
+
     function markReveal(element, index) {
         if (element.dataset.revealReady === 'true') return;
         element.dataset.revealReady = 'true';
+
+        const variant = variantFor(element);
         element.classList.add('reveal');
+        if (variant) element.classList.add(`reveal-${variant}`);
 
         const parent = element.parentElement?.closest(staggerContainers);
         if (parent) {
             const siblings = Array.from(parent.children).filter((child) => child.classList.contains('reveal'));
             const order = Math.max(0, siblings.indexOf(element));
-            element.style.setProperty('--reveal-delay', `${Math.min(order, 5) * 70}ms`);
+            element.style.setProperty('--reveal-delay', `${Math.min(order, 4) * 45}ms`);
         }
 
         if (observer) {

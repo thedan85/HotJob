@@ -120,7 +120,7 @@
                 var visible = VisibleApplications.ToList();
 
                 <div class="ma-layout">
-                    <section class="workspace-card ma-apps" aria-label="My applications">
+                    <section class="ma-apps" aria-label="My applications">
                         <div class="workspace-section-head">
                             <div>
                                 <h2>Applications</h2>
@@ -170,50 +170,55 @@
                                         </span>
                                     </div>
 
-                                    @if (InProgressStatuses.Contains(application.Status))
+                                    @if (application.History.Count > 0 || InProgressStatuses.Contains(application.Status))
                                     {
-                                        <div class="ma-app-actions">
-                                            @if (withdrawConfirmId == application.ApplicationId)
+                                        <div class="ma-app-footer">
+                                            @if (application.History.Count > 0)
                                             {
-                                                <span class="ma-withdraw-copy">Withdraw this application? This cannot be undone.</span>
-                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
-                                                        disabled="@(withdrawingId == application.ApplicationId)"
-                                                        @onclick="() => WithdrawAsync(application.ApplicationId)">
-                                                    @(withdrawingId == application.ApplicationId ? "Withdrawing…" : "Confirm withdraw")
-                                                </button>
-                                                <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
-                                                        disabled="@(withdrawingId == application.ApplicationId)"
-                                                        @onclick="() => { withdrawConfirmId = null; }">
-                                                    Cancel
-                                                </button>
+                                                <details class="workspace-details ma-history">
+                                                    <summary>Status history (@application.History.Count update@(application.History.Count == 1 ? string.Empty : "s"))</summary>
+                                                    <div class="workspace-details-body">
+                                                        <ol class="ma-timeline">
+                                                            @foreach (var entry in application.History.OrderByDescending(h => h.ChangedAt))
+                                                            {
+                                                                <li>
+                                                                    <strong>@entry.Status</strong>
+                                                                    <span>@(string.IsNullOrWhiteSpace(entry.Notes) ? "No note added." : entry.Notes)</span>
+                                                                    <small>@entry.ChangedAt.ToString("dd MMM yyyy, HH:mm")</small>
+                                                                </li>
+                                                            }
+                                                        </ol>
+                                                    </div>
+                                                </details>
                                             }
-                                            else
+
+                                            @if (InProgressStatuses.Contains(application.Status))
                                             {
-                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
-                                                        @onclick="() => { withdrawConfirmId = application.ApplicationId; }">
-                                                    Withdraw application
-                                                </button>
+                                                <div class="ma-app-actions">
+                                                    @if (withdrawConfirmId == application.ApplicationId)
+                                                    {
+                                                        <span class="ma-withdraw-copy">Withdraw this application? This cannot be undone.</span>
+                                                        <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                                disabled="@(withdrawingId == application.ApplicationId)"
+                                                                @onclick="() => WithdrawAsync(application.ApplicationId)">
+                                                            @(withdrawingId == application.ApplicationId ? "Withdrawing…" : "Confirm withdraw")
+                                                        </button>
+                                                        <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
+                                                                disabled="@(withdrawingId == application.ApplicationId)"
+                                                                @onclick="() => { withdrawConfirmId = null; }">
+                                                            Cancel
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button class="workspace-btn workspace-btn-secondary workspace-btn-small ma-withdraw-trigger" type="button"
+                                                                @onclick="() => { withdrawConfirmId = application.ApplicationId; }">
+                                                            Withdraw application
+                                                        </button>
+                                                    }
+                                                </div>
                                             }
                                         </div>
-                                    }
-
-                                    @if (application.History.Count > 0)
-                                    {
-                                        <details class="workspace-details ma-history">
-                                            <summary>Status history (@application.History.Count update@(application.History.Count == 1 ? string.Empty : "s"))</summary>
-                                            <div class="workspace-details-body">
-                                                <ol class="ma-timeline">
-                                                    @foreach (var entry in application.History.OrderByDescending(h => h.ChangedAt))
-                                                    {
-                                                        <li>
-                                                            <strong>@entry.Status</strong>
-                                                            <span>@(string.IsNullOrWhiteSpace(entry.Notes) ? "No note added." : entry.Notes)</span>
-                                                            <small>@entry.ChangedAt.ToString("dd MMM yyyy, HH:mm")</small>
-                                                        </li>
-                                                    }
-                                                </ol>
-                                            </div>
-                                        </details>
                                     }
                                 </article>
                             }
