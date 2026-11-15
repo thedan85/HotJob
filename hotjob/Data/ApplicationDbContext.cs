@@ -70,6 +70,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<JobPosting>().HasOne(x => x.Company).WithMany(x => x.JobPostings).HasForeignKey(x => x.CompanyProfileId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<JobPosting>().HasOne(x => x.CreatedBy).WithMany(x => x.CreatedJobs).HasForeignKey(x => x.CreatedByEmployerId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<JobPosting>().HasOne(x => x.ReviewedBy).WithMany().HasForeignKey(x => x.ReviewedByAdminId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<JobPosting>().Property(x => x.SalaryMin).HasPrecision(18, 2);
         modelBuilder.Entity<JobPosting>().Property(x => x.SalaryMax).HasPrecision(18, 2);
 
@@ -94,6 +95,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<Review>().HasOne(x => x.Company).WithMany(x => x.Reviews).HasForeignKey(x => x.CompanyProfileId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Review>().HasOne(x => x.Candidate).WithMany(x => x.Reviews).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Review>().HasOne(x => x.DeletedBy).WithMany().HasForeignKey(x => x.DeletedByAdminId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<Review>().HasIndex(x => new { x.CompanyProfileId, x.CandidateId }).IsUnique();
 
         modelBuilder.Entity<SavedJob>().HasKey(x => new { x.CandidateId, x.JobPostingId });

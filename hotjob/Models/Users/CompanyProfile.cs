@@ -59,6 +59,16 @@ public class CompanyProfile
     /// <summary>Admin who verified this company. Null until reviewed.</summary>
     public ApplicationUser? VerifiedBy { get; set; }
 
+    /// <summary>Soft delete flag. Deactivated companies cannot post or manage jobs.</summary>
+    public bool IsActive { get; set; } = true;
+
+    /// <summary>When this company was deactivated by admin.</summary>
+    public DateTime? DeactivatedAt { get; set; }
+
+    /// <summary>Admin who deactivated this company.</summary>
+    [MaxLength(255)]
+    public string? DeactivatedByAdminId { get; set; }
+
     /// <summary>Employer members of the company.</summary>
     public ICollection<Employer> Employers { get; set; } = new List<Employer>();
 

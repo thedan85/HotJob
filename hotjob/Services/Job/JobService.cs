@@ -47,6 +47,11 @@ public sealed class JobService(
             return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.Validation, errors);
         }
 
+        var requestedStatus = request.Status ?? JobStatus.Draft;
+
+        // Automatically convert Published to PendingApproval when creating
+        var actualStatus = requestedStatus == JobStatus.Published ? JobStatus.PendingApproval : requestedStatus;
+
         var job = new JobPosting
         {
             CompanyProfileId = employer.CompanyProfileId,
@@ -58,7 +63,8 @@ public sealed class JobService(
             ExperienceRequired = request.ExperienceRequired,
             JobType = request.JobType,
             ExpiryDate = request.ExpiryDate,
-            Status = request.Status ?? JobStatus.Draft,
+            Status = actualStatus,
+            SubmittedForApprovalAt = actualStatus == JobStatus.PendingApproval ? DateTime.UtcNow : null,
             JobSkills = request.Skills
                 .Select(skill => new JobSkill { SkillId = skill.SkillId, ImportanceWeight = skill.ImportanceWeight })
                 .ToList(),
@@ -69,7 +75,7 @@ public sealed class JobService(
 
         await jobRepository.AddAsync(job, cancellationToken);
         await jobRepository.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Employer {EmployerId} created job {JobId}.", employer.Id, job.Id);
+        logger.LogInformation("Employer {EmployerId} created job {JobId} with status {Status}.", employer.Id, job.Id, actualStatus);
 
         return await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
     }
@@ -104,6 +110,13 @@ public sealed class JobService(
             return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.NotFound, "Job not found.");
         }
 
+        // Validate status transition
+        var requestedStatus = request.Status ?? job.Status;
+        if (requestedStatus == JobStatus.Published && job.Status != JobStatus.Approved)
+        {
+            return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.Validation, "Job must be approved before it can be published.");
+        }
+
         job.Title = request.Title.Trim();
         job.Description = request.Description.Trim();
         job.SalaryMin = request.SalaryMin;
@@ -111,7 +124,7 @@ public sealed class JobService(
         job.ExperienceRequired = request.ExperienceRequired;
         job.JobType = request.JobType;
         job.ExpiryDate = request.ExpiryDate;
-        job.Status = request.Status ?? job.Status;
+        job.Status = requestedStatus;
 
         ReplaceSkills(job, request.Skills);
         ReplaceCategories(job, request.CategoryIds);
@@ -506,7 +519,10 @@ public sealed class JobService(
             job.CategoryMappings.Select(mapping => new JobCategoryDto(mapping.JobCategoryId, mapping.Category?.Name ?? string.Empty)).ToList(),
             applicationsCount,
             job.CreatedAt,
-            job.Company?.Location);
+            job.Company?.Location,
+            job.SubmittedForApprovalAt,
+            job.ReviewedAt,
+            job.RejectionReason);
 
     private static PublicJobListItemResponse ToPublicListItem(JobPosting job) =>
         new(
