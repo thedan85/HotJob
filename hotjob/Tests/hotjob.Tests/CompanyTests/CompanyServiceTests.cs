@@ -14,7 +14,8 @@ namespace hotjob.Tests;
 public sealed class CompanyServiceTests
 {
     private static Services.Company.CompanyService CreateService(TestFixture fx) =>
-        new(new CompanyRepository(fx.Db), NullLogger<Services.Company.CompanyService>.Instance);
+        new(new CompanyRepository(fx.Db), fx.Db, TimeProvider.System,
+            NullLogger<Services.Company.CompanyService>.Instance);
 
     private static async Task<Candidate> SeedCandidateAsync(TestFixture fx, string email, string name)
     {

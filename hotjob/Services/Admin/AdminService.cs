@@ -207,6 +207,28 @@ public sealed class AdminService(
         return ServiceResult<bool>.Ok(true);
     }
 
+    public async Task<ServiceResult<IReadOnlyList<AdminTrainingLogDto>>> GetTrainingLogsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var logs = await dbContext.ModelTrainingLogs
+            .AsNoTracking()
+            .Include(log => log.TrainedBy)
+            .OrderByDescending(log => log.TrainedAt)
+            .ThenByDescending(log => log.Id)
+            .Select(log => new AdminTrainingLogDto(
+                log.Id,
+                log.RecordCount,
+                log.AccuracyScore,
+                log.ModelFilePath,
+                log.TrainedBy != null ? log.TrainedBy.Email : null,
+                log.TrainedAt,
+                log.IsActive))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<IReadOnlyList<AdminTrainingLogDto>>.Ok(logs);
+    }
+
     public async Task<ServiceResult<PagedResponse<AdminSkillDto>>> GetSkillsAsync(
         string? search,
         string? category,

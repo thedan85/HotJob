@@ -1,0 +1,309 @@
+@page "/recommended-jobs"
+@implements IDisposable
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Candidate
+@using hotjob.DTOs.Job
+@using hotjob.Models.Job
+@using hotjob.Services.Candidate
+@using hotjob.Services.Job
+@using hotjob.Services.Common
+@inject IResumeService ResumeService
+@inject IJobService JobService
+@inject CircuitDbGate CircuitDbGate
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject IJSRuntime JS
+
+<PageTitle>Recommended jobs | HotJob</PageTitle>
+
+<AuthorizeView Roles="Candidate">
+    <Authorized>
+        <div class="workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Candidate workspace</p>
+                    <h1>Recommended for you</h1>
+                    <p class="workspace-lede">Published roles ranked by how well your resume skills cover what each job asks for.</p>
+                </div>
+                <div class="workspace-actions">
+                    <a class="workspace-btn workspace-btn-primary" href="/it-jobs">Browse all jobs</a>
+                </div>
+            </section>
+
+            @if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="workspace-alert" role="alert">@loadError</div>
+            }
+            else if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading recommended jobs">
+                    <p class="workspace-sub" role="status">Scoring your resume against open roles…</p>
+                </section>
+            }
+            else if (resumes.Count == 0)
+            {
+                <section class="workspace-card">
+                    <h2>Create a resume first</h2>
+                    <p class="workspace-sub">Recommendations are based on the skills on your resume. Build one to see your match percentages here.</p>
+                    <a class="workspace-btn workspace-btn-primary" href="/profile#cv-management">Create your first resume</a>
+                </section>
+            }
+            else if (paged is null || paged.Items.Count == 0)
+            {
+                <section class="workspace-card">
+                    <h2>No matches yet</h2>
+                    <p class="workspace-sub">No published job lists a skill from this resume. Add more skills or browse every open role.</p>
+                    <a class="workspace-btn workspace-btn-primary" href="/it-jobs">Browse all jobs</a>
+                </section>
+            }
+            else
+            {
+                <section class="workspace-card" aria-label="Recommended jobs">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2>@SelectedResumeTitle</h2>
+                            <p class="workspace-sub">@paged.TotalCount matching job@(paged.TotalCount == 1 ? string.Empty : "s") · best overlap first</p>
+                        </div>
+                        @if (resumes.Count > 1)
+                        {
+                            <div class="workspace-toolbar-actions">
+                                <label class="workspace-field">
+                                    <span>Resume</span>
+                                    <select value="@selectedResumeId" @onchange="ChangeResumeAsync">
+                                        @foreach (var resume in resumes)
+                                        {
+                                            <option value="@resume.Id" selected="@(resume.Id == selectedResumeId)">
+                                                @resume.Title@(resume.IsPrimary ? " (primary)" : string.Empty)
+                                            </option>
+                                        }
+                                    </select>
+                                </label>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="jobs-list">
+                        @foreach (var job in paged.Items)
+                        {
+                            <a class="job-card" href="@($"/jobs/{job.Id}")">
+                                <div class="job-logo" aria-hidden="true">@CompanyInitial(job.CompanyName)</div>
+                                <div class="job-main">
+                                    <h3>@job.Title</h3>
+                                    <p class="job-company">@job.CompanyName@(string.IsNullOrWhiteSpace(job.Location) ? string.Empty : $" · {job.Location}")</p>
+                                    @if (job.MatchedSkills.Count > 0)
+                                    {
+                                        <div class="job-tags">
+                                            @foreach (var skill in job.MatchedSkills.Take(5))
+                                            {
+                                                <span class="job-tag">@skill.SkillName</span>
+                                            }
+                                        </div>
+                                    }
+                                    <p class="job-meta">
+                                        <span>@job.JobType</span>
+                                        <span> · Posted @job.CreatedAt.ToString("MMM dd, yyyy")</span>
+                                        @if (job.ExpiryDate.HasValue)
+                                        {
+                                            <span> · Expires @job.ExpiryDate.Value.ToString("MMM dd, yyyy")</span>
+                                        }
+                                    </p>
+                                </div>
+                                <div class="job-side">
+                                    <span class="match-badge @MatchBadgeClass(job.MatchPercentage)" title="Match against this resume">
+                                        @(job.MatchPercentage.HasValue ? $"{job.MatchPercentage.Value:0}% match" : $"{job.MatchedSkillCount} skill{(job.MatchedSkillCount == 1 ? string.Empty : "s")}")
+                                    </span>
+                                    <span class="job-salary">@FormatSalary(job.SalaryMin, job.SalaryMax)</span>
+                                </div>
+                            </a>
+                        }
+                    </div>
+
+                    @if (paged.TotalPages > 1)
+                    {
+                        <nav class="jobs-pager" aria-label="Recommended jobs pages">
+                            @if (paged.Page > 1)
+                            {
+                                <button type="button" class="page-btn" @onclick="() => ChangePageAsync(paged.Page - 1)">← Prev</button>
+                            }
+                            <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount matches</span>
+                            @if (paged.Page < paged.TotalPages)
+                            {
+                                <button type="button" class="page-btn" @onclick="() => ChangePageAsync(paged.Page + 1)">Next →</button>
+                            }
+                        </nav>
+                    }
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private const int PageSize = 10;
+
+    private List<ResumeListItemDto> resumes = [];
+    private int selectedResumeId;
+    private PagedResponse<SkillMatchJobListItemDto>? paged;
+    private bool isLoading = true;
+    private bool hasLoaded;
+    private string? loadError;
+    private int page = 1;
+
+    private string SelectedResumeTitle =>
+        resumes.FirstOrDefault(resume => resume.Id == selectedResumeId)?.Title ?? "Recommended jobs";
+
+    protected override void OnInitialized()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true && state.User.IsInRole("Candidate"))
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Restore the circuit session so the page sees the signed-in candidate.
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
+            if (result.Ok && result.Data is not null)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // JS interop unavailable during prerender — auth restore retries on the interactive pass.
+        }
+
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
+    private async Task<bool> IsCandidateAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.Identity?.IsAuthenticated == true && state.User.IsInRole("Candidate");
+    }
+
+    private async Task LoadAsync(bool force = false)
+    {
+        if (hasLoaded && !force)
+        {
+            return;
+        }
+
+        if (!await IsCandidateAsync())
+        {
+            return;
+        }
+
+        hasLoaded = true;
+        isLoading = true;
+        loadError = null;
+        var userId = await GetUserIdAsync();
+
+        if (resumes.Count == 0)
+        {
+            var resumeResult = await CircuitDbGate.RunAsync(() => ResumeService.ListAsync(userId));
+            if (resumeResult.Success && resumeResult.Data is not null)
+            {
+                resumes = resumeResult.Data.ToList();
+                selectedResumeId = resumes.FirstOrDefault(resume => resume.IsPrimary)?.Id
+                    ?? resumes.FirstOrDefault()?.Id
+                    ?? 0;
+            }
+            else
+            {
+                loadError = resumeResult.Errors.FirstOrDefault() ?? "We could not load your resumes.";
+                isLoading = false;
+                return;
+            }
+        }
+
+        if (selectedResumeId > 0)
+        {
+            var result = await CircuitDbGate.RunAsync(
+                () => JobService.GetJobsMatchingResumeAsync(
+                    userId, selectedResumeId, null, null, 1, page, PageSize));
+            if (result.Success && result.Data is not null)
+            {
+                paged = result.Data;
+            }
+            else
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "We could not load your matches.";
+            }
+        }
+
+        isLoading = false;
+    }
+
+    private async Task ChangeResumeAsync(ChangeEventArgs eventArgs)
+    {
+        if (int.TryParse(eventArgs.Value?.ToString(), out var resumeId))
+        {
+            selectedResumeId = resumeId;
+            page = 1;
+            await LoadAsync(force: true);
+        }
+    }
+
+    private async Task ChangePageAsync(int next)
+    {
+        if (next < 1)
+        {
+            return;
+        }
+
+        page = next;
+        await LoadAsync(force: true);
+    }
+
+    private static string CompanyInitial(string companyName) =>
+        string.IsNullOrWhiteSpace(companyName) ? "?" : companyName.Trim().Substring(0, 1).ToUpperInvariant();
+
+    private static string MatchBadgeClass(double? percentage) => percentage switch
+    {
+        >= 70 => "is-high",
+        >= 45 => "is-mid",
+        _ => "is-low"
+    };
+
+    private static string FormatSalary(decimal? min, decimal? max)
+    {
+        if (min.HasValue && max.HasValue)
+        {
+            return $"${min.Value:N0} – ${max.Value:N0}";
+        }
+
+        return min.HasValue ? $"From ${min.Value:N0}" : max.HasValue ? $"Up to ${max.Value:N0}" : "Negotiable";
+    }
+}

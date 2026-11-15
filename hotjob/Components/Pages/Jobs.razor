@@ -1,9 +1,16 @@
 @page "/it-jobs"
+@implements IDisposable
+@using System.Security.Claims
 @using hotjob.DTOs.Job
 @using hotjob.Models.Job
 @using hotjob.Services.Job
+@using hotjob.Services.ML
+@using hotjob.Services.Common
 @inject IJobService JobService
+@inject IMatchScoreService MatchScoreService
+@inject CircuitDbGate CircuitDbGate
 @inject HotJobAuthStateProvider AuthStateProvider
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JS
 @rendermode InteractiveServer
 
@@ -12,7 +19,7 @@
 <section class="jobs-hero" aria-labelledby="jobs-title">
     <p class="eyebrow">Published roles, updated daily</p>
     <h1 id="jobs-title">Explore jobs</h1>
-    <p class="jobs-lede">Search by keyword, city, skill, or company. Only published roles that have not expired are listed.</p>
+    <p class="jobs-lede">Search by keyword, city, skill, category, or salary. Only published roles that have not expired are listed.</p>
 
     <form class="jobs-search" method="get" action="/it-jobs">
         <label class="jobs-field">
@@ -43,6 +50,35 @@
                     }
                 }
             </select>
+        </label>
+        <label class="jobs-field">
+            <span>Category</span>
+            <select name="categoryId">
+                <option value="">All categories</option>
+                @foreach (var category in categories)
+                {
+                    @if (CategoryId == category.Id)
+                    {
+                        <option value="@category.Id" selected>@category.Name</option>
+                    }
+                    else
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                }
+            </select>
+        </label>
+        <label class="jobs-field jobs-field-salary">
+            <span>Salary from</span>
+            <input type="number" name="salaryMin" min="0" step="100" inputmode="numeric"
+                   value="@(SalaryMin.HasValue ? SalaryMin.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty)"
+                   placeholder="e.g. 1000" />
+        </label>
+        <label class="jobs-field jobs-field-salary">
+            <span>Salary to</span>
+            <input type="number" name="salaryMax" min="0" step="100" inputmode="numeric"
+                   value="@(SalaryMax.HasValue ? SalaryMax.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty)"
+                   placeholder="e.g. 5000" />
         </label>
         <button type="submit" class="jobs-search-button">Search</button>
     </form>
@@ -115,6 +151,10 @@
                         </p>
                     </div>
                     <div class="job-side">
+                        @if (matchScores.TryGetValue(job.Id, out var match))
+                        {
+                            <span class="match-badge @MatchBadgeClass(match)" title="Match against your primary resume">@match.ToString("0")% match</span>
+                        }
                         <AuthorizeView>
                             <Authorized><span class="job-salary">@FormatSalary(job.SalaryMin, job.SalaryMax)</span></Authorized>
                             <NotAuthorized><span class="job-salary job-salary-locked">Log in to view salary</span></NotAuthorized>
@@ -169,12 +209,47 @@
     [SupplyParameterFromQuery(Name = "jobType")]
     public string? JobTypeFilter { get; set; }
 
+    [SupplyParameterFromQuery(Name = "categoryId")]
+    public int? CategoryId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "salaryMin")]
+    public decimal? SalaryMin { get; set; }
+
+    [SupplyParameterFromQuery(Name = "salaryMax")]
+    public decimal? SalaryMax { get; set; }
+
     [SupplyParameterFromQuery(Name = "page")]
     public int Page { get; set; } = 1;
 
     private PagedResponse<PublicJobListItemResponse>? paged;
+    private IReadOnlyList<JobCategoryDto> categories = [];
+    private IReadOnlyDictionary<int, double> matchScores = new Dictionary<int, double>();
+    private bool matchScoresLoaded;
     private bool isLoading = true;
     private string? loadError;
+
+    protected override void OnInitialized()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true && state.User.IsInRole("Candidate"))
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadMatchScoresAsync();
+                StateHasChanged();
+            });
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -193,6 +268,7 @@
         {
             // JS interop unavailable during prerender — guests keep seeing the login prompt.
         }
+
     }
 
     protected override async Task OnParametersSetAsync()
@@ -200,6 +276,8 @@
         isLoading = true;
         loadError = null;
         paged = null;
+        matchScores = new Dictionary<int, double>();
+        matchScoresLoaded = false;
 
         Enum.TryParse<JobType>(JobTypeFilter, ignoreCase: true, out var parsedJobType);
         var hasJobType = !string.IsNullOrWhiteSpace(JobTypeFilter) && Enum.IsDefined(typeof(JobType), parsedJobType)
@@ -211,20 +289,63 @@
             NullIfWhiteSpace(Skill),
             CompanyId is > 0 ? CompanyId : null,
             hasJobType ? parsedJobType : null,
+            CategoryId is > 0 ? CategoryId : null,
+            SalaryMin,
+            SalaryMax,
             Page <= 0 ? 1 : Page,
             PageSize);
 
         if (result.Success && result.Data is not null)
         {
             paged = result.Data;
+            await LoadMatchScoresAsync();
         }
         else
         {
             loadError = result.Errors.FirstOrDefault() ?? "We could not load jobs right now.";
         }
 
+        var categoryResult = await JobService.GetCategoriesAsync();
+        if (categoryResult.Success && categoryResult.Data is not null)
+        {
+            categories = categoryResult.Data;
+        }
+
         isLoading = false;
     }
+
+    private async Task LoadMatchScoresAsync()
+    {
+        if (paged is null || paged.Items.Count == 0 || matchScoresLoaded)
+        {
+            return;
+        }
+
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
+        {
+            return;
+        }
+
+        var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? state.User.FindFirstValue("sub");
+        var jobIds = paged.Items.Select(item => item.Id).ToList();
+        var result = await CircuitDbGate.RunAsync(
+            () => MatchScoreService.GetStoredForJobsAsync(userId, jobIds));
+        if (result.Success && result.Data is not null)
+        {
+            matchScores = result.Data;
+        }
+
+        matchScoresLoaded = true;
+    }
+
+    private static string MatchBadgeClass(double percentage) => percentage switch
+    {
+        >= 70 => "is-high",
+        >= 45 => "is-mid",
+        _ => "is-low"
+    };
 
     private string PageUrl(int page)
     {
@@ -234,6 +355,9 @@
         AddQuery(parts, "skill", Skill);
         if (CompanyId is > 0) parts.Add($"companyId={CompanyId}");
         AddQuery(parts, "jobType", JobTypeFilter);
+        if (CategoryId is > 0) parts.Add($"categoryId={CategoryId}");
+        AddNumber(parts, "salaryMin", SalaryMin);
+        AddNumber(parts, "salaryMax", SalaryMax);
         if (page > 1)
         {
             parts.Add($"page={page}");
@@ -247,6 +371,14 @@
         if (!string.IsNullOrWhiteSpace(value))
         {
             parts.Add($"{name}={Uri.EscapeDataString(value.Trim())}");
+        }
+    }
+
+    private static void AddNumber(List<string> parts, string name, decimal? value)
+    {
+        if (value.HasValue)
+        {
+            parts.Add($"{name}={value.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
         }
     }
 

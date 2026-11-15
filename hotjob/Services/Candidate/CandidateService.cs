@@ -35,6 +35,7 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
             .Include(application => application.JobPosting).ThenInclude(job => job.Company)
             .Include(application => application.Resume)
             .Include(application => application.StatusHistory)
+            .Include(application => application.Interviews)
             .OrderByDescending(application => application.AppliedAt)
             .ThenByDescending(application => application.Id)
             .ToListAsync(cancellationToken);
@@ -51,6 +52,17 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
                     .OrderBy(history => history.ChangedAt)
                     .Select(history => new HistoryDto(
                         history.Id, history.Status, history.ChangedByUserId, history.Notes, history.ChangedAt))
+                    .ToArray(),
+                application.Interviews
+                    .OrderBy(interview => interview.InterviewDate)
+                    .Select(interview => new InterviewDto(
+                        interview.Id,
+                        interview.ApplicationId,
+                        interview.InterviewDate,
+                        interview.LocationOrLink,
+                        interview.InterviewType,
+                        interview.Notes,
+                        interview.Status))
                     .ToArray()))
             .ToArray());
     }
@@ -97,6 +109,24 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
         }
 
         return ServiceResult<MyNotificationDto>.Ok(ToDto(notification));
+    }
+
+    public async Task<ServiceResult<int>> MarkAllNotificationsReadAsync(
+        string? userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return ServiceResult<int>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
+
+        var updated = await dbContext.Notifications
+            .Where(notification => notification.UserId == userId
+                && !notification.IsRead
+                && (notification.Kind == null || notification.Kind != NotificationKinds.JobAlert))
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(notification => notification.IsRead, true),
+                cancellationToken);
+
+        return ServiceResult<int>.Ok(updated);
     }
 
     private static MyNotificationDto ToDto(Notification notification) =>

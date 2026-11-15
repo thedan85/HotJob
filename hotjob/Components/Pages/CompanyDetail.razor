@@ -106,6 +106,7 @@ else
                 {
                     <span class="company-detail-rating">@reviews.TotalCount review@(reviews.TotalCount == 1 ? string.Empty : "s")</span>
                 }
+                <a class="company-detail-back" href="/companies/@Id/review">Write a review</a>
             </div>
 
             @if (reviews is null)

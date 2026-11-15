@@ -136,11 +136,33 @@ public sealed class JobSearchControllerTests
 
         public Task<ServiceResult<PagedResponse<PublicJobListItemResponse>>> BrowsePublishedAsync(
             string? keyword, string? city, string? skill, int? companyId,
-            JobType? jobType, int page, int pageSize, CancellationToken cancellationToken = default) =>
+            JobType? jobType, int? categoryId, decimal? salaryMin, decimal? salaryMax,
+            int page, int pageSize, CancellationToken cancellationToken = default) =>
             Task.FromResult(ServiceResult<PagedResponse<PublicJobListItemResponse>>.Fail(ServiceErrorType.NotFound));
+
+        public Task<ServiceResult<IReadOnlyList<JobCategoryDto>>> GetCategoriesAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ServiceResult<IReadOnlyList<JobCategoryDto>>.Ok(
+                (IReadOnlyList<JobCategoryDto>)new List<JobCategoryDto>()));
 
         public Task<ServiceResult<JobDetailResponse>> GetPublishedAsync(
             int id, CancellationToken cancellationToken = default) =>
             Task.FromResult(ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.NotFound));
+
+        public Task<ServiceResult<PagedResponse<SavedJobDto>>> GetSavedJobsAsync(
+            string? userId, int page, int pageSize, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ServiceResult<PagedResponse<SavedJobDto>>.Fail(ServiceErrorType.NotFound));
+
+        public Task<ServiceResult<bool>> IsSavedAsync(
+            string? userId, int jobId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ServiceResult<bool>.Ok(false));
+
+        public Task<ServiceResult<bool>> SaveJobAsync(
+            string? userId, int jobId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ServiceResult<bool>.Fail(ServiceErrorType.NotFound));
+
+        public Task<ServiceResult<bool>> UnsaveJobAsync(
+            string? userId, int jobId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ServiceResult<bool>.Fail(ServiceErrorType.NotFound));
     }
 }

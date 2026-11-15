@@ -1,0 +1,166 @@
+@page "/admin/model"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Admin
+@using hotjob.Services.Admin
+@using hotjob.Services.ML
+@inject IAdminService AdminService
+@inject IMatchScoreService MatchScoreService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>ML model | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Match score model</h1>
+                    <p class="workspace-lede">Training runs and the model currently used to score resumes against jobs.</p>
+                </div>
+                <div class="workspace-actions">
+                    <button class="workspace-btn workspace-btn-primary" type="button"
+                            @onclick="RetrainAsync" disabled="@isTraining">
+                        @(isTraining ? "Training…" : "Retrain model")
+                    </button>
+                </div>
+            </section>
+
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="workspace-notice" role="status" aria-live="polite">@message</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+
+            <section class="workspace-card" aria-labelledby="training-log-heading">
+                <div class="workspace-section-head">
+                    <div>
+                        <h2 id="training-log-heading">Training history</h2>
+                        <p class="workspace-sub">@logs.Count run@(logs.Count == 1 ? string.Empty : "s")</p>
+                    </div>
+                </div>
+
+                @if (isLoading)
+                {
+                    <p class="workspace-sub" role="status">Loading training runs…</p>
+                }
+                else if (logs.Count == 0)
+                {
+                    <p class="workspace-sub">No training runs yet. Retrain after enough applications reach Offered, Rejected or Withdrawn.</p>
+                }
+                else
+                {
+                    <div style="overflow-x:auto">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Trained at</th>
+                                    <th>Records</th>
+                                    <th>Accuracy</th>
+                                    <th>Active</th>
+                                    <th>Trained by</th>
+                                    <th>Model file</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var log in logs)
+                                {
+                                    <tr>
+                                        <td>@log.TrainedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                        <td>@log.RecordCount</td>
+                                        <td>@(log.AccuracyScore.ToString("P1"))</td>
+                                        <td>
+                                            <span class="workspace-badge is-@(log.IsActive ? "success" : "neutral")">
+                                                @(log.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </td>
+                                        <td>@(string.IsNullOrWhiteSpace(log.TrainedByEmail) ? "System" : log.TrainedByEmail)</td>
+                                        <td title="@log.ModelFilePath">@(string.IsNullOrWhiteSpace(log.ModelFilePath) ? "—" : System.IO.Path.GetFileName(log.ModelFilePath))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<AdminTrainingLogDto> logs = new();
+    private bool isLoading = true;
+    private bool isTraining;
+    private string? message;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var result = await AdminService.GetTrainingLogsAsync();
+            if (!result.Success)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            logs = result.Data?.ToList() ?? new List<AdminTrainingLogDto>();
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RetrainAsync()
+    {
+        message = null;
+        errorMessage = null;
+        isTraining = true;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+
+            var result = await MatchScoreService.TrainAsync(userId);
+            if (!result.Success || result.Data is null)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            var training = result.Data;
+            message = training.Trained
+                ? $"Trained on {training.RecordCount} applications with {training.Accuracy:P1} accuracy. "
+                  + (training.Promoted ? "New model is active." : "Kept the existing model (not more accurate).")
+                : training.Message;
+
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            isTraining = false;
+        }
+    }
+}

@@ -77,6 +77,9 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         string? skill,
         int? companyId,
         JobType? jobType,
+        int? categoryId,
+        decimal? salaryMin,
+        decimal? salaryMax,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default)
@@ -121,6 +124,23 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         if (jobType.HasValue)
         {
             query = query.Where(job => job.JobType == jobType.Value);
+        }
+
+        if (categoryId is > 0)
+        {
+            query = query.Where(job =>
+                job.CategoryMappings.Any(mapping => mapping.JobCategoryId == categoryId.Value));
+        }
+
+        // Open-ended jobs (missing bound) still match any range the user enters.
+        if (salaryMin.HasValue)
+        {
+            query = query.Where(job => job.SalaryMax == null || job.SalaryMax >= salaryMin.Value);
+        }
+
+        if (salaryMax.HasValue)
+        {
+            query = query.Where(job => job.SalaryMin == null || job.SalaryMin <= salaryMax.Value);
         }
 
         var total = await query.CountAsync(cancellationToken);

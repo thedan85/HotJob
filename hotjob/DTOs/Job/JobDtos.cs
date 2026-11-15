@@ -113,6 +113,19 @@ public sealed record PublicJobListItemResponse(
     IReadOnlyList<string> Skills,
     DateTime? FeaturedUntil);
 
+/// <summary>A job bookmarked by the signed-in candidate.</summary>
+public sealed record SavedJobDto(
+    int JobId,
+    string Title,
+    string CompanyName,
+    string? CompanyLocation,
+    decimal? SalaryMin,
+    decimal? SalaryMax,
+    JobType JobType,
+    DateTime? ExpiryDate,
+    JobStatus Status,
+    DateTime SavedAt);
+
 public sealed class PagedResponse<T>
 {
     public IReadOnlyList<T> Items { get; init; } = Array.Empty<T>();

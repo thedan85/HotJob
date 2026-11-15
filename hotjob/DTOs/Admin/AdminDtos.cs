@@ -46,3 +46,12 @@ public sealed record AdminJobListItemDto(
     JobStatus Status,
     DateTime CreatedAt,
     int ApplicationCount);
+
+public sealed record AdminTrainingLogDto(
+    int Id,
+    int RecordCount,
+    double AccuracyScore,
+    string? ModelFilePath,
+    string? TrainedByEmail,
+    DateTime TrainedAt,
+    bool IsActive);

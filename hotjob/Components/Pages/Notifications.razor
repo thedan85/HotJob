@@ -1,0 +1,249 @@
+@page "/notifications"
+@implements IDisposable
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Candidate
+@using hotjob.Services.Candidate
+@inject NotificationFeed NotificationFeed
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
+
+<PageTitle>Notifications | HotJob</PageTitle>
+
+<AuthorizeView Roles="Candidate">
+    <Authorized>
+        <div class="workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Candidate workspace</p>
+                    <h1>Notifications</h1>
+                    <p class="workspace-lede">Status updates and messages from employers. Job alerts live on their own page.</p>
+                </div>
+                <div class="workspace-actions">
+                    <button class="workspace-btn workspace-btn-secondary" type="button"
+                            @onclick="MarkAllReadAsync" disabled="@(isMarking || unreadCount == 0)">
+                        @(isMarking ? "Marking…" : "Mark all read")
+                    </button>
+                </div>
+            </section>
+
+            @if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="workspace-alert" role="alert">@loadError</div>
+                <div class="workspace-actions">
+                    <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="LoadAsync">Retry</button>
+                </div>
+            }
+            else if (notifications is null)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading notifications">
+                    <p class="workspace-sub" role="status">Loading notifications…</p>
+                </section>
+            }
+            else if (notifications.Count == 0)
+            {
+                <section class="workspace-card">
+                    <h2>No messages yet</h2>
+                    <p class="workspace-sub">When an employer sends you an update, it shows up here.</p>
+                    <a class="workspace-btn workspace-btn-primary" href="/my-applications">My applications</a>
+                </section>
+            }
+            else
+            {
+                @if (!string.IsNullOrWhiteSpace(actionMessage))
+                {
+                    <div class="workspace-notice" role="status" aria-live="polite">@actionMessage</div>
+                }
+
+                <section class="workspace-card" aria-label="Notification list">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2>All messages</h2>
+                            <p class="workspace-sub">@unreadCount unread of @notifications.Count</p>
+                        </div>
+                    </div>
+                    <ul class="review-list">
+                        @foreach (var note in notifications.OrderBy(n => n.IsRead).ThenByDescending(n => n.CreatedAt))
+                        {
+                            <li class="review-card notification-item @(note.IsRead ? null : "is-unread")">
+                                <div class="workspace-section-head">
+                                    <div>
+                                        <p class="notification-title">
+                                            @if (!note.IsRead)
+                                            {
+                                                <span class="notification-dot" aria-hidden="true"></span>
+                                            }
+                                            @note.Title
+                                        </p>
+                                        @if (!string.IsNullOrWhiteSpace(note.Content))
+                                        {
+                                            <p class="workspace-sub notification-content">@note.Content</p>
+                                        }
+                                        <p class="workspace-sub">@note.CreatedAt.ToString("dd MMM yyyy, HH:mm")</p>
+                                    </div>
+                                    @if (!note.IsRead)
+                                    {
+                                        <div class="workspace-toolbar-actions">
+                                            <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                                    disabled="@(markingId == note.Id)"
+                                                    @onclick="() => MarkReadAsync(note.Id)">
+                                                @(markingId == note.Id ? "Marking…" : "Mark read")
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<MyNotificationDto>? notifications;
+    private string? loadError;
+    private string? actionMessage;
+    private bool isMarking;
+    private int? markingId;
+
+    private int unreadCount => notifications?.Count(note => !note.IsRead) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
+    private async Task LoadAsync()
+    {
+        loadError = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            var result = await NotificationFeed.ListAsync(userId);
+            if (!result.Success || result.Data is null)
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "Could not load your notifications.";
+                return;
+            }
+
+            notifications = result.Data.ToList();
+        }
+        catch (Exception exception)
+        {
+            loadError = exception is InvalidOperationException
+                ? "The app was busy. Please retry."
+                : exception.Message;
+        }
+    }
+
+    private async Task MarkReadAsync(int notificationId)
+    {
+        actionMessage = null;
+        markingId = notificationId;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            var result = await NotificationFeed.MarkReadAsync(userId, notificationId);
+            if (!result.Success)
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "Could not update this notification.";
+                return;
+            }
+
+            if (notifications is not null)
+            {
+                var index = notifications.FindIndex(note => note.Id == notificationId);
+                if (index >= 0)
+                {
+                    notifications[index] = result.Data!;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            loadError = exception is InvalidOperationException
+                ? "The app was busy. Please retry."
+                : exception.Message;
+        }
+        finally
+        {
+            markingId = null;
+        }
+    }
+
+    private async Task MarkAllReadAsync()
+    {
+        actionMessage = null;
+        isMarking = true;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            var result = await NotificationFeed.MarkAllReadAsync(userId);
+            if (result.Success)
+            {
+                notifications = notifications?.Select(note => note with { IsRead = true }).ToList();
+                actionMessage = result.Data == 1 ? "1 message marked read." : $"{result.Data} messages marked read.";
+            }
+            else
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "Could not mark messages read.";
+            }
+        }
+        catch (Exception exception)
+        {
+            loadError = exception is InvalidOperationException
+                ? "The app was busy. Please retry."
+                : exception.Message;
+        }
+        finally
+        {
+            isMarking = false;
+        }
+    }
+}

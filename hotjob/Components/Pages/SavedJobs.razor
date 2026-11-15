@@ -1,0 +1,271 @@
+@page "/saved-jobs"
+@implements IDisposable
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Job
+@using hotjob.Models.Job
+@using hotjob.Services.Job
+@using hotjob.Services.Common
+@inject IJobService JobService
+@inject CircuitDbGate CircuitDbGate
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
+
+<PageTitle>Saved jobs | HotJob</PageTitle>
+
+<AuthorizeView Roles="Candidate">
+    <Authorized>
+        <div class="workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Candidate workspace</p>
+                    <h1>Saved jobs</h1>
+                    <p class="workspace-lede">Roles you bookmarked to apply for later.</p>
+                </div>
+                <div class="workspace-actions">
+                    <a class="workspace-btn workspace-btn-primary" href="/it-jobs">Browse jobs</a>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading saved jobs">
+                    <p class="workspace-sub" role="status">Loading saved jobs…</p>
+                </section>
+            }
+            else if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="workspace-alert" role="alert">@loadError</div>
+            }
+            else if (paged is null || paged.TotalCount == 0)
+            {
+                <section class="workspace-card">
+                    <h2>No saved jobs yet</h2>
+                    <p class="workspace-sub">Use “Save job” on any posting to keep it here.</p>
+                </section>
+            }
+            else
+            {
+                @if (!string.IsNullOrWhiteSpace(actionError))
+                {
+                    <div class="workspace-alert" role="alert">@actionError</div>
+                }
+
+                <section class="workspace-card" aria-label="Saved job list">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2>Bookmarked roles</h2>
+                            <p class="workspace-sub">@paged.TotalCount saved · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
+                        </div>
+                    </div>
+                    <ul class="review-list">
+                        @foreach (var item in paged.Items)
+                        {
+                            <li class="review-card">
+                                <div class="workspace-section-head">
+                                    <div>
+                                        <h3><a href="/jobs/@item.JobId">@item.Title</a></h3>
+                                        <p class="workspace-sub">
+                                            @item.CompanyName
+                                            @if (!string.IsNullOrWhiteSpace(item.CompanyLocation))
+                                            {
+                                                <span> · @item.CompanyLocation</span>
+                                            }
+                                            <span> · @item.JobType</span>
+                                        </p>
+                                        <p class="workspace-sub">
+                                            @Salary(item.SalaryMin, item.SalaryMax)
+                                            <span> · saved @item.SavedAt.ToString("dd MMM yyyy")</span>
+                                            @if (!IsOpen(item))
+                                            {
+                                                <span class="workspace-badge is-danger">@StatusLabel(item)</span>
+                                            }
+                                        </p>
+                                    </div>
+                                    <div class="workspace-toolbar-actions">
+                                        <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/jobs/@item.JobId">View job</a>
+                                        <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button"
+                                                @onclick="() => UnsaveAsync(item.JobId)" disabled="@(unsavingId == item.JobId)">
+                                            @(unsavingId == item.JobId ? "Removing…" : "Remove")
+                                        </button>
+                                    </div>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                    @if (paged.TotalPages > 1)
+                    {
+                        <nav class="jobs-pager" aria-label="Saved jobs pages">
+                            @if (paged.Page > 1)
+                            {
+                                <button type="button" class="page-btn" @onclick="() => ChangePageAsync(paged.Page - 1)">← Prev</button>
+                            }
+                            <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount saved</span>
+                            @if (paged.Page < paged.TotalPages)
+                            {
+                                <button type="button" class="page-btn" @onclick="() => ChangePageAsync(paged.Page + 1)">Next →</button>
+                            }
+                        </nav>
+                    }
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private const int PageSize = 10;
+
+    private PagedResponse<SavedJobDto>? paged;
+    private int page = 1;
+    private bool isLoading = true;
+    private bool hasLoadedOnce;
+    private string? loadError;
+    private string? actionError;
+    private int? unsavingId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync(force: true);
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync(force: true);
+                StateHasChanged();
+            });
+        }
+    }
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
+    private async Task LoadAsync(bool force = false)
+    {
+        if (isLoading && hasLoadedOnce && !force)
+        {
+            return;
+        }
+
+        isLoading = true;
+        hasLoadedOnce = true;
+        loadError = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            var result = await CircuitDbGate.RunAsync(() => JobService.GetSavedJobsAsync(userId, page, PageSize));
+            if (!result.Success || result.Data is null)
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "Could not load your saved jobs.";
+                return;
+            }
+
+            paged = result.Data;
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ChangePageAsync(int next)
+    {
+        if (next < 1)
+        {
+            return;
+        }
+
+        page = next;
+        await LoadAsync(force: true);
+    }
+
+    private async Task UnsaveAsync(int jobId)
+    {
+        actionError = null;
+        unsavingId = jobId;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            var result = await CircuitDbGate.RunAsync(() => JobService.UnsaveJobAsync(userId, jobId));
+            if (!result.Success)
+            {
+                actionError = result.Errors.FirstOrDefault() ?? "Could not remove this saved job.";
+                return;
+            }
+
+            // Step back a page when the last item on a page is removed.
+            if (paged is not null && paged.Items.Count <= 1 && page > 1)
+            {
+                page--;
+            }
+
+            await LoadAsync(force: true);
+        }
+        catch (Exception exception)
+        {
+            actionError = exception.Message;
+        }
+        finally
+        {
+            unsavingId = null;
+        }
+    }
+
+    private static bool IsOpen(SavedJobDto item) =>
+        item.Status == JobStatus.Published && (item.ExpiryDate is null || item.ExpiryDate > DateTime.UtcNow);
+
+    private static string StatusLabel(SavedJobDto item) =>
+        item.Status == JobStatus.Published ? "Expired" : item.Status.ToString();
+
+    private static string Salary(decimal? min, decimal? max)
+    {
+        if (min.HasValue && max.HasValue)
+        {
+            return $"${min.Value:N0} – ${max.Value:N0}";
+        }
+
+        if (min.HasValue)
+        {
+            return $"From ${min.Value:N0}";
+        }
+
+        if (max.HasValue)
+        {
+            return $"Up to ${max.Value:N0}";
+        }
+
+        return "Negotiable";
+    }
+}

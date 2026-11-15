@@ -136,6 +136,9 @@ public sealed class AdminSkillsControllerTests
         public Task<ServiceResult<bool>> DeleteJobAsync(int jobId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<ServiceResult<IReadOnlyList<AdminTrainingLogDto>>> GetTrainingLogsAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ServiceResult<PagedResponse<AdminSkillDto>>> GetSkillsAsync(string? search, string? category, int page, int pageSize, CancellationToken cancellationToken = default) =>
             Task.FromResult(PageResult);
 

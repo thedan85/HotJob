@@ -1,8 +1,13 @@
-﻿@rendermode InteractiveServer
+@rendermode InteractiveServer
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NotificationFeed NotificationFeed
 @inject HotJobAuthStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject NavigationManager NavigationManager
+@using System.Security.Claims
 @using hotjob.Services.Authentication
+@using hotjob.Services.Candidate
 
 <header class="top-row">
     <div class="nav-inner">
@@ -41,9 +46,18 @@
             </AuthorizeView>
             <AuthorizeView Roles="Candidate">
                 <Authorized>
-                    <NavLink class="nav-link" href="my-applications">My applications</NavLink>
-                    <NavLink class="nav-link" href="job-alerts">Job alerts</NavLink>
-                    <NavLink class="nav-link" href="premium">Go premium</NavLink>
+                    <NavLink class="nav-link" href="my-applications">Applications</NavLink>
+                    <NavLink class="nav-link nav-link-notifications" href="notifications">
+                        Notifications
+                        @if (unreadCount > 0)
+                        {
+                            <span class="nav-badge" aria-label="@unreadCount unread">@unreadCount</span>
+                        }
+                    </NavLink>
+                    <NavLink class="nav-link" href="recommended-jobs">Recommended</NavLink>
+                    <NavLink class="nav-link" href="saved-jobs">Saved jobs</NavLink>
+                    <NavLink class="nav-link" href="job-alerts">Alerts</NavLink>
+                    <NavLink class="nav-link" href="premium">Premium</NavLink>
                 </Authorized>
             </AuthorizeView>
             <AuthorizeView Roles="Admin">
@@ -53,6 +67,7 @@
                     <NavLink class="nav-link nav-link-employer" href="admin/accounts">Accounts</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="admin/companies">Companies</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="admin/jobs">Jobs</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/model">ML model</NavLink>
                 </Authorized>
             </AuthorizeView>
         </nav>
@@ -84,10 +99,59 @@
 
 @code {
     private bool menuOpen;
+    private int unreadCount;
 
     private void ToggleMenu() => menuOpen = !menuOpen;
 
     private void CloseMenu() => menuOpen = false;
+
+    protected override void OnInitialized()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        await InvokeAsync(async () =>
+        {
+            await RefreshUnreadAsync(state);
+            StateHasChanged();
+        });
+    }
+
+    private async Task RefreshUnreadAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        await RefreshUnreadAsync(state);
+    }
+
+    private async Task RefreshUnreadAsync(AuthenticationState state)
+    {
+        if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
+        {
+            unreadCount = 0;
+            return;
+        }
+
+        var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? state.User.FindFirstValue("sub");
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            unreadCount = 0;
+            return;
+        }
+
+        var result = await NotificationFeed.ListAsync(userId);
+        unreadCount = result.Success && result.Data is not null
+            ? result.Data.Count(note => !note.IsRead)
+            : 0;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -111,6 +175,8 @@
             if (result.Ok && result.Data is not null)
             {
                 AuthStateProvider.SignIn(result.ToTokens());
+                await RefreshUnreadAsync();
+                StateHasChanged();
             }
         }
         catch (Exception exception) when (exception is JSException or InvalidOperationException)

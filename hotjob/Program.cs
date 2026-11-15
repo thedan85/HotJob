@@ -202,7 +202,9 @@ builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IApplicantService, ApplicantService>();
 builder.Services.AddScoped<IInterviewService, InterviewService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<hotjob.Services.Common.CircuitDbGate>();
 builder.Services.AddScoped<hotjob.Services.Candidate.ICandidateService, hotjob.Services.Candidate.CandidateService>();
+builder.Services.AddScoped<hotjob.Services.Candidate.NotificationFeed>();
 builder.Services.AddScoped<hotjob.Services.Candidate.IResumeService, hotjob.Services.Candidate.ResumeService>();
 builder.Services.AddScoped<hotjob.Services.Candidate.IApplicationService, hotjob.Services.Candidate.ApplicationService>();
 builder.Services.AddSingleton<hotjob.Services.Candidate.ICvFileStorage>(services =>

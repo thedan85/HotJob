@@ -3,7 +3,7 @@ using hotjob.Models.Application;
 
 namespace hotjob.DTOs.Candidate;
 
-/// <summary>A candidate's own application, with its status timeline.</summary>
+/// <summary>A candidate's own application, with its status timeline and interviews.</summary>
 public sealed record MyApplicationDto(
     int ApplicationId,
     string JobTitle,
@@ -11,7 +11,8 @@ public sealed record MyApplicationDto(
     string ResumeTitle,
     ApplicationStatus Status,
     DateTime AppliedAt,
-    IReadOnlyList<HistoryDto> History);
+    IReadOnlyList<HistoryDto> History,
+    IReadOnlyList<InterviewDto> Interviews);
 
 /// <summary>An in-app notification addressed to the candidate.</summary>
 public sealed record MyNotificationDto(

@@ -21,4 +21,10 @@ public interface ICompanyService
         int companyId,
         int page,
         CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<CompanyReviewDto>> CreateReviewAsync(
+        string? userId,
+        int companyId,
+        CreateReviewRequest request,
+        CancellationToken cancellationToken = default);
 }

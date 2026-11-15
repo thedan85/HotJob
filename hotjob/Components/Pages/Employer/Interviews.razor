@@ -85,6 +85,13 @@
                             }
                         </InputSelect>
                     </label>
+                    <label class="workspace-field">
+                        <span>Sort</span>
+                        <InputSelect @bind-Value="query.Sort">
+                            <option value="">Newest first</option>
+                            <option value="match">Best match</option>
+                        </InputSelect>
+                    </label>
                     <label class="workspace-field workspace-field-grow">
                         <span>Search</span>
                         <InputText @bind-Value="query.Search" placeholder="Candidate name or email" />
@@ -126,7 +133,13 @@
                                             <span class="workspace-badge @StatusClass(a.CurrentStatus)">@a.CurrentStatus</span>
                                         </span>
                                         <span class="ei-applicant-job">@a.JobTitle</span>
-                                        <span class="ei-applicant-meta">Applied @a.AppliedAt.ToString("dd MMM yyyy") · @(a.CandidateEmail ?? "no email")</span>
+                                        <span class="ei-applicant-meta">
+                                            Applied @a.AppliedAt.ToString("dd MMM yyyy") · @(a.CandidateEmail ?? "no email")
+                                            @if (a.MatchPercentage is not null)
+                                            {
+                                                <span class="ei-match" title="Match against this job">@a.MatchPercentage.Value.ToString("0")% match</span>
+                                            }
+                                        </span>
                                     </span>
                                     <span class="ei-applicant-chevron" aria-hidden="true">›</span>
                                 </button>
@@ -564,12 +577,13 @@
         await LoadAsync();
     }
 
-    private bool HasFilters => query.JobPostingId.HasValue || statusFilter.HasValue || !string.IsNullOrWhiteSpace(query.Search);
+    private bool HasFilters => query.JobPostingId.HasValue || statusFilter.HasValue || !string.IsNullOrWhiteSpace(query.Search) || !string.IsNullOrWhiteSpace(query.Sort);
 
     private async Task ClearFiltersAsync()
     {
         query.JobPostingId = null;
         query.Search = null;
+        query.Sort = null;
         statusFilter = null;
         page = 1;
         await LoadAsync();

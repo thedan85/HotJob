@@ -17,6 +17,15 @@ public interface IMatchScoreService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns stored percentages for the caller's primary resume, in one query.
+    /// List pages use this instead of recomputing per card.
+    /// </summary>
+    Task<ServiceResult<IReadOnlyDictionary<int, double>>> GetStoredForJobsAsync(
+        string? userId,
+        IReadOnlyList<int> jobIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Premium-only breakdown. Free candidates get an unauthorized result with no
     /// breakdown data, regardless of what the client asks for.
     /// </summary>

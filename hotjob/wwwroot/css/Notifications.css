@@ -1,0 +1,28 @@
+/* Notifications page. Shared theme lives in Theme.css. */
+
+.notification-item.is-unread {
+    border-left: 3px solid var(--hj-primary);
+}
+
+.notification-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    color: var(--hj-ink);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.notification-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 50%;
+    background: var(--hj-accent);
+}
+
+.notification-content {
+    margin-top: 6px;
+    white-space: pre-wrap;
+}

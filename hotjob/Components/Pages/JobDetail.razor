@@ -10,9 +10,11 @@
 @using hotjob.Services.Common
 @using hotjob.Services.Job
 @using hotjob.Services.ML
+@using hotjob.Services.Common
 @inject IJobService JobService
 @inject IApplicationService ApplicationService
 @inject IMatchScoreService MatchScoreService
+@inject CircuitDbGate CircuitDbGate
 @inject ICandidatePremiumService CandidatePremiumService
 @inject HotJobAuthStateProvider AuthStateProvider
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -120,6 +122,16 @@ else
             </div>
             <AuthorizeView Roles="Candidate">
                 <Authorized>
+                    <div class="job-detail-save">
+                        <button class="job-detail-save-btn" type="button" @onclick="ToggleSavedAsync"
+                                disabled="@saveBusy" aria-pressed="@(isSaved ? "true" : "false")">
+                            @(isSaved ? "★ Saved — remove" : "☆ Save job")
+                        </button>
+                        @if (!string.IsNullOrWhiteSpace(saveError))
+                        {
+                            <p class="job-detail-status job-detail-error" role="alert">@saveError</p>
+                        }
+                    </div>
                     <div class="job-detail-match" aria-label="Match score">
                         <h2>Your match</h2>
                         @if (job.Skills.Count == 0)
@@ -317,6 +329,9 @@ else
     private string? advancedError;
     private int matchResumeId;
     private bool isPremium;
+    private bool isSaved;
+    private bool saveBusy;
+    private string? saveError;
 
     // Session restore fires AuthenticationStateChanged while OnParametersSetAsync is
     // still loading; both paths share the circuit-scoped DbContext.
@@ -337,8 +352,12 @@ else
         {
             await InvokeAsync(async () =>
             {
-                await LoadApplyContextAsync();
-                await LoadMatchAsync();
+                await CircuitDbGate.RunAsync(async () =>
+                {
+                    await LoadApplyContextAsync();
+                    await LoadMatchAsync();
+                    await LoadSavedAsync();
+                });
                 StateHasChanged();
             });
         }
@@ -510,6 +529,58 @@ else
         StateHasChanged();
     }
 
+    private async Task LoadSavedAsync()
+    {
+        isSaved = false;
+        saveError = null;
+        var userId = await GetUserIdAsync();
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return;
+        }
+
+        var result = await JobService.IsSavedAsync(userId, Id);
+        if (result.Success)
+        {
+            isSaved = result.Data;
+        }
+    }
+
+    private async Task ToggleSavedAsync()
+    {
+        saveError = null;
+        var userId = await GetUserIdAsync();
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            saveError = "Please sign in to save jobs.";
+            return;
+        }
+
+        saveBusy = true;
+        try
+        {
+            var result = isSaved
+                ? await JobService.UnsaveJobAsync(userId, Id)
+                : await JobService.SaveJobAsync(userId, Id);
+
+            if (!result.Success)
+            {
+                saveError = result.Errors.FirstOrDefault() ?? "Could not update this saved job.";
+                return;
+            }
+
+            isSaved = !isSaved;
+        }
+        catch (Exception exception)
+        {
+            saveError = exception.Message;
+        }
+        finally
+        {
+            saveBusy = false;
+        }
+    }
+
     private static string MatchAlgorithmLabel(string? algorithm) => algorithm switch
     {
         hotjob.Services.ML.MatchScoreService.ModelAlgorithm => "the trained ML model (FastTreeBinary)",
@@ -603,8 +674,12 @@ else
 
         if (job is not null)
         {
-            await LoadApplyContextAsync();
-            await LoadMatchAsync();
+            await CircuitDbGate.RunAsync(async () =>
+            {
+                await LoadApplyContextAsync();
+                await LoadMatchAsync();
+                await LoadSavedAsync();
+            });
         }
     }
 

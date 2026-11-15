@@ -479,3 +479,18 @@
         padding: 14px 16px 18px;
     }
 }
+
+
+.ei-match {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border: 1px solid var(--hj-success);
+    border-radius: var(--hj-radius-pill);
+    color: var(--hj-success);
+    font-family: var(--hj-font-mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}

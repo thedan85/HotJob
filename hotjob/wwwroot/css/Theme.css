@@ -1150,8 +1150,8 @@ h2 {
 }
 
 .jobs-search {
-    display: grid;
-    grid-template-columns: 1.2fr .8fr .9fr .7fr auto;
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     align-items: end;
     margin-top: 30px;
@@ -1161,6 +1161,12 @@ h2 {
     background: var(--hj-surface);
     box-shadow: var(--hj-shadow-sm);
 }
+
+.jobs-search .jobs-field { flex: 1 1 130px; }
+.jobs-search .jobs-search-button { flex: 0 0 auto; }
+.jobs-field-salary { flex: 0 1 120px; }
+.jobs-pager .page-info,
+.pagination .page-info { width: auto; margin: 0; }
 
 .jobs-field {
     display: grid;
@@ -1904,7 +1910,7 @@ h2 {
     font-weight: 600;
 }
 
-.review-list { display: grid; gap: 10px; margin-top: 16px; }
+.review-list { display: grid; gap: 10px; margin-top: 16px; padding: 0; list-style: none; }
 
 .review-card {
     padding: 16px;

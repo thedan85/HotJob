@@ -77,3 +77,22 @@
     .job-card::after { display: none; }
     .job-card .job-side { padding-right: 0; }
 }
+
+
+.match-badge {
+    display: inline-block;
+    margin-bottom: 6px;
+    padding: 4px 10px;
+    border: 1px solid currentColor;
+    border-radius: var(--hj-radius-pill);
+    font-family: var(--hj-font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.match-badge.is-high { border-color: rgba(30, 122, 75, .3); background: var(--hj-success-bg); color: var(--hj-success); }
+.match-badge.is-mid { border-color: rgba(154, 91, 18, .3); background: var(--hj-warning-bg); color: var(--hj-warning); }
+.match-badge.is-low { border-color: var(--hj-border); background: var(--hj-surface-muted); color: var(--hj-muted); }

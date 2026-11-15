@@ -53,6 +53,40 @@ public sealed class MatchScoreService(
             : ServiceResult<MatchScoreDto>.Fail(scored.ErrorType!.Value, scored.Errors);
     }
 
+    public async Task<ServiceResult<IReadOnlyDictionary<int, double>>> GetStoredForJobsAsync(
+        string? userId,
+        IReadOnlyList<int> jobIds,
+        CancellationToken cancellationToken = default)
+    {
+        var candidate = await ResolveCandidateIdAsync(userId, cancellationToken);
+        if (!candidate.Success)
+        {
+            return ServiceResult<IReadOnlyDictionary<int, double>>.Fail(candidate.ErrorType!.Value, candidate.Errors);
+        }
+
+        var resumeId = await ResolveResumeIdAsync(candidate.Data, null, cancellationToken);
+        if (resumeId is null)
+        {
+            return ServiceResult<IReadOnlyDictionary<int, double>>.Ok(new Dictionary<int, double>());
+        }
+
+        var ids = (jobIds ?? Array.Empty<int>()).Where(id => id > 0).Distinct().Take(200).ToList();
+        if (ids.Count == 0)
+        {
+            return ServiceResult<IReadOnlyDictionary<int, double>>.Ok(new Dictionary<int, double>());
+        }
+
+        var rows = await dbContext.MatchScores
+            .AsNoTracking()
+            .Where(score => score.ResumeId == resumeId.Value && ids.Contains(score.JobPostingId))
+            .Select(score => new { score.JobPostingId, score.MatchPercentage })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<IReadOnlyDictionary<int, double>>.Ok(
+            rows.ToDictionary(row => row.JobPostingId, row => (double)row.MatchPercentage));
+    }
+
     public async Task<ServiceResult<AdvancedMatchScoreDto>> GetAdvancedAsync(
         string? userId,
         int jobId,

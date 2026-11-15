@@ -7,10 +7,10 @@ namespace hotjob.Services.Employer;
 /// <summary>Entity → DTO mapping shared by applicant/interview/notification services.</summary>
 internal static class ApplicantMapping
 {
-    public static ApplicantListItemResponse ToListItem(Application a) =>
+    public static ApplicantListItemResponse ToListItem(Application a, double? matchPercentage = null) =>
         new(a.Id, a.JobPostingId, a.JobPosting.Title,
             a.CandidateId, a.Candidate.FullName, a.Candidate.User?.Email,
-            a.ResumeId, a.Resume.Title, a.CurrentStatus, a.AppliedAt);
+            a.ResumeId, a.Resume.Title, a.CurrentStatus, a.AppliedAt, matchPercentage);
 
     public static ApplicantDetailResponse ToDetail(Application a) =>
         new()

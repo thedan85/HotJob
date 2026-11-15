@@ -10,7 +10,7 @@
 .nav-inner {
     display: flex;
     align-items: center;
-    gap: 26px;
+    gap: 14px;
     width: min(100% - 40px, 1320px);
     min-height: 68px;
     margin: 0 auto;
@@ -31,12 +31,13 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
 }
 
 .nav-link {
-    padding: 8px 12px;
+    padding: 8px 9px;
+    font-size: 13.5px;
     border: 1px solid transparent;
     border-radius: var(--hj-radius-pill);
     color: rgba(255, 255, 255, .78);
@@ -136,6 +137,11 @@
 
 .nav-user-name { overflow: hidden; text-overflow: ellipsis; }
 
+@media (max-width: 1600px) {
+    .nav-user-name { display: none; }
+    .nav-user { max-width: 40px; }
+}
+
 .nav-avatar {
     display: grid;
     width: 32px;
@@ -193,7 +199,7 @@
 .menu-toggle[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
 .menu-toggle[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
-@media (max-width: 1190px) {
+@media (max-width: 1360px) {
     .nav-inner {
         position: relative;
         width: min(100% - 32px, 1320px);
@@ -255,4 +261,26 @@
 @media (max-width: 420px) {
     .navbar-brand { font-size: 1.2rem; }
     .nav-sign-in { display: none; }
+}
+
+
+.nav-link-notifications {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.nav-badge {
+    display: inline-grid;
+    place-items: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #BAE1FA;
+    color: #0E3B2E;
+    font-family: var(--hj-font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    line-height: 1;
 }

@@ -16,6 +16,11 @@ public interface IApplicantRepository
         string? search,
         int page,
         int pageSize,
+        string? sort = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<(int JobPostingId, int ResumeId), double>> ListMatchScoresAsync(
+        IReadOnlyCollection<(int JobPostingId, int ResumeId)> keys,
         CancellationToken cancellationToken = default);
 
     Task<Application?> GetOwnedDetailAsync(

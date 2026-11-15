@@ -53,8 +53,15 @@ public interface IJobService
         string? skill,
         int? companyId,
         JobType? jobType,
+        int? categoryId,
+        decimal? salaryMin,
+        decimal? salaryMax,
         int page,
         int pageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Lists all job categories for the public filter dropdown.</summary>
+    Task<ServiceResult<IReadOnlyList<JobCategoryDto>>> GetCategoriesAsync(
         CancellationToken cancellationToken = default);
 
     Task<ServiceResult<PagedResponse<SkillMatchJobListItemDto>>> GetJobsMatchingResumeAsync(
@@ -69,5 +76,26 @@ public interface IJobService
 
     Task<ServiceResult<JobDetailResponse>> GetPublishedAsync(
         int id,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<PagedResponse<SavedJobDto>>> GetSavedJobsAsync(
+        string? userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<bool>> IsSavedAsync(
+        string? userId,
+        int jobId,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<bool>> SaveJobAsync(
+        string? userId,
+        int jobId,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<bool>> UnsaveJobAsync(
+        string? userId,
+        int jobId,
         CancellationToken cancellationToken = default);
 }

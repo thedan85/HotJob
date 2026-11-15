@@ -15,6 +15,9 @@ public interface IAdminService
     Task<ServiceResult<IReadOnlyList<AdminJobListItemDto>>> GetJobsAsync(CancellationToken cancellationToken = default);
     Task<ServiceResult<bool>> DeleteJobAsync(int jobId, CancellationToken cancellationToken = default);
 
+    Task<ServiceResult<IReadOnlyList<AdminTrainingLogDto>>> GetTrainingLogsAsync(
+        CancellationToken cancellationToken = default);
+
     Task<ServiceResult<PagedResponse<AdminSkillDto>>> GetSkillsAsync(
         string? search,
         string? category,

@@ -58,6 +58,11 @@ public sealed class CompaniesControllerTests
                     PageSize = 20
                 }));
         }
+
+        public Task<ServiceResult<CompanyReviewDto>> CreateReviewAsync(
+            string? userId, int companyId, CreateReviewRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     [Fact]

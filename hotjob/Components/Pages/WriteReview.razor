@@ -1,0 +1,145 @@
+@page "/companies/{id:int}/review"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Company
+@using hotjob.Services.Company
+@inject ICompanyService CompanyService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Write a review | HotJob</PageTitle>
+
+<div class="workspace">
+    <AuthorizeView Roles="Candidate">
+        <Authorized Context="reviewAuth">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Company review</p>
+                    <h1>Review @(company?.CompanyName ?? "this company")</h1>
+                    <p class="workspace-lede">One review per company. Your rating is public with your name.</p>
+                </div>
+                <div class="workspace-actions">
+                    <a class="workspace-btn workspace-btn-secondary" href="/companies/@Id">Back to company</a>
+                </div>
+            </section>
+
+            @if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="workspace-alert" role="alert">@loadError</div>
+            }
+            else if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true">
+                    <p class="workspace-sub" role="status">Loading company…</p>
+                </section>
+            }
+            else
+            {
+                <section class="workspace-card">
+                    @if (!string.IsNullOrWhiteSpace(submitError))
+                    {
+                        <div class="workspace-alert" role="alert">@submitError</div>
+                    }
+
+                    <EditForm Model="form" OnValidSubmit="SubmitAsync">
+                        <DataAnnotationsValidator />
+                        <label class="workspace-field">
+                            <span>Rating</span>
+                            <InputSelect @bind-Value="form.RatingScore">
+                                <option value="5">5 — Excellent</option>
+                                <option value="4">4 — Good</option>
+                                <option value="3">3 — Average</option>
+                                <option value="2">2 — Poor</option>
+                                <option value="1">1 — Terrible</option>
+                            </InputSelect>
+                        </label>
+                        <label class="workspace-field">
+                            <span>Your review (optional)</span>
+                            <InputTextArea @bind-Value="form.ReviewText" rows="6" maxlength="2000"
+                                           placeholder="What was it like to work with this company?" />
+                        </label>
+                        <ValidationSummary />
+                        <button class="workspace-btn workspace-btn-primary" type="submit" disabled="@isSubmitting">
+                            @(isSubmitting ? "Submitting…" : "Submit review")
+                        </button>
+                    </EditForm>
+                </section>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <RedirectToLogin />
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private CompanyDetailDto? company;
+    private CreateReviewRequest form = new();
+    private bool isLoading = true;
+    private bool isSubmitting;
+    private string? loadError;
+    private string? submitError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id <= 0)
+        {
+            loadError = "Company not found.";
+            isLoading = false;
+            return;
+        }
+
+        var result = await CompanyService.GetDetailAsync(Id);
+        if (result.Success && result.Data is not null)
+        {
+            company = result.Data;
+        }
+        else
+        {
+            loadError = result.Errors.FirstOrDefault() ?? "Company not found.";
+        }
+
+        isLoading = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        submitError = null;
+        isSubmitting = true;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                submitError = "Please sign in to review this company.";
+                return;
+            }
+
+            var result = await CompanyService.CreateReviewAsync(userId, Id, form);
+            if (!result.Success)
+            {
+                submitError = string.Join(" ", result.Errors);
+                return;
+            }
+
+            NavigationManager.NavigateTo($"/companies/{Id}");
+        }
+        catch (Exception exception)
+        {
+            submitError = exception.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+}

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using hotjob.Data;
 using hotjob.DTOs.Job;
+using hotjob.Models;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Models.Users;
@@ -341,6 +342,9 @@ public sealed class JobService(
         string? skill,
         int? companyId,
         JobType? jobType,
+        int? categoryId,
+        decimal? salaryMin,
+        decimal? salaryMax,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default)
@@ -348,7 +352,19 @@ public sealed class JobService(
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var (items, total) = await jobRepository.BrowsePublishedAsync(keyword, city, skill, companyId, jobType, page, pageSize, cancellationToken);
+        if (salaryMin.HasValue && salaryMax.HasValue && salaryMin.Value > salaryMax.Value)
+        {
+            return ServiceResult<PagedResponse<PublicJobListItemResponse>>.Fail(
+                ServiceErrorType.Validation, "Salary minimum cannot be greater than salary maximum.");
+        }
+
+        if (salaryMin.HasValue && salaryMin.Value < 0 || salaryMax.HasValue && salaryMax.Value < 0)
+        {
+            return ServiceResult<PagedResponse<PublicJobListItemResponse>>.Fail(
+                ServiceErrorType.Validation, "Salary cannot be negative.");
+        }
+
+        var (items, total) = await jobRepository.BrowsePublishedAsync(keyword, city, skill, companyId, jobType, categoryId, salaryMin, salaryMax, page, pageSize, cancellationToken);
 
         return ServiceResult<PagedResponse<PublicJobListItemResponse>>.Ok(new PagedResponse<PublicJobListItemResponse>
         {
@@ -357,6 +373,19 @@ public sealed class JobService(
             Page = page,
             PageSize = pageSize
         });
+    }
+
+    public async Task<ServiceResult<IReadOnlyList<JobCategoryDto>>> GetCategoriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var categories = await dbContext.JobCategories
+            .AsNoTracking()
+            .OrderBy(category => category.Name)
+            .Select(category => new JobCategoryDto(category.Id, category.Name))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<IReadOnlyList<JobCategoryDto>>.Ok(categories);
     }
 
     public async Task<ServiceResult<JobDetailResponse>> GetPublishedAsync(
@@ -376,6 +405,178 @@ public sealed class JobService(
 
         var count = await dbContext.Applications.CountAsync(application => application.JobPostingId == id, cancellationToken);
         return ServiceResult<JobDetailResponse>.Ok(ToDetail(job, count));
+    }
+
+    public async Task<ServiceResult<PagedResponse<SavedJobDto>>> GetSavedJobsAsync(
+        string? userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var candidateId = await GetCandidateIdAsync(userId, cancellationToken);
+        if (candidateId is null)
+        {
+            return ServiceResult<PagedResponse<SavedJobDto>>.Fail(
+                ServiceErrorType.Unauthorized, "Candidate profile not found.");
+        }
+
+        var baseQuery = dbContext.SavedJobs
+            .AsNoTracking()
+            .Where(saved => saved.CandidateId == candidateId);
+
+        var total = await baseQuery.CountAsync(cancellationToken);
+        var items = await baseQuery
+            .OrderByDescending(saved => saved.SavedAt)
+            .ThenByDescending(saved => saved.JobPostingId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(saved => new SavedJobDto(
+                saved.JobPostingId,
+                saved.JobPosting.Title,
+                saved.JobPosting.Company.CompanyName,
+                saved.JobPosting.Company.Location,
+                saved.JobPosting.SalaryMin,
+                saved.JobPosting.SalaryMax,
+                saved.JobPosting.JobType,
+                saved.JobPosting.ExpiryDate,
+                saved.JobPosting.Status,
+                saved.SavedAt))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<PagedResponse<SavedJobDto>>.Ok(new PagedResponse<SavedJobDto>
+        {
+            Items = items,
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        });
+    }
+
+    public async Task<ServiceResult<bool>> IsSavedAsync(
+        string? userId,
+        int jobId,
+        CancellationToken cancellationToken = default)
+    {
+        var candidateId = await GetCandidateIdAsync(userId, cancellationToken);
+        if (candidateId is null)
+        {
+            return ServiceResult<bool>.Ok(false);
+        }
+
+        var saved = await dbContext.SavedJobs
+            .AsNoTracking()
+            .AnyAsync(row => row.CandidateId == candidateId && row.JobPostingId == jobId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<bool>.Ok(saved);
+    }
+
+    public async Task<ServiceResult<bool>> SaveJobAsync(
+        string? userId,
+        int jobId,
+        CancellationToken cancellationToken = default)
+    {
+        var candidateId = await GetCandidateIdAsync(userId, cancellationToken);
+        if (candidateId is null)
+        {
+            return ServiceResult<bool>.Fail(ServiceErrorType.Unauthorized, "Candidate profile not found.");
+        }
+
+        var now = DateTime.UtcNow;
+        var isOpen = await dbContext.JobPostings
+            .AsNoTracking()
+            .AnyAsync(
+                job => job.Id == jobId
+                    && job.Status == JobStatus.Published
+                    && (job.ExpiryDate == null || job.ExpiryDate > now)
+                    && job.Company.Status == CompanyStatus.Approved,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!isOpen)
+        {
+            return ServiceResult<bool>.Fail(ServiceErrorType.NotFound, "Job not found.");
+        }
+
+        if (await dbContext.SavedJobs.AnyAsync(
+                row => row.CandidateId == candidateId && row.JobPostingId == jobId, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            return ServiceResult<bool>.Ok(true);
+        }
+
+        dbContext.SavedJobs.Add(new SavedJob
+        {
+            CandidateId = candidateId.Value,
+            JobPostingId = jobId,
+            SavedAt = now
+        });
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent save from the same candidate wins; the bookmark still exists.
+            foreach (var entry in dbContext.ChangeTracker.Entries<SavedJob>()
+                         .Where(entry => entry.State == EntityState.Added)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            var exists = await dbContext.SavedJobs
+                .AsNoTracking()
+                .AnyAsync(row => row.CandidateId == candidateId && row.JobPostingId == jobId, cancellationToken)
+                .ConfigureAwait(false);
+            if (!exists)
+            {
+                throw;
+            }
+        }
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> UnsaveJobAsync(
+        string? userId,
+        int jobId,
+        CancellationToken cancellationToken = default)
+    {
+        var candidateId = await GetCandidateIdAsync(userId, cancellationToken);
+        if (candidateId is null)
+        {
+            return ServiceResult<bool>.Fail(ServiceErrorType.Unauthorized, "Candidate profile not found.");
+        }
+
+        await dbContext.SavedJobs
+            .Where(row => row.CandidateId == candidateId && row.JobPostingId == jobId)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    private async Task<int?> GetCandidateIdAsync(string? userId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return null;
+        }
+
+        var candidateId = await dbContext.Candidates
+            .AsNoTracking()
+            .Where(candidate => candidate.UserId == userId)
+            .Select(candidate => candidate.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return candidateId == 0 ? null : candidateId;
     }
 
     private async Task<ServiceResult<JobDetailResponse>> GetDetailAsync(

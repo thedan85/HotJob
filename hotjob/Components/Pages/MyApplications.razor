@@ -5,7 +5,10 @@
 @using hotjob.DTOs.Candidate
 @using hotjob.Models.Application
 @using hotjob.Services.Candidate
+@using hotjob.Services.Common
 @inject ICandidateService CandidateService
+@inject NotificationFeed NotificationFeed
+@inject CircuitDbGate CircuitDbGate
 @inject IApplicationService ApplicationService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuthSession AuthSession
@@ -22,7 +25,7 @@
                     <p class="workspace-lede">Track every role you applied to, follow each status change, and read the messages employers sent you.</p>
                 </div>
                 <div class="workspace-actions">
-                    <a class="workspace-btn workspace-btn-primary" href="/jobs">Browse jobs</a>
+                    <a class="workspace-btn workspace-btn-primary" href="/it-jobs">Browse jobs</a>
                 </div>
             </section>
 
@@ -136,7 +139,7 @@
                                 </span>
                                 <h3>No applications yet</h3>
                                 <p>When you apply to a job, its status and history appear here so you always know where you stand.</p>
-                                <a class="workspace-btn workspace-btn-primary workspace-btn-small" href="/jobs">Browse open jobs</a>
+                                <a class="workspace-btn workspace-btn-primary workspace-btn-small" href="/it-jobs">Browse open jobs</a>
                             </div>
                         }
                         else if (visible.Count == 0)
@@ -169,6 +172,35 @@
                                             CV: @application.ResumeTitle
                                         </span>
                                     </div>
+
+                                    @if (application.Interviews.Count > 0)
+                                    {
+                                        <div class="ma-interviews" aria-label="Interviews">
+                                            <p class="ma-interview-label">Interviews</p>
+                                            <ul class="ma-interview-list">
+                                                @foreach (var interview in application.Interviews.OrderByDescending(i => i.InterviewDate))
+                                                {
+                                                    <li class="ma-interview">
+                                                        <span class="ma-interview-date">
+                                                            @interview.InterviewDate.ToString("ddd dd MMM, HH:mm")
+                                                        </span>
+                                                        <span class="ma-interview-detail">
+                                                            @(interview.InterviewType?.ToString() ?? "Interview")
+                                                            @if (!string.IsNullOrWhiteSpace(interview.LocationOrLink))
+                                                            {
+                                                                <span> · @interview.LocationOrLink</span>
+                                                            }
+                                                            @if (!string.IsNullOrWhiteSpace(interview.Notes))
+                                                            {
+                                                                <span> · @interview.Notes</span>
+                                                            }
+                                                        </span>
+                                                        <span class="workspace-badge @InterviewStatusClass(interview.Status)">@interview.Status</span>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
 
                                     @if (application.History.Count > 0 || InProgressStatuses.Contains(application.Status))
                                     {
@@ -358,6 +390,14 @@
     public void Dispose() =>
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
 
+    private static string InterviewStatusClass(InterviewStatus status) => status switch
+    {
+        InterviewStatus.Scheduled => "is-scheduled",
+        InterviewStatus.Completed => "is-completed",
+        InterviewStatus.Cancelled => "is-cancelled",
+        _ => "is-muted"
+    };
+
     private static string StatusClass(ApplicationStatus status) => status switch
     {
         ApplicationStatus.Pending => "is-pending",
@@ -393,7 +433,7 @@
         try
         {
             var userId = await GetUserIdAsync();
-            var apps = await CandidateService.GetMyApplicationsAsync(userId);
+            var apps = await CircuitDbGate.RunAsync(() => CandidateService.GetMyApplicationsAsync(userId));
             if (!apps.Success || apps.Data is null)
             {
                 loadError = apps.Errors.FirstOrDefault() ?? "We could not load your applications.";
@@ -401,7 +441,7 @@
             }
             applications = apps.Data.ToList();
 
-            var notes = await CandidateService.GetMyNotificationsAsync(userId);
+            var notes = await NotificationFeed.ListAsync(userId);
             if (notes.Success && notes.Data is not null)
             {
                 notifications = notes.Data.ToList();
@@ -427,7 +467,8 @@
         markingId = notificationId;
         try
         {
-            var result = await CandidateService.MarkNotificationReadAsync(await GetUserIdAsync(), notificationId);
+            var notificationUserId = await GetUserIdAsync();
+            var result = await NotificationFeed.MarkReadAsync(notificationUserId, notificationId);
             if (result.Success && result.Data is not null)
             {
                 var index = notifications.FindIndex(note => note.Id == notificationId);
@@ -454,7 +495,7 @@
         withdrawingId = applicationId;
         try
         {
-            var result = await ApplicationService.WithdrawAsync(await GetUserIdAsync(), applicationId);
+            var result = await CircuitDbGate.RunAsync(async () => await ApplicationService.WithdrawAsync(await GetUserIdAsync(), applicationId));
             withdrawConfirmId = null;
             if (!result.Success)
             {
@@ -477,7 +518,7 @@
 
     private async Task ReloadApplicationsAsync()
     {
-        var result = await CandidateService.GetMyApplicationsAsync(await GetUserIdAsync());
+        var result = await CircuitDbGate.RunAsync(async () => await CandidateService.GetMyApplicationsAsync(await GetUserIdAsync()));
         if (result.Success && result.Data is not null)
         {
             applications = result.Data.ToList();

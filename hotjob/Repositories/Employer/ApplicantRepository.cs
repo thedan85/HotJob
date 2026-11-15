@@ -19,10 +19,12 @@ public sealed class ApplicantRepository(ApplicationDbContext db) : IApplicantRep
         string? search,
         int page,
         int pageSize,
+        string? sort = null,
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
+        var bestMatch = string.Equals(sort, "match", StringComparison.OrdinalIgnoreCase);
 
         var query = db.Applications
             .AsNoTracking()
@@ -44,12 +46,58 @@ public sealed class ApplicantRepository(ApplicationDbContext db) : IApplicantRep
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderByDescending(a => a.AppliedAt)
+        IQueryable<Application> ordered = query;
+
+        if (bestMatch)
+        {
+            ordered =
+                from application in query
+                join score in db.MatchScores on
+                    new { application.JobPostingId, application.ResumeId }
+                    equals new { score.JobPostingId, score.ResumeId } into scores
+                from score in scores.DefaultIfEmpty()
+                orderby score == null ? -1d : score.MatchPercentage descending,
+                    application.AppliedAt descending,
+                    application.Id descending
+                select application;
+        }
+        else
+        {
+            ordered = query
+                .OrderByDescending(application => application.AppliedAt)
+                .ThenByDescending(application => application.Id);
+        }
+
+        var items = await ordered
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
         return (items, total);
+    }
+
+    public async Task<IReadOnlyDictionary<(int JobPostingId, int ResumeId), double>> ListMatchScoresAsync(
+        IReadOnlyCollection<(int JobPostingId, int ResumeId)> keys,
+        CancellationToken cancellationToken = default)
+    {
+        if (keys.Count == 0)
+        {
+            return new Dictionary<(int JobPostingId, int ResumeId), double>();
+        }
+
+        var jobIds = keys.Select(key => key.JobPostingId).Distinct().ToList();
+        var resumeIds = keys.Select(key => key.ResumeId).Distinct().ToList();
+
+        var rows = await db.MatchScores
+            .AsNoTracking()
+            .Where(score => jobIds.Contains(score.JobPostingId) && resumeIds.Contains(score.ResumeId))
+            .Select(score => new { score.JobPostingId, score.ResumeId, score.MatchPercentage })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Where(row => keys.Contains((row.JobPostingId, row.ResumeId)))
+            .ToDictionary(
+                row => (row.JobPostingId, row.ResumeId),
+                row => row.MatchPercentage);
     }
 
     public Task<Application?> GetOwnedDetailAsync(

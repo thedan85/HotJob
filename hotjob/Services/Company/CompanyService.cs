@@ -1,13 +1,19 @@
+using hotjob.Data;
 using hotjob.DTOs.Company;
 using hotjob.DTOs.Job;
+using hotjob.Models;
+using hotjob.Models.Users;
 using hotjob.Repositories.Company;
 using hotjob.Services.Common;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace hotjob.Services.Company;
 
 public sealed class CompanyService(
     ICompanyRepository repository,
+    ApplicationDbContext dbContext,
+    TimeProvider timeProvider,
     ILogger<CompanyService> logger) : ICompanyService
 {
     public const int PageSize = 20;
@@ -94,5 +100,89 @@ public sealed class CompanyService(
             Page = page,
             PageSize = ReviewPageSize
         });
+    }
+
+    public async Task<ServiceResult<CompanyReviewDto>> CreateReviewAsync(
+        string? userId,
+        int companyId,
+        CreateReviewRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
+
+        if (request is null)
+            return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.Validation, "Review data is required.");
+
+        if (request.RatingScore is < 1 or > 5)
+            return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.Validation, "Rating must be between 1 and 5.");
+
+        var reviewText = string.IsNullOrWhiteSpace(request.ReviewText) ? null : request.ReviewText.Trim();
+        if (reviewText is { Length: > 2000 })
+            return ServiceResult<CompanyReviewDto>.Fail(
+                ServiceErrorType.Validation, "Review text must be 2000 characters or fewer.");
+
+        var candidate = await dbContext.Candidates
+            .AsNoTracking()
+            .Where(row => row.UserId == userId)
+            .Select(row => new { row.Id, row.FullName })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (candidate is null)
+            return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.NotFound, "Candidate profile not found.");
+
+        var companyExists = await dbContext.CompanyProfiles
+            .AsNoTracking()
+            .AnyAsync(
+                company => company.Id == companyId && company.Status == CompanyStatus.Approved,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!companyExists)
+            return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
+
+        var alreadyReviewed = await dbContext.Reviews
+            .AsNoTracking()
+            .AnyAsync(
+                review => review.CompanyProfileId == companyId && review.CandidateId == candidate.Id,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (alreadyReviewed)
+            return ServiceResult<CompanyReviewDto>.Fail(
+                ServiceErrorType.Conflict, "You already reviewed this company.");
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var review = new Review
+        {
+            CompanyProfileId = companyId,
+            CandidateId = candidate.Id,
+            RatingScore = request.RatingScore,
+            ReviewText = reviewText,
+            CreatedAt = now
+        };
+        dbContext.Reviews.Add(review);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // Unique (company, candidate) index: a concurrent submit already stored one.
+            dbContext.Entry(review).State = EntityState.Detached;
+            return ServiceResult<CompanyReviewDto>.Fail(
+                ServiceErrorType.Conflict, "You already reviewed this company.");
+        }
+
+        logger.LogInformation("Candidate {CandidateId} reviewed company {CompanyId}.", candidate.Id, companyId);
+
+        return ServiceResult<CompanyReviewDto>.Ok(new CompanyReviewDto(
+            review.Id,
+            review.RatingScore,
+            review.ReviewText,
+            candidate.FullName,
+            review.CreatedAt));
     }
 }

@@ -27,11 +27,20 @@ public sealed class ApplicantService(
             employerResult.Data!.CompanyProfileId,
             query.JobPostingId, query.Status,
             string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
-            query.Page, query.PageSize, cancellationToken);
+            query.Page, query.PageSize,
+            query.Sort,
+            cancellationToken);
+
+        var matchScores = await repo.ListMatchScoresAsync(
+            items.Select(application => (application.JobPostingId, application.ResumeId)).ToList(),
+            cancellationToken);
 
         return ServiceResult<PagedResult<ApplicantListItemResponse>>.Ok(new PagedResult<ApplicantListItemResponse>
         {
-            Items = items.Select(ApplicantMapping.ToListItem).ToArray(),
+            Items = items.Select(application => ApplicantMapping.ToListItem(
+                    application,
+                    matchScores.GetValueOrDefault((application.JobPostingId, application.ResumeId))))
+                .ToArray(),
             Page = query.Page,
             PageSize = query.PageSize,
             TotalCount = total,

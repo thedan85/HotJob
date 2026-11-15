@@ -6,6 +6,7 @@
 @using hotjob.DTOs.Candidate
 @using hotjob.Models.Users
 @using hotjob.Services.Account
+@using hotjob.Services.Common
 @using hotjob.Services.Authentication
 @using hotjob.Services.Candidate
 @using Microsoft.AspNetCore.Components.Authorization
@@ -14,6 +15,7 @@
 @inject AuthSession AuthSession
 @inject IAccountService AccountService
 @inject IResumeService ResumeService
+@inject CircuitDbGate CircuitDbGate
 
 <PageTitle>Your profile | HotJob</PageTitle>
 
@@ -248,7 +250,7 @@ else
                                     </label>
                                     @if (resume.FileUrl is not null)
                                     {
-                                        <a class="cv-icon-button" href="@resume.FileUrl" target="_blank" rel="noopener noreferrer" title="Open @resume.Title" download>↓</a>
+                                        <a class="profile-btn profile-btn-secondary profile-btn-small" href="@resume.FileUrl" target="_blank" rel="noopener noreferrer" aria-label="View CV @resume.Title">View CV</a>
                                     }
                                     @if (pendingDeleteId != resume.Id)
                                     {
@@ -478,7 +480,7 @@ else
                 return;
             }
 
-            var result = await AccountService.GetProfileAsync(userId);
+            var result = await CircuitDbGate.RunAsync(() => AccountService.GetProfileAsync(userId));
             if (!result.Success || result.Data?.Candidate is null)
             {
                 errorMessage = result.Errors.FirstOrDefault() ?? "We could not load your candidate profile.";
@@ -500,7 +502,7 @@ else
             };
 
             // Sequential awaits: ResumeService and AccountService share the circuit's DbContext.
-            var resumeResult = await ResumeService.ListAsync(userId);
+            var resumeResult = await CircuitDbGate.RunAsync(() => ResumeService.ListAsync(userId));
             if (resumeResult.Success && resumeResult.Data is not null)
             {
                 resumes = resumeResult.Data.ToList();
@@ -510,7 +512,7 @@ else
                 cvError = resumeResult.Errors.FirstOrDefault() ?? "We could not load your resumes.";
             }
 
-            var skillResult = await ResumeService.ListSkillsAsync();
+            var skillResult = await CircuitDbGate.RunAsync(() => ResumeService.ListSkillsAsync());
             if (skillResult.Success && skillResult.Data is not null)
             {
                 skillOptions = skillResult.Data.ToList();

@@ -240,7 +240,7 @@ public sealed class EntitlementQuotaTests
         await fx.Db.SaveChangesAsync();
 
         var (items, total) = await new JobPostingRepository(fx.Db)
-            .BrowsePublishedAsync(null, null, null, null, null, 1, 20);
+            .BrowsePublishedAsync(null, null, null, null, null, null, null, null, 1, 20);
 
         Assert.Equal(2, total);
         Assert.Equal("Featured", items[0].Title);

@@ -18,4 +18,9 @@ public interface ICandidateService
         string? userId,
         int notificationId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Marks every unread employer message for the caller as read. Returns the number marked.</summary>
+    Task<ServiceResult<int>> MarkAllNotificationsReadAsync(
+        string? userId,
+        CancellationToken cancellationToken = default);
 }

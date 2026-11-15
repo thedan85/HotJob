@@ -28,6 +28,9 @@ public interface IJobPostingRepository
         string? skill,
         int? companyId,
         JobType? jobType,
+        int? categoryId,
+        decimal? salaryMin,
+        decimal? salaryMax,
         int page,
         int pageSize,
         CancellationToken cancellationToken = default);

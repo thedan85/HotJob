@@ -64,6 +64,40 @@
 
 .job-detail-company-link:hover { color: var(--hj-accent-text); }
 
+.job-detail-save { margin-bottom: 14px; }
+
+.job-detail-save-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 42px;
+    padding: 0 16px;
+    border: 1px solid var(--hj-border);
+    border-radius: 10px;
+    background: var(--hj-surface);
+    color: var(--hj-ink);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color var(--hj-transition), color var(--hj-transition), background var(--hj-transition);
+}
+
+.job-detail-save-btn:hover { border-color: var(--hj-primary); color: var(--hj-primary); }
+
+.job-detail-save-btn[aria-pressed="true"] {
+    border-color: var(--hj-primary);
+    background: var(--hj-surface-tint);
+    color: var(--hj-primary);
+}
+
+.job-detail-save-btn:focus-visible {
+    outline: 2px solid var(--hj-primary);
+    outline-offset: 2px;
+}
+
+.job-detail-save-btn:disabled { opacity: .6; cursor: wait; }
+
 @media (max-width: 980px) {
     .job-detail-side { top: auto; }
 }

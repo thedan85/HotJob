@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace hotjob.DTOs.Company;
 
 public sealed class CompanyListQuery
@@ -38,3 +40,12 @@ public sealed record CompanyReviewDto(
 public sealed record CompanyFilterOptionsDto(
     IReadOnlyList<string> Industries,
     IReadOnlyList<string> Locations);
+
+public sealed class CreateReviewRequest
+{
+    [Range(1, 5)]
+    public int RatingScore { get; set; } = 5;
+
+    [MaxLength(2000)]
+    public string? ReviewText { get; set; }
+}

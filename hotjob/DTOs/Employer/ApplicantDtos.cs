@@ -9,6 +9,8 @@ public sealed class ApplicantListQuery
     public int? JobPostingId { get; set; }
     public ApplicationStatus? Status { get; set; }
     public string? Search { get; set; }
+    /// <summary>Null or "recent" = newest first; "match" = highest stored match percentage first.</summary>
+    public string? Sort { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }
@@ -33,7 +35,8 @@ public sealed record ApplicantListItemResponse(
     int ResumeId,
     string ResumeTitle,
     ApplicationStatus CurrentStatus,
-    DateTime AppliedAt);
+    DateTime AppliedAt,
+    double? MatchPercentage = null);
 
 public sealed class ApplicantDetailResponse
 {
