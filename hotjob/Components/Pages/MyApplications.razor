@@ -264,10 +264,13 @@
                                     <h2>Messages</h2>
                                     <p class="workspace-sub">Updates from employers.</p>
                                 </div>
-                                @if (unreadCount > 0)
-                                {
-                                    <span class="workspace-badge is-pending">@unreadCount unread</span>
-                                }
+                                <div class="workspace-toolbar-actions">
+                                    @if (unreadCount > 0)
+                                    {
+                                        <span class="workspace-badge is-pending">@unreadCount unread</span>
+                                    }
+                                    <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/notifications">All messages</a>
+                                </div>
                             </div>
 
                             @if (notifications.Count == 0)
@@ -346,7 +349,7 @@
     private List<MyNotificationDto> notifications = new();
 
     private int totalCount => applications.Count;
-    private int unreadCount => notifications.Count(note => !note.IsRead);
+    private int unreadCount;
     private int InProgressCount => applications.Count(a => InProgressStatuses.Contains(a.Status));
     private int OfferCount => applications.Count(a => a.Status == ApplicationStatus.Offered);
     private bool HasFilters => !string.IsNullOrWhiteSpace(search) || !string.IsNullOrWhiteSpace(statusGroup);
@@ -441,10 +444,15 @@
             }
             applications = apps.Data.ToList();
 
-            var notes = await NotificationFeed.ListAsync(userId);
+            var notes = await NotificationFeed.ListAsync(userId, 1, 20);
             if (notes.Success && notes.Data is not null)
             {
-                notifications = notes.Data.ToList();
+                notifications = notes.Data.Items.ToList();
+                var unread = await NotificationFeed.UnreadCountAsync(userId);
+                if (unread.Success)
+                {
+                    unreadCount = unread.Data;
+                }
             }
             else
             {
@@ -475,6 +483,7 @@
                 if (index >= 0)
                 {
                     notifications[index] = result.Data;
+                    unreadCount = Math.Max(0, unreadCount - 1);
                 }
                 actionMessage = "Notification marked read.";
             }

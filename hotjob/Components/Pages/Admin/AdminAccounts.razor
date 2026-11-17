@@ -1,6 +1,7 @@
 @page "/admin/accounts"
 @rendermode InteractiveServer
 @using hotjob.DTOs.Admin
+@using hotjob.DTOs.Job
 @using hotjob.Services.Admin
 @inject IAdminService AdminService
 
@@ -27,13 +28,13 @@
             {
                 <div class="workspace-alert" role="alert">@errorMessage</div>
             }
-            else
+            else if (paged is not null)
             {
                 <section class="workspace-card" aria-labelledby="admin-accounts-heading">
                     <div class="workspace-section-head">
                         <div>
                             <h2 id="admin-accounts-heading">All accounts</h2>
-                            <p class="workspace-sub">@users.Count total</p>
+                            <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
                         </div>
                     </div>
                     <div style="overflow-x:auto">
@@ -50,7 +51,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var user in users)
+                                @foreach (var user in paged.Items)
                                 {
                                     <tr>
                                         <td>@user.Email</td>
@@ -73,6 +74,16 @@
                             </tbody>
                         </table>
                     </div>
+                    @if (paged.TotalPages > 1)
+                    {
+                        <nav class="jobs-pager" aria-label="Account pages">
+                            <button type="button" class="page-btn" disabled="@(paged.Page <= 1)"
+                                    @onclick="() => LoadAsyncAsync(paged.Page - 1)">← Prev</button>
+                            <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount accounts</span>
+                            <button type="button" class="page-btn" disabled="@(paged.Page >= paged.TotalPages)"
+                                    @onclick="() => LoadAsyncAsync(paged.Page + 1)">Next →</button>
+                        </nav>
+                    }
                 </section>
             }
         </div>
@@ -83,27 +94,33 @@
 </AuthorizeView>
 
 @code {
-    private IReadOnlyList<AdminUserListItemDto> users = Array.Empty<AdminUserListItemDto>();
+    private const int PageSize = 20;
+
+    private PagedResponse<AdminUserListItemDto>? paged;
     private bool isLoading = true;
     private string? errorMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadAsync();
+        await LoadAsyncAsync(1);
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsyncAsync(int page)
     {
         try
         {
-            var result = await AdminService.GetUsersAsync();
-            if (!result.Success)
+            var result = await AdminService.GetUsersAsync(page, PageSize);
+            if (!result.Success || result.Data is null)
             {
                 errorMessage = string.Join("; ", result.Errors);
                 return;
             }
 
-            users = result.Data ?? Array.Empty<AdminUserListItemDto>();
+            paged = result.Data;
+            if (paged.TotalCount > 0 && page > paged.TotalPages)
+            {
+                await LoadAsyncAsync(paged.TotalPages);
+            }
         }
         catch (Exception ex)
         {
@@ -126,7 +143,7 @@
                 return;
             }
 
-            await LoadAsync();
+            await LoadAsyncAsync(paged?.Page ?? 1);
         }
         catch (Exception ex)
         {

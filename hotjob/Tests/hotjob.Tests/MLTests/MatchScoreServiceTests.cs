@@ -210,6 +210,36 @@ public sealed class MatchScoreServiceTests
         Assert.Equal(clock.GetUtcNow().UtcDateTime, after.Data.CalculatedAt);
     }
 
+    [Fact]
+    public async Task StoredScores_RefreshStaleRowsForListBadges()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        using var temp = new TempModelDirectory();
+        var clock = new FakeTimeProvider(Start);
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "stored@example.com", ("C#", 2));
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var csharp = await MatchTestData.GetOrCreateSkillAsync(fx, "C#");
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, [(csharp.Id, 10)], experienceRequired: 1);
+        fx.Db.MatchScores.Add(new MatchScore
+        {
+            JobPostingId = job.Id,
+            ResumeId = resume.Id,
+            MatchPercentage = 1,
+            AlgorithmUsed = "old-rule",
+            CalculatedAt = Start.UtcDateTime.AddDays(-1)
+        });
+        await fx.Db.SaveChangesAsync();
+
+        var result = await CreateService(fx, temp, clock)
+            .GetStoredForJobsAsync(candidate.UserId, [job.Id]);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(100, result.Data![job.Id], 6);
+        var stored = await fx.Db.MatchScores.SingleAsync();
+        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, stored.AlgorithmUsed);
+        Assert.Equal(100, stored.MatchPercentage, 6);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -1,9 +1,12 @@
 @page "/admin/companies"
 @rendermode InteractiveServer
+@using System.Security.Claims
 @using hotjob.DTOs.Admin
+@using hotjob.DTOs.Job
 @using hotjob.Models.Users
 @using hotjob.Services.Admin
 @inject IAdminService AdminService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Admin companies | HotJob</PageTitle>
 
@@ -28,13 +31,13 @@
             {
                 <div class="workspace-alert" role="alert">@errorMessage</div>
             }
-            else
+            else if (paged is not null)
             {
                 <section class="workspace-card" aria-labelledby="admin-companies-heading">
                     <div class="workspace-section-head">
                         <div>
                             <h2 id="admin-companies-heading">All companies</h2>
-                            <p class="workspace-sub">@companies.Count total</p>
+                            <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
                         </div>
                     </div>
                     <div style="overflow-x:auto">
@@ -51,7 +54,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var company in companies)
+                                @foreach (var company in paged.Items)
                                 {
                                     <tr>
                                         <td>@company.CompanyName</td>
@@ -70,15 +73,51 @@
                                                 }
                                                 @if (company.Status != CompanyStatus.Rejected)
                                                 {
-                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => RejectCompany(company.Id)">Reject</button>
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => BeginReject(company.Id)">Reject</button>
                                                 }
                                             </div>
                                         </td>
                                     </tr>
+                                    @if (rejectingId == company.Id)
+                                    {
+                                        <tr>
+                                            <td colspan="7">
+                                                <div class="admin-reject-form">
+                                                    <label class="workspace-field">
+                                                        <span>Rejection reason (required)</span>
+                                                        <textarea @bind="rejectionReason" maxlength="1000" rows="2"
+                                                                  placeholder="Tell the employer what to fix before resubmitting."></textarea>
+                                                    </label>
+                                                    @if (rejectError is not null)
+                                                    {
+                                                        <div class="workspace-alert" role="alert">@rejectError</div>
+                                                    }
+                                                    <div class="workspace-toolbar-actions">
+                                                        <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button"
+                                                                disabled="@rejectBusy" @onclick="() => RejectCompanyAsync(company.Id)">
+                                                            @(rejectBusy ? "Rejecting…" : "Confirm rejection")
+                                                        </button>
+                                                        <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
+                                                                disabled="@rejectBusy" @onclick="CancelReject">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
                                 }
                             </tbody>
                         </table>
                     </div>
+                    @if (paged.TotalPages > 1)
+                    {
+                        <nav class="jobs-pager" aria-label="Company pages">
+                            <button type="button" class="page-btn" disabled="@(paged.Page <= 1)"
+                                    @onclick="() => LoadAsync(paged.Page - 1)">← Prev</button>
+                            <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount companies</span>
+                            <button type="button" class="page-btn" disabled="@(paged.Page >= paged.TotalPages)"
+                                    @onclick="() => LoadAsync(paged.Page + 1)">Next →</button>
+                        </nav>
+                    }
                 </section>
             }
         </div>
@@ -89,27 +128,39 @@
 </AuthorizeView>
 
 @code {
-    private IReadOnlyList<AdminCompanyListItemDto> companies = Array.Empty<AdminCompanyListItemDto>();
+    private const int PageSize = 20;
+
+    private PagedResponse<AdminCompanyListItemDto>? paged;
+    private int page = 1;
     private bool isLoading = true;
     private string? errorMessage;
+    private int? rejectingId;
+    private string? rejectionReason;
+    private string? rejectError;
+    private bool rejectBusy;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(int? requestedPage = null)
     {
+        page = requestedPage ?? page;
         try
         {
-            var result = await AdminService.GetCompaniesAsync();
-            if (!result.Success)
+            var result = await AdminService.GetCompaniesAsync(page, PageSize);
+            if (!result.Success || result.Data is null)
             {
                 errorMessage = string.Join("; ", result.Errors);
                 return;
             }
 
-            companies = result.Data ?? Array.Empty<AdminCompanyListItemDto>();
+            paged = result.Data;
+            if (paged.TotalCount > 0 && page > paged.TotalPages)
+            {
+                await LoadAsync(paged.TotalPages);
+            }
         }
         catch (Exception ex)
         {
@@ -125,7 +176,8 @@
     {
         try
         {
-            var result = await AdminService.UpdateCompanyStatusAsync(companyId, CompanyStatus.Approved, null);
+            var result = await AdminService.UpdateCompanyStatusAsync(
+                companyId, CompanyStatus.Approved, null, await GetUserIdAsync());
             if (!result.Success)
             {
                 errorMessage = string.Join("; ", result.Errors);
@@ -140,23 +192,58 @@
         }
     }
 
-    private async Task RejectCompany(int companyId)
+    private void BeginReject(int companyId)
     {
+        rejectingId = companyId;
+        rejectionReason = null;
+        rejectError = null;
+    }
+
+    private void CancelReject()
+    {
+        rejectingId = null;
+        rejectionReason = null;
+        rejectError = null;
+    }
+
+    private async Task RejectCompanyAsync(int companyId)
+    {
+        var reason = rejectionReason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            rejectError = "Enter a rejection reason.";
+            return;
+        }
+
+        rejectBusy = true;
+        rejectError = null;
         try
         {
-            var result = await AdminService.UpdateCompanyStatusAsync(companyId, CompanyStatus.Rejected, "Rejected by administrator.");
+            var result = await AdminService.UpdateCompanyStatusAsync(
+                companyId, CompanyStatus.Rejected, reason, await GetUserIdAsync());
             if (!result.Success)
             {
-                errorMessage = string.Join("; ", result.Errors);
+                rejectError = string.Join("; ", result.Errors);
                 return;
             }
 
+            CancelReject();
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            rejectError = ex.Message;
         }
+        finally
+        {
+            rejectBusy = false;
+        }
+    }
+
+    private async Task<string?> GetUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
     }
 
     private static string StatusClass(CompanyStatus status) => status switch

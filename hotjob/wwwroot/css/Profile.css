@@ -96,6 +96,7 @@
     height: 88px;
     margin: 0 auto 14px;
     place-items: center;
+    overflow: hidden;
     border: 3px solid var(--hj-surface);
     border-radius: 50%;
     background: var(--hj-gradient-brand);
@@ -106,6 +107,12 @@
     font-weight: 400;
     letter-spacing: 0;
     line-height: 1;
+}
+
+.profile-avatar-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .profile-avatar-edit {
@@ -360,6 +367,24 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
+}
+
+.preference-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    color: var(--hj-ink-soft);
+    font-size: 13px;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.preference-check input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--hj-primary);
 }
 
 .profile-save-message {

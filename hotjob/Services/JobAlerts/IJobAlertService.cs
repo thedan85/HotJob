@@ -15,9 +15,11 @@ public interface IJobAlertService
         int jobPostingId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Newest-first alerts for the caller.</summary>
+    /// <summary>Newest-first page of alerts for the caller, plus the unread count across all pages.</summary>
     Task<ServiceResult<JobAlertsPageDto>> GetAlertsAsync(
         string? userId,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken = default);
 
     /// <summary>Marks only the caller's own job-alert notifications read.</summary>

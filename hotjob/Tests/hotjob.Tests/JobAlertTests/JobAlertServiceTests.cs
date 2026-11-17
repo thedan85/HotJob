@@ -245,7 +245,7 @@ public sealed class JobAlertServiceTests
             });
         await fx.Db.SaveChangesAsync();
 
-        var result = await CreateService(fx, temp, clock).GetAlertsAsync(me.Candidate.UserId);
+        var result = await CreateService(fx, temp, clock).GetAlertsAsync(me.Candidate.UserId, 1, 20);
 
         Assert.True(result.Success, string.Join("; ", result.Errors));
         var feed = result.Data!;
@@ -255,6 +255,38 @@ public sealed class JobAlertServiceTests
         Assert.Equal(2, feed.UnreadCount);
         Assert.DoesNotContain(feed.Alerts, alert => alert.Title == "Employer message");
         Assert.DoesNotContain(feed.Alerts, alert => alert.Title == "Other candidate alert");
+    }
+
+    [Fact]
+    public async Task GetAlerts_PagesWithoutOverlap_AndCountsAllUnread()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        using var temp = new TempModelDirectory();
+        var clock = new FakeTimeProvider(Start);
+        var me = await MatchTestData.CreateCandidateAsync(fx, "paged-alerts@example.com");
+        for (var index = 0; index < 3; index++)
+        {
+            fx.Db.Notifications.Add(new Notification
+            {
+                UserId = me.Candidate.UserId,
+                Title = $"Alert {index}",
+                Kind = NotificationKinds.JobAlert,
+                IsRead = index > 0,
+                CreatedAt = Start.UtcDateTime.AddMinutes(index)
+            });
+        }
+        await fx.Db.SaveChangesAsync();
+
+        var service = CreateService(fx, temp, clock);
+        var first = await service.GetAlertsAsync(me.Candidate.UserId, 1, 2);
+        var second = await service.GetAlertsAsync(me.Candidate.UserId, 2, 2);
+
+        Assert.True(first.Success, string.Join("; ", first.Errors));
+        Assert.Equal(3, first.Data!.TotalCount);
+        Assert.Equal(2, first.Data.TotalPages);
+        Assert.Equal(1, first.Data.UnreadCount);
+        var secondAlert = Assert.Single(second.Data!.Alerts);
+        Assert.DoesNotContain(first.Data.Alerts, alert => alert.Id == secondAlert.Id);
     }
 
     [Fact]
@@ -311,7 +343,7 @@ public sealed class JobAlertServiceTests
         });
         await fx.Db.SaveChangesAsync();
 
-        var result = await CreateService(fx, temp, clock).GetAlertsAsync(candidate.Candidate.UserId);
+        var result = await CreateService(fx, temp, clock).GetAlertsAsync(candidate.Candidate.UserId, 1, 20);
 
         Assert.True(result.Success, string.Join("; ", result.Errors));
         var alert = Assert.Single(result.Data!.Alerts);
@@ -365,10 +397,10 @@ public sealed class JobAlertServiceTests
         await fx.Db.SaveChangesAsync();
 
         var result = await new hotjob.Services.Candidate.CandidateService(fx.Db)
-            .GetMyNotificationsAsync(candidate.Candidate.UserId);
+            .GetMyNotificationsAsync(candidate.Candidate.UserId, 1, 20);
 
         Assert.True(result.Success, string.Join("; ", result.Errors));
-        var message = Assert.Single(result.Data!);
+        var message = Assert.Single(result.Data!.Items);
         Assert.Equal("Employer message", message.Title);
     }
 

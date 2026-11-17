@@ -11,6 +11,8 @@ public sealed class ApplicantListQuery
     public string? Search { get; set; }
     /// <summary>Null or "recent" = newest first; "match" = highest stored match percentage first.</summary>
     public string? Sort { get; set; }
+    /// <summary>Only applications whose stored match percentage is at least this value (0–100).</summary>
+    public double? MinMatch { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }

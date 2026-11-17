@@ -52,6 +52,21 @@ public sealed class ProfileServiceTests
     }
 
     [Fact]
+    public async Task GetProfile_Candidate_ReturnsDiscoverability()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var register = await RegisterCandidateAsync(fx);
+        var candidate = await fx.Db.Candidates.SingleAsync(row => row.UserId == register.Data!.UserId);
+        candidate.IsDiscoverable = true;
+        await fx.Db.SaveChangesAsync();
+
+        var result = await fx.Service.GetProfileAsync(register.Data!.UserId);
+
+        Assert.True(result.Success);
+        Assert.True(result.Data!.Candidate!.IsDiscoverable);
+    }
+
+    [Fact]
     public async Task Update_Email_Duplicate_ReturnsConflict()
     {
         await using var fx = await TestFixture.CreateAsync();

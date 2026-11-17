@@ -7,12 +7,14 @@
 @using hotjob.DTOs.Employer
 @using hotjob.DTOs.Job
 @using hotjob.Models.Application
+@using hotjob.Services.Common
 @using hotjob.Services.Employer
 @using hotjob.Services.Job
 @inject IApplicantService ApplicantService
 @inject IInterviewService InterviewService
 @inject INotificationService NotificationService
 @inject IJobService JobService
+@inject CircuitDbGate CircuitDbGate
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuthSession AuthSession
 
@@ -90,6 +92,16 @@
                         <InputSelect @bind-Value="query.Sort">
                             <option value="">Newest first</option>
                             <option value="match">Best match</option>
+                        </InputSelect>
+                    </label>
+                    <label class="workspace-field">
+                        <span>Min match</span>
+                        <InputSelect @bind-Value="minMatchFilter">
+                            <option value="">Any match</option>
+                            <option value="30">30%+</option>
+                            <option value="50">50%+</option>
+                            <option value="70">70%+</option>
+                            <option value="80">80%+</option>
                         </InputSelect>
                     </label>
                     <label class="workspace-field workspace-field-grow">
@@ -382,9 +394,44 @@
                                                 @if (iv.Status == InterviewStatus.Scheduled)
                                                 {
                                                     <div class="ei-interview-actions">
+                                                        <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => StartEditInterview(iv)">Edit</button>
                                                         <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => CompleteAsync(iv.Id)">Mark completed</button>
                                                         <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => CancelAsync(iv.Id)">Cancel</button>
                                                     </div>
+                                                }
+                                                @if (editingInterviewId == iv.Id)
+                                                {
+                                                    <EditForm Model="editInterviewForm" OnValidSubmit="SaveInterviewAsync">
+                                                        <DataAnnotationsValidator />
+                                                        <div class="workspace-form-grid">
+                                                            <label class="workspace-field workspace-wide">
+                                                                <span>Date &amp; time (UTC, future)</span>
+                                                                <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="editInterviewForm.InterviewDate" />
+                                                            </label>
+                                                            <label class="workspace-field workspace-wide">
+                                                                <span>Type</span>
+                                                                <InputSelect @bind-Value="editInterviewForm.InterviewType">
+                                                                    <option value="">—</option>
+                                                                    @foreach (var t in Enum.GetValues<InterviewType>())
+                                                                    {
+                                                                        <option value="@t">@t</option>
+                                                                    }
+                                                                </InputSelect>
+                                                            </label>
+                                                            <label class="workspace-field workspace-wide">
+                                                                <span>Location or link</span>
+                                                                <InputText @bind-Value="editInterviewForm.LocationOrLink" placeholder="Room, address, or meeting URL" />
+                                                            </label>
+                                                            <label class="workspace-field workspace-wide">
+                                                                <span>Notes</span>
+                                                                <InputTextArea @bind-Value="editInterviewForm.Notes" rows="2" />
+                                                            </label>
+                                                        </div>
+                                                        <div class="workspace-form-actions">
+                                                            <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="submit" disabled="@isActing">Save changes</button>
+                                                            <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" @onclick="StopEditInterview">Cancel</button>
+                                                        </div>
+                                                    </EditForm>
                                                 }
                                             </article>
                                         }
@@ -475,6 +522,7 @@
     private int totalCount;
     private int totalPages;
     private ApplicationStatus? statusFilter;
+    private double? minMatchFilter;
     private readonly ApplicantListQuery query = new() { PageSize = PageSize };
     private List<ApplicantListItemResponse> applicants = new();
     private List<JobListItemResponse> jobs = new();
@@ -482,6 +530,8 @@
     private List<InterviewResponse> interviews = new();
     private readonly UpdateStatusRequest statusForm = new() { Status = ApplicationStatus.Viewed };
     private readonly CreateInterviewRequest interviewForm = new() { InterviewDate = DateTime.UtcNow.AddDays(1) };
+    private UpdateInterviewRequest editInterviewForm = new();
+    private int? editingInterviewId;
     private readonly SendNotificationRequest notifyForm = new();
 
     [SupplyParameterFromQuery(Name = "jobId")]
@@ -524,7 +574,8 @@
 
     private async Task LoadJobsAsync()
     {
-        var result = await JobService.ListAsync(await GetUserIdAsync() ?? string.Empty, null, null, 1, 100);
+        var userId = await GetUserIdAsync() ?? string.Empty;
+        var result = await CircuitDbGate.RunAsync(() => JobService.ListAsync(userId, null, null, 1, 100));
         jobs = result.Success && result.Data is not null
             ? result.Data.Items.ToList()
             : new List<JobListItemResponse>();
@@ -545,7 +596,9 @@
             query.Page = page;
             query.PageSize = PageSize;
             query.Status = statusFilter;
-            var result = await ApplicantService.ListAsync(await GetUserIdAsync(), query);
+            query.MinMatch = minMatchFilter;
+            var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(() => ApplicantService.ListAsync(userId, query));
             if (!result.Success || result.Data is null)
             {
                 loadError = result.Errors.FirstOrDefault() ?? "We could not load applicants.";
@@ -577,7 +630,7 @@
         await LoadAsync();
     }
 
-    private bool HasFilters => query.JobPostingId.HasValue || statusFilter.HasValue || !string.IsNullOrWhiteSpace(query.Search) || !string.IsNullOrWhiteSpace(query.Sort);
+    private bool HasFilters => query.JobPostingId.HasValue || statusFilter.HasValue || minMatchFilter.HasValue || !string.IsNullOrWhiteSpace(query.Search) || !string.IsNullOrWhiteSpace(query.Sort);
 
     private async Task ClearFiltersAsync()
     {
@@ -585,6 +638,7 @@
         query.Search = null;
         query.Sort = null;
         statusFilter = null;
+        minMatchFilter = null;
         page = 1;
         await LoadAsync();
     }
@@ -593,7 +647,7 @@
     {
         actionMessage = actionError = null;
         var userId = await GetUserIdAsync();
-        var detail = await ApplicantService.GetDetailAsync(userId, applicationId);
+        var detail = await CircuitDbGate.RunAsync(() => ApplicantService.GetDetailAsync(userId, applicationId));
         if (!detail.Success || detail.Data is null)
         {
             actionError = detail.Errors.FirstOrDefault() ?? "Could not load this application.";
@@ -602,7 +656,7 @@
         selected = detail.Data;
         statusForm.Status = NextStatusFor(selected.CurrentStatus);
         statusForm.Notes = null;
-        var list = await InterviewService.ListAsync(userId, applicationId);
+        var list = await CircuitDbGate.RunAsync(() => InterviewService.ListAsync(userId, applicationId));
         interviews = list.Success && list.Data is not null ? list.Data.ToList() : new();
     }
 
@@ -611,7 +665,8 @@
         if (selected is null) return;
         actionMessage = actionError = null;
         isActing = true;
-        var result = await ApplicantService.UpdateStatusAsync(await GetUserIdAsync(), selected.ApplicationId, statusForm);
+        var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(() => ApplicantService.UpdateStatusAsync(userId, selected.ApplicationId, statusForm));
         isActing = false;
         if (result.Success && result.Data is not null)
         {
@@ -632,7 +687,8 @@
         if (selected is null) return;
         actionMessage = actionError = null;
         isActing = true;
-        var result = await InterviewService.CreateAsync(await GetUserIdAsync(), selected.ApplicationId, interviewForm);
+        var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(() => InterviewService.CreateAsync(userId, selected.ApplicationId, interviewForm));
         isActing = false;
         if (result.Success && result.Data is not null)
         {
@@ -649,7 +705,8 @@
     private async Task CompleteAsync(int interviewId)
     {
         actionMessage = actionError = null;
-        var result = await InterviewService.UpdateAsync(await GetUserIdAsync(), interviewId, new UpdateInterviewRequest { Status = InterviewStatus.Completed });
+        var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(() => InterviewService.UpdateAsync(userId, interviewId, new UpdateInterviewRequest { Status = InterviewStatus.Completed }));
         if (result.Success && result.Data is not null)
         {
             var index = interviews.FindIndex(i => i.Id == interviewId);
@@ -665,7 +722,8 @@
     private async Task CancelAsync(int interviewId)
     {
         actionMessage = actionError = null;
-        var result = await InterviewService.CancelAsync(await GetUserIdAsync(), interviewId);
+        var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(() => InterviewService.CancelAsync(userId, interviewId));
         if (result.Success && result.Data is not null)
         {
             var index = interviews.FindIndex(i => i.Id == interviewId);
@@ -678,12 +736,54 @@
         }
     }
 
+    private void StartEditInterview(InterviewResponse interview)
+    {
+        actionMessage = actionError = null;
+        editingInterviewId = interview.Id;
+        editInterviewForm = new UpdateInterviewRequest
+        {
+            InterviewDate = DateTime.SpecifyKind(interview.InterviewDate, DateTimeKind.Utc).ToLocalTime(),
+            LocationOrLink = interview.LocationOrLink,
+            InterviewType = interview.InterviewType,
+            Notes = interview.Notes
+        };
+    }
+
+    private void StopEditInterview()
+    {
+        editingInterviewId = null;
+        editInterviewForm = new UpdateInterviewRequest();
+    }
+
+    private async Task SaveInterviewAsync()
+    {
+        if (editingInterviewId is not { } interviewId) return;
+        actionMessage = actionError = null;
+        isActing = true;
+        var userId = await GetUserIdAsync();
+        var result = await CircuitDbGate.RunAsync(
+            () => InterviewService.UpdateAsync(userId, interviewId, editInterviewForm));
+        isActing = false;
+        if (result.Success && result.Data is not null)
+        {
+            var index = interviews.FindIndex(i => i.Id == interviewId);
+            if (index >= 0) interviews[index] = result.Data;
+            StopEditInterview();
+            actionMessage = "Interview updated.";
+        }
+        else
+        {
+            actionError = result.Errors.FirstOrDefault() ?? "Could not update this interview.";
+        }
+    }
+
     private async Task NotifyAsync()
     {
         if (selected is null) return;
         actionMessage = actionError = null;
         isActing = true;
-        var result = await NotificationService.NotifyAsync(await GetUserIdAsync(), selected.ApplicationId, notifyForm);
+        var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(() => NotificationService.NotifyAsync(userId, selected.ApplicationId, notifyForm));
         isActing = false;
         if (result.Success)
         {

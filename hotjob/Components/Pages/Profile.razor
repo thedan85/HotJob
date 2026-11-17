@@ -9,12 +9,14 @@
 @using hotjob.Services.Common
 @using hotjob.Services.Authentication
 @using hotjob.Services.Candidate
+@using hotjob.Services.Employer
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject HotJobAuthStateProvider AuthStateProvider
 @inject AuthSession AuthSession
 @inject IAccountService AccountService
 @inject IResumeService ResumeService
+@inject ICandidateSearchService CandidateSearchService
 @inject CircuitDbGate CircuitDbGate
 
 <PageTitle>Your profile | HotJob</PageTitle>
@@ -47,8 +49,17 @@ else
         <aside class="profile-sidebar">
             <div class="profile-card">
                 <div class="profile-summary">
-                    <div class="profile-avatar-large">@Initials</div>
-                    <button class="profile-avatar-edit" type="button" title="Change photo" aria-label="Change photo">+</button>
+                    <div class="profile-avatar-large">
+                        @if (SafeUrl(profileForm.AvatarUrl) is { } avatarUrl)
+                        {
+                            <img src="@avatarUrl" alt="Profile photo" />
+                        }
+                        else
+                        {
+                            @Initials
+                        }
+                    </div>
+                    <a class="profile-avatar-edit" href="#avatar-url" title="Set avatar URL" aria-label="Set avatar URL">+</a>
                     <h2>@DisplayName</h2>
                     <p>@(string.IsNullOrWhiteSpace(profileForm.Position) ? "Candidate" : profileForm.Position)</p>
                     <span class="profile-status @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "profile-status-empty" : string.Empty)"><span></span> @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "Add your job seeking status" : profileForm.JobSeekingStatus)</span>
@@ -71,9 +82,21 @@ else
                     <div class="profile-form-grid">
                         <label>Full name <InputText @bind-Value="profileForm.FullName" /></label>
                         <label>Email <InputText @bind-Value="profileForm.Email" type="email" /></label>
+                        <label>Date of birth <InputDate Type="InputDateType.Date" @bind-Value="profileForm.DateOfBirth" /></label>
+                        <label>Gender
+                            <InputSelect @bind-Value="profileForm.Gender">
+                                <option value="">Not specified</option>
+                                @foreach (var gender in Enum.GetValues<Gender>())
+                                {
+                                    <option value="@gender">@gender</option>
+                                }
+                            </InputSelect>
+                        </label>
                         <label>Location <InputText @bind-Value="profileForm.Address" placeholder="City, country" /></label>
                         <label>Position <InputText @bind-Value="profileForm.Position" placeholder="e.g. Senior Marketing Specialist" /></label>
-                        <label class="profile-field-wide">LinkedIn URL <InputText @bind-Value="profileForm.LinkedInUrl" placeholder="https://linkedin.com/in/your-name" /></label>
+                        <label>GitHub URL <InputText @bind-Value="profileForm.GithubUrl" placeholder="https://github.com/your-name" /></label>
+                        <label>LinkedIn URL <InputText @bind-Value="profileForm.LinkedInUrl" placeholder="https://linkedin.com/in/your-name" /></label>
+                        <label class="profile-field-wide">Avatar URL <InputText id="avatar-url" @bind-Value="profileForm.AvatarUrl" placeholder="https://example.com/avatar.jpg" /></label>
                         <label class="profile-field-wide">About you <InputTextArea @bind-Value="profileForm.Summary" placeholder="Tell employers what you do best" /></label>
                     </div>
                 </EditForm>
@@ -377,6 +400,10 @@ else
                         <label>Preferred work model <InputText @bind-Value="profileForm.PreferredWorkModel" placeholder="e.g. Hybrid / Remote" /></label>
                         <label>Preferred location <InputText @bind-Value="profileForm.PreferredLocation" placeholder="e.g. Ho Chi Minh City" /></label>
                     </div>
+                    <label class="preference-check">
+                        <InputCheckbox @bind-Value="profileForm.IsDiscoverable" />
+                        <span>Let approved employers find my profile in candidate search.</span>
+                    </label>
                 </EditForm>
             </section>
         </main>
@@ -492,13 +519,18 @@ else
             {
                 FullName = candidate.FullName,
                 Email = result.Data.Email,
+                DateOfBirth = candidate.DateOfBirth,
+                Gender = candidate.Gender,
                 Address = candidate.Address,
+                AvatarUrl = candidate.AvatarUrl,
+                GithubUrl = candidate.GithubUrl,
                 LinkedInUrl = candidate.LinkedInUrl,
                 Position = candidate.Position,
                 Summary = candidate.Summary,
                 JobSeekingStatus = candidate.JobSeekingStatus,
                 PreferredWorkModel = candidate.PreferredWorkModel,
-                PreferredLocation = candidate.PreferredLocation
+                PreferredLocation = candidate.PreferredLocation,
+                IsDiscoverable = candidate.IsDiscoverable
             };
 
             // Sequential awaits: ResumeService and AccountService share the circuit's DbContext.
@@ -545,7 +577,11 @@ else
         {
             FullName = profileForm.FullName,
             Email = profileForm.Email,
+            DateOfBirth = profileForm.DateOfBirth,
+            Gender = profileForm.Gender,
             Address = profileForm.Address,
+            AvatarUrl = profileForm.AvatarUrl,
+            GithubUrl = profileForm.GithubUrl,
             LinkedInUrl = profileForm.LinkedInUrl,
             Position = profileForm.Position,
             Summary = profileForm.Summary,
@@ -556,16 +592,28 @@ else
         isSaving = false;
         if (result.Success && result.Data?.Candidate is not null)
         {
+            var discoverResult = await CandidateSearchService.SetDiscoverableAsync(userId, profileForm.IsDiscoverable);
             AuthStateProvider.RefreshIdentity(result.Data.Candidate.FullName, result.Data.Email);
             profileForm.FullName = result.Data.Candidate.FullName;
             profileForm.Email = result.Data.Email;
+            profileForm.DateOfBirth = result.Data.Candidate.DateOfBirth;
+            profileForm.Gender = result.Data.Candidate.Gender;
             profileForm.Address = result.Data.Candidate.Address;
+            profileForm.AvatarUrl = result.Data.Candidate.AvatarUrl;
+            profileForm.GithubUrl = result.Data.Candidate.GithubUrl;
             profileForm.LinkedInUrl = result.Data.Candidate.LinkedInUrl;
             profileForm.Position = result.Data.Candidate.Position;
             profileForm.Summary = result.Data.Candidate.Summary;
             profileForm.JobSeekingStatus = result.Data.Candidate.JobSeekingStatus;
             profileForm.PreferredWorkModel = result.Data.Candidate.PreferredWorkModel;
             profileForm.PreferredLocation = result.Data.Candidate.PreferredLocation;
+            profileForm.IsDiscoverable = discoverResult.Success ? discoverResult.Data : profileForm.IsDiscoverable;
+            if (!discoverResult.Success)
+            {
+                saveMessage = "Profile saved, but candidate-search visibility could not be updated.";
+                saveIsError = true;
+                return;
+            }
         }
         saveMessage = result.Success ? "Profile changes saved successfully." : result.Errors.FirstOrDefault() ?? "Unable to save your changes.";
         saveIsError = !result.Success;
@@ -1006,6 +1054,15 @@ else
     private string SkillName(int skillId) =>
         skillOptions.FirstOrDefault(option => option.Id == skillId)?.Name ?? $"Skill #{skillId}";
 
+    private static string? SafeUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            ? value
+            : null;
+    }
+
     private static string ResumeFileType(string? fileUrl)
     {
         if (string.IsNullOrWhiteSpace(fileUrl)) return "CV";
@@ -1017,12 +1074,17 @@ else
     {
         public string FullName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public DateOnly? DateOfBirth { get; set; }
+        public Gender? Gender { get; set; }
         public string? Address { get; set; }
+        public string? AvatarUrl { get; set; }
+        public string? GithubUrl { get; set; }
         public string? LinkedInUrl { get; set; }
         public string? Position { get; set; }
         public string? Summary { get; set; }
         public string? JobSeekingStatus { get; set; }
         public string? PreferredWorkModel { get; set; }
         public string? PreferredLocation { get; set; }
+        public bool IsDiscoverable { get; set; }
     }
 }

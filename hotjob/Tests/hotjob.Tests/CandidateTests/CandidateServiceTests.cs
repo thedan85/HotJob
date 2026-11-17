@@ -168,13 +168,41 @@ public sealed class CandidateServiceTests
         await fx.Db.SaveChangesAsync();
         Detach(fx);
 
-        var result = await Service(fx).GetMyNotificationsAsync(me);
+        var result = await Service(fx).GetMyNotificationsAsync(me, 1, 20);
 
         Assert.True(result.Success, string.Join("; ", result.Errors));
-        Assert.Equal(2, result.Data!.Count);
-        Assert.Equal("Newer", result.Data[0].Title);
-        Assert.Equal("Older", result.Data[1].Title);
-        Assert.DoesNotContain(result.Data, n => n.Title == "Not mine");
+        Assert.Equal(2, result.Data!.TotalCount);
+        Assert.Equal("Newer", result.Data.Items[0].Title);
+        Assert.Equal("Older", result.Data.Items[1].Title);
+        Assert.DoesNotContain(result.Data.Items, n => n.Title == "Not mine");
+    }
+
+    [Fact]
+    public async Task GetMyNotifications_PagesWithoutOverlap()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (me, _) = await SeedCandidateAsync(fx, "paged@example.com");
+        for (var index = 0; index < 3; index++)
+        {
+            fx.Db.Notifications.Add(new Notification
+            {
+                UserId = me,
+                Title = $"Note {index}",
+                CreatedAt = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc).AddMinutes(index)
+            });
+        }
+        await fx.Db.SaveChangesAsync();
+        Detach(fx);
+
+        var first = await Service(fx).GetMyNotificationsAsync(me, 1, 2);
+        var second = await Service(fx).GetMyNotificationsAsync(me, 2, 2);
+
+        Assert.True(first.Success, string.Join("; ", first.Errors));
+        Assert.Equal(3, first.Data!.TotalCount);
+        Assert.Equal(2, first.Data.Items.Count);
+        Assert.Equal(2, first.Data.TotalPages);
+        Assert.Single(second.Data!.Items);
+        Assert.DoesNotContain(second.Data.Items, note => first.Data.Items.Any(other => other.Id == note.Id));
     }
 
     [Fact]
@@ -182,7 +210,7 @@ public sealed class CandidateServiceTests
     {
         await using var fx = await TestFixture.CreateAsync();
 
-        var result = await Service(fx).GetMyNotificationsAsync(null);
+        var result = await Service(fx).GetMyNotificationsAsync(null, 1, 20);
 
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.Unauthorized, result.ErrorType);

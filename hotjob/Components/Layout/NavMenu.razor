@@ -147,10 +147,8 @@
             return;
         }
 
-        var result = await NotificationFeed.ListAsync(userId);
-        unreadCount = result.Success && result.Data is not null
-            ? result.Data.Count(note => !note.IsRead)
-            : 0;
+        var result = await NotificationFeed.UnreadCountAsync(userId);
+        unreadCount = result.Success ? result.Data : 0;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

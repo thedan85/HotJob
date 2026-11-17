@@ -26,6 +26,35 @@
     object-fit: cover;
 }
 
+.company-rating {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 0 0 10px;
+    color: var(--hj-warning);
+    font-family: var(--hj-font-mono);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.company-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.company-meta .meta-pill {
+    padding: 3px 9px;
+}
+
+.company-rating-count {
+    color: var(--hj-muted);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
 .filter-options {
     max-height: 220px;
     overflow: auto;

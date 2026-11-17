@@ -139,6 +139,8 @@ public sealed class JobAlertService(
 
     public async Task<ServiceResult<JobAlertsPageDto>> GetAlertsAsync(
         string? userId,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(userId))
@@ -156,23 +158,36 @@ public sealed class JobAlertService(
                 ServiceErrorType.NotFound, "Candidate profile not found.");
         }
 
-        var alerts = await dbContext.Notifications
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = dbContext.Notifications
             .AsNoTracking()
             .Where(notification => notification.UserId == userId
-                && notification.Kind == NotificationKinds.JobAlert)
-            .OrderByDescending(notification => notification.CreatedAt)
-            .ThenByDescending(notification => notification.Id)
-            .Select(notification => new JobAlertDto(
-                notification.Id,
-                notification.RelatedJobPostingId,
-                notification.Title,
-                notification.Content,
-                notification.IsRead,
-                notification.CreatedAt))
-            .ToListAsync(cancellationToken);
+                && notification.Kind == NotificationKinds.JobAlert);
+
+        var total = await query.CountAsync(cancellationToken);
+        var unread = await query.CountAsync(notification => !notification.IsRead, cancellationToken);
+
+        var offset = (long)(page - 1) * pageSize;
+        IReadOnlyList<JobAlertDto> alerts = offset >= total
+            ? Array.Empty<JobAlertDto>()
+            : await query
+                .OrderByDescending(notification => notification.CreatedAt)
+                .ThenByDescending(notification => notification.Id)
+                .Skip((int)offset)
+                .Take(pageSize)
+                .Select(notification => new JobAlertDto(
+                    notification.Id,
+                    notification.RelatedJobPostingId,
+                    notification.Title,
+                    notification.Content,
+                    notification.IsRead,
+                    notification.CreatedAt))
+                .ToListAsync(cancellationToken);
 
         return ServiceResult<JobAlertsPageDto>.Ok(
-            new JobAlertsPageDto(alerts, alerts.Count(alert => !alert.IsRead)));
+            new JobAlertsPageDto(alerts, unread, total, page, pageSize));
     }
 
     public async Task<ServiceResult<int>> MarkAllReadAsync(

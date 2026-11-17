@@ -35,13 +35,15 @@
     min-width: 0;
 }
 
+.nav-scrollable > * { flex: 0 0 auto; }
+
 .nav-link {
+    flex: 0 0 auto;
     padding: 8px 9px;
-    font-size: 13.5px;
     border: 1px solid transparent;
     border-radius: var(--hj-radius-pill);
     color: rgba(255, 255, 255, .78);
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 500;
     text-decoration: none;
     white-space: nowrap;

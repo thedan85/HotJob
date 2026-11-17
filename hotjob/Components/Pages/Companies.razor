@@ -146,6 +146,13 @@
                         }
                     </div>
                     <h2>@company.CompanyName</h2>
+                    @if (company.ReviewCount > 0)
+                    {
+                        <p class="company-rating" aria-label="@($"{company.AverageRating:0.0} out of 5 from {company.ReviewCount} review{(company.ReviewCount == 1 ? string.Empty : "s")}")">
+                            <span aria-hidden="true">★</span> @company.AverageRating!.Value.ToString("0.0")
+                            <span class="company-rating-count">(@company.ReviewCount review@(company.ReviewCount == 1 ? string.Empty : "s"))</span>
+                        </p>
+                    }
                     <div class="company-meta">
                         @if (!string.IsNullOrWhiteSpace(company.Industry)) { <span class="meta-pill">@company.Industry</span> }
                         @if (!string.IsNullOrWhiteSpace(company.Location)) { <span class="meta-pill">@company.Location</span> }

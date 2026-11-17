@@ -12,4 +12,10 @@ public sealed record JobAlertDto(
 /// <summary>Alert feed for the signed-in candidate.</summary>
 public sealed record JobAlertsPageDto(
     IReadOnlyList<JobAlertDto> Alerts,
-    int UnreadCount);
+    int UnreadCount,
+    int TotalCount,
+    int Page,
+    int PageSize)
+{
+    public int TotalPages => PageSize <= 0 ? 0 : (int)Math.Ceiling(TotalCount / (double)PageSize);
+}

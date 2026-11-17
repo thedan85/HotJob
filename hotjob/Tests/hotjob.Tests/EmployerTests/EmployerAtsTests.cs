@@ -3,6 +3,7 @@ using hotjob.DTOs.Employer;
 using hotjob.Models;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
+using hotjob.Models.ML;
 using hotjob.Models.Resume;
 using hotjob.Models.Users;
 using hotjob.Repositories.Employer;
@@ -165,6 +166,31 @@ public sealed class EmployerAtsTests
     }
 
     [Fact]
+    public async Task List_MinMatch_FiltersByStoredPercentage()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (strongApp, _, strongJob) = await SeedApplicationAsync(fx, companyId, "strong@example.com", "Strong");
+        var (weakApp, _, weakJob) = await SeedApplicationAsync(fx, companyId, "weak@example.com", "Weak");
+        var resumes = await fx.Db.Applications
+            .AsNoTracking()
+            .Where(application => application.Id == strongApp || application.Id == weakApp)
+            .ToDictionaryAsync(application => application.Id, application => application.ResumeId);
+        fx.Db.MatchScores.AddRange(
+            new MatchScore { JobPostingId = strongJob, ResumeId = resumes[strongApp], MatchPercentage = 82 },
+            new MatchScore { JobPostingId = weakJob, ResumeId = resumes[weakApp], MatchPercentage = 24 });
+        await fx.Db.SaveChangesAsync();
+        Detach(fx);
+
+        var result = await Applicants(fx).ListAsync(owner, new ApplicantListQuery { MinMatch = 50 });
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(1, result.Data!.TotalCount);
+        Assert.Equal("Strong", result.Data.Items[0].CandidateFullName);
+        Assert.Equal(82, result.Data.Items[0].MatchPercentage);
+    }
+
+    [Fact]
     public async Task List_NoEmployer_Unauthorized()
     {
         await using var fx = await TestFixture.CreateAsync();
@@ -312,6 +338,38 @@ public sealed class EmployerAtsTests
         var notification = fx.Db.Notifications.Single();
         Assert.Equal(candidateUserId, notification.UserId);
         Assert.Equal("Interview scheduled", notification.Title);
+    }
+
+    [Fact]
+    public async Task UpdateInterview_Reschedules_KeepsScheduledStatus()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, _, _) = await SeedApplicationAsync(fx, companyId);
+        Detach(fx);
+
+        var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(2),
+            InterviewType = InterviewType.Online,
+            LocationOrLink = "https://meet.example/old",
+            Notes = "old"
+        });
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+
+        var newDate = DateTime.UtcNow.AddDays(3).Date.AddHours(10);
+        var updated = await Interviews(fx).UpdateAsync(owner, created.Data!.Id, new UpdateInterviewRequest
+        {
+            InterviewDate = newDate,
+            LocationOrLink = "Room 2",
+            Notes = "moved"
+        });
+
+        Assert.True(updated.Success, string.Join("; ", updated.Errors));
+        Assert.Equal(newDate, updated.Data!.InterviewDate);
+        Assert.Equal("Room 2", updated.Data.LocationOrLink);
+        Assert.Equal("moved", updated.Data.Notes);
+        Assert.Equal(InterviewStatus.Scheduled, updated.Data.Status);
     }
 
     [Fact]

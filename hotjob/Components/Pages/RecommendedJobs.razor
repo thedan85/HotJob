@@ -110,9 +110,18 @@
                                     </p>
                                 </div>
                                 <div class="job-side">
-                                    <span class="match-badge @MatchBadgeClass(job.MatchPercentage)" title="Match against this resume">
-                                        @(job.MatchPercentage.HasValue ? $"{job.MatchPercentage.Value:0}% match" : $"{job.MatchedSkillCount} skill{(job.MatchedSkillCount == 1 ? string.Empty : "s")}")
-                                    </span>
+                                    @if (job.MatchPercentage is >= 20)
+                                    {
+                                        <span class="match-badge @MatchBadgeClass(job.MatchPercentage)" title="Match against this resume">
+                                            @($"{job.MatchPercentage.Value:0}% match")
+                                        </span>
+                                    }
+                                    else if (job.MatchPercentage is null && job.MatchedSkillCount > 0)
+                                    {
+                                        <span class="match-badge is-low">
+                                            @($"{job.MatchedSkillCount} skill{(job.MatchedSkillCount == 1 ? string.Empty : "s")}")
+                                        </span>
+                                    }
                                     <span class="job-salary">@FormatSalary(job.SalaryMin, job.SalaryMax)</span>
                                 </div>
                             </a>

@@ -17,7 +17,9 @@ public sealed record CompanyListItemDto(
     string? Location,
     Models.Users.CompanyScale? Scale,
     string? LogoUrl,
-    string? Description);
+    string? Description,
+    double? AverageRating = null,
+    int ReviewCount = 0);
 
 public sealed record CompanyDetailDto(
     int Id,
@@ -28,7 +30,9 @@ public sealed record CompanyDetailDto(
     string? LogoUrl,
     string? Description,
     string? Website,
-    string? OwnerName);
+    string? OwnerName,
+    double? AverageRating = null,
+    int ReviewCount = 0);
 
 public sealed record CompanyReviewDto(
     int Id,

@@ -3,6 +3,7 @@
 @rendermode InteractiveServer
 @using System.Security.Claims
 @using hotjob.DTOs.Candidate
+@using hotjob.DTOs.Job
 @using hotjob.Services.Candidate
 @inject NotificationFeed NotificationFeed
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -31,16 +32,16 @@
             {
                 <div class="workspace-alert" role="alert">@loadError</div>
                 <div class="workspace-actions">
-                    <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="LoadAsync">Retry</button>
+                    <button class="workspace-btn workspace-btn-secondary" type="button" @onclick="() => LoadAsync()">Retry</button>
                 </div>
             }
-            else if (notifications is null)
+            else if (paged is null)
             {
                 <section class="workspace-card" aria-busy="true" aria-label="Loading notifications">
                     <p class="workspace-sub" role="status">Loading notifications…</p>
                 </section>
             }
-            else if (notifications.Count == 0)
+            else if (paged.TotalCount == 0)
             {
                 <section class="workspace-card">
                     <h2>No messages yet</h2>
@@ -59,11 +60,11 @@
                     <div class="workspace-section-head">
                         <div>
                             <h2>All messages</h2>
-                            <p class="workspace-sub">@unreadCount unread of @notifications.Count</p>
+                            <p class="workspace-sub">@unreadCount unread of @paged.TotalCount · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
                         </div>
                     </div>
                     <ul class="review-list">
-                        @foreach (var note in notifications.OrderBy(n => n.IsRead).ThenByDescending(n => n.CreatedAt))
+                        @foreach (var note in paged.Items.OrderBy(n => n.IsRead).ThenByDescending(n => n.CreatedAt))
                         {
                             <li class="review-card notification-item @(note.IsRead ? null : "is-unread")">
                                 <div class="workspace-section-head">
@@ -95,6 +96,16 @@
                             </li>
                         }
                     </ul>
+                    @if (paged.TotalPages > 1)
+                    {
+                        <nav class="jobs-pager" aria-label="Notification pages">
+                            <button type="button" class="page-btn" disabled="@(paged.Page <= 1)"
+                                    @onclick="() => LoadAsync(paged.Page - 1)">← Prev</button>
+                            <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount messages</span>
+                            <button type="button" class="page-btn" disabled="@(paged.Page >= paged.TotalPages)"
+                                    @onclick="() => LoadAsync(paged.Page + 1)">Next →</button>
+                        </nav>
+                    }
                 </section>
             }
         </div>
@@ -105,13 +116,14 @@
 </AuthorizeView>
 
 @code {
-    private List<MyNotificationDto>? notifications;
+    private const int PageSize = 20;
+
+    private PagedResponse<MyNotificationDto>? paged;
     private string? loadError;
     private string? actionMessage;
     private bool isMarking;
     private int? markingId;
-
-    private int unreadCount => notifications?.Count(note => !note.IsRead) ?? 0;
+    private int unreadCount;
 
     protected override async Task OnInitializedAsync()
     {
@@ -144,7 +156,7 @@
         return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(int requestedPage = 0)
     {
         loadError = null;
         try
@@ -155,14 +167,26 @@
                 return;
             }
 
-            var result = await NotificationFeed.ListAsync(userId);
+            var page = requestedPage > 0 ? requestedPage : paged?.Page ?? 1;
+            var result = await NotificationFeed.ListAsync(userId, page, PageSize);
             if (!result.Success || result.Data is null)
             {
                 loadError = result.Errors.FirstOrDefault() ?? "Could not load your notifications.";
                 return;
             }
 
-            notifications = result.Data.ToList();
+            paged = result.Data;
+            if (paged.TotalCount > 0 && page > paged.TotalPages)
+            {
+                await LoadAsync(paged.TotalPages);
+                return;
+            }
+
+            var unread = await NotificationFeed.UnreadCountAsync(userId);
+            if (unread.Success)
+            {
+                unreadCount = unread.Data;
+            }
         }
         catch (Exception exception)
         {
@@ -191,14 +215,7 @@
                 return;
             }
 
-            if (notifications is not null)
-            {
-                var index = notifications.FindIndex(note => note.Id == notificationId);
-                if (index >= 0)
-                {
-                    notifications[index] = result.Data!;
-                }
-            }
+            await LoadAsync();
         }
         catch (Exception exception)
         {
@@ -227,7 +244,7 @@
             var result = await NotificationFeed.MarkAllReadAsync(userId);
             if (result.Success)
             {
-                notifications = notifications?.Select(note => note with { IsRead = true }).ToList();
+                await LoadAsync();
                 actionMessage = result.Data == 1 ? "1 message marked read." : $"{result.Data} messages marked read.";
             }
             else

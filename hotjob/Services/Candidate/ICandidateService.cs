@@ -1,4 +1,5 @@
 using hotjob.DTOs.Candidate;
+using hotjob.DTOs.Job;
 using hotjob.Services.Common;
 
 namespace hotjob.Services.Candidate;
@@ -10,7 +11,14 @@ public interface ICandidateService
         string? userId,
         CancellationToken cancellationToken = default);
 
-    Task<ServiceResult<IReadOnlyList<MyNotificationDto>>> GetMyNotificationsAsync(
+    Task<ServiceResult<PagedResponse<MyNotificationDto>>> GetMyNotificationsAsync(
+        string? userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Unread employer messages for the caller, across every page.</summary>
+    Task<ServiceResult<int>> GetUnreadNotificationCountAsync(
         string? userId,
         CancellationToken cancellationToken = default);
 

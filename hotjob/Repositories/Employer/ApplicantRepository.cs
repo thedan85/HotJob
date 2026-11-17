@@ -20,6 +20,7 @@ public sealed class ApplicantRepository(ApplicationDbContext db) : IApplicantRep
         int page,
         int pageSize,
         string? sort = null,
+        double? minMatch = null,
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(page, 1);
@@ -37,6 +38,13 @@ public sealed class ApplicantRepository(ApplicationDbContext db) : IApplicantRep
             query = query.Where(a => a.JobPostingId == jobPostingId.Value);
         if (status.HasValue)
             query = query.Where(a => a.CurrentStatus == status.Value);
+        if (minMatch is > 0)
+        {
+            query = query.Where(a => db.MatchScores.Any(score =>
+                score.JobPostingId == a.JobPostingId
+                && score.ResumeId == a.ResumeId
+                && score.MatchPercentage >= minMatch.Value));
+        }
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = $"%{search.Trim()}%";

@@ -79,12 +79,42 @@ public sealed class MatchScoreService(
         var rows = await dbContext.MatchScores
             .AsNoTracking()
             .Where(score => score.ResumeId == resumeId.Value && ids.Contains(score.JobPostingId))
-            .Select(score => new { score.JobPostingId, score.MatchPercentage })
+            .Select(score => new { score.JobPostingId, score.MatchPercentage, score.AlgorithmUsed, score.CalculatedAt })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return ServiceResult<IReadOnlyDictionary<int, double>>.Ok(
-            rows.ToDictionary(row => row.JobPostingId, row => (double)row.MatchPercentage));
+        var activeLog = await dbContext.ModelTrainingLogs
+            .AsNoTracking()
+            .Where(log => log.IsActive)
+            .OrderByDescending(log => log.TrainedAt)
+            .ThenByDescending(log => log.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var modelUsable = activeLog is not null && modelStore.IsModelAvailable;
+        var expectedAlgorithm = modelUsable ? ModelAlgorithm : WeightedRuleAlgorithm;
+
+        var scores = new Dictionary<int, double>();
+        foreach (var row in rows)
+        {
+            if (row.AlgorithmUsed == expectedAlgorithm
+                && (!modelUsable || row.CalculatedAt >= activeLog!.TrainedAt))
+            {
+                scores[row.JobPostingId] = (double)row.MatchPercentage;
+            }
+        }
+
+        // Badges must not lag behind the job detail page: recompute the rows that are
+        // missing or were produced by an older rule/model while the list is loading.
+        foreach (var jobId in ids.Where(id => !scores.ContainsKey(id)))
+        {
+            var scored = await ScoreAsync(candidate.Data, jobId, resumeId.Value, cancellationToken);
+            if (scored.Success && scored.Data is { Score.Available: true } match)
+            {
+                scores[jobId] = match.Score.MatchPercentage;
+            }
+        }
+
+        return ServiceResult<IReadOnlyDictionary<int, double>>.Ok(scores);
     }
 
     public async Task<ServiceResult<AdvancedMatchScoreDto>> GetAdvancedAsync(

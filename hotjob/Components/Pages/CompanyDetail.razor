@@ -68,6 +68,22 @@ else
                     <dd>@(company.Scale.HasValue ? ScaleLabel(company.Scale.Value) : "—")</dd>
                 </div>
                 <div class="company-detail-fact">
+                    <dt>Rating</dt>
+                    <dd>
+                        @if (company.ReviewCount > 0)
+                        {
+                            <span class="company-detail-stars" aria-label="@($"{company.AverageRating:0.0} out of 5 from {company.ReviewCount} review{(company.ReviewCount == 1 ? string.Empty : "s")}")">
+                                ★ @company.AverageRating!.Value.ToString("0.0") / 5
+                                <span class="company-detail-review-count">(@company.ReviewCount review@(company.ReviewCount == 1 ? string.Empty : "s"))</span>
+                            </span>
+                        }
+                        else
+                        {
+                            <span>—</span>
+                        }
+                    </dd>
+                </div>
+                <div class="company-detail-fact">
                     <dt>Website</dt>
                     <dd>
                         @if (!string.IsNullOrWhiteSpace(company.Website))

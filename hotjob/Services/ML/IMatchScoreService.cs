@@ -17,8 +17,9 @@ public interface IMatchScoreService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns stored percentages for the caller's primary resume, in one query.
-    /// List pages use this instead of recomputing per card.
+    /// Returns percentages for the caller's primary resume. Fresh stored rows are read
+    /// in one query; missing or stale rows are recomputed so list badges match the
+    /// job detail page before the user opens it.
     /// </summary>
     Task<ServiceResult<IReadOnlyDictionary<int, double>>> GetStoredForJobsAsync(
         string? userId,

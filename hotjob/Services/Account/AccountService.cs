@@ -380,7 +380,8 @@ public sealed class AccountService(
                 Summary = candidate.Summary,
                 JobSeekingStatus = candidate.JobSeekingStatus,
                 PreferredWorkModel = candidate.PreferredWorkModel,
-                PreferredLocation = candidate.PreferredLocation
+                PreferredLocation = candidate.PreferredLocation,
+                IsDiscoverable = candidate.IsDiscoverable
             },
             employer is null ? null : new EmployerProfileDto
             {

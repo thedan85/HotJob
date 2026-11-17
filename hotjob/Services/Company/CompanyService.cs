@@ -30,18 +30,26 @@ public sealed class CompanyService(
         var (items, total) = await repository.ListApprovedAsync(
             query.Search, query.Industries, query.Locations, page, PageSize, cancellationToken);
 
+        var ratings = await LoadRatingsAsync(items.Select(company => company.Id).ToList(), cancellationToken);
+
         logger.LogDebug("Listed {Count} companies (page {Page}, total {Total}).", items.Count, page, total);
 
         return ServiceResult<PagedResponse<CompanyListItemDto>>.Ok(new PagedResponse<CompanyListItemDto>
         {
-            Items = items.Select(company => new CompanyListItemDto(
-                company.Id,
-                company.CompanyName,
-                company.Industry,
-                company.Location,
-                company.Scale,
-                company.LogoUrl,
-                company.Description)).ToList(),
+            Items = items.Select(company =>
+            {
+                var rating = ratings.GetValueOrDefault(company.Id);
+                return new CompanyListItemDto(
+                    company.Id,
+                    company.CompanyName,
+                    company.Industry,
+                    company.Location,
+                    company.Scale,
+                    company.LogoUrl,
+                    company.Description,
+                    rating.Count == 0 ? null : Math.Round(rating.Average, 1),
+                    rating.Count);
+            }).ToList(),
             TotalCount = total,
             Page = page,
             PageSize = PageSize
@@ -67,6 +75,16 @@ public sealed class CompanyService(
             return ServiceResult<CompanyDetailDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
 
         var ownerName = await repository.GetOwnerNameAsync(id, cancellationToken);
+        var rating = await dbContext.Reviews
+            .AsNoTracking()
+            .Where(review => review.CompanyProfileId == id)
+            .GroupBy(review => review.CompanyProfileId)
+            .Select(group => new
+            {
+                Average = group.Average(review => (double)review.RatingScore),
+                Count = group.Count()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
         return ServiceResult<CompanyDetailDto>.Ok(new CompanyDetailDto(
             company.Id,
@@ -77,7 +95,9 @@ public sealed class CompanyService(
             company.LogoUrl,
             company.Description,
             company.Website,
-            ownerName));
+            ownerName,
+            rating is null ? null : Math.Round(rating.Average, 1),
+            rating?.Count ?? 0));
     }
 
     public async Task<ServiceResult<PagedResponse<CompanyReviewDto>>> GetReviewsAsync(
@@ -184,5 +204,30 @@ public sealed class CompanyService(
             review.ReviewText,
             candidate.FullName,
             review.CreatedAt));
+    }
+
+    private async Task<Dictionary<int, (double Average, int Count)>> LoadRatingsAsync(
+        IReadOnlyCollection<int> companyIds,
+        CancellationToken cancellationToken)
+    {
+        if (companyIds.Count == 0)
+        {
+            return new Dictionary<int, (double Average, int Count)>();
+        }
+
+        var rows = await dbContext.Reviews
+            .AsNoTracking()
+            .Where(review => companyIds.Contains(review.CompanyProfileId))
+            .GroupBy(review => review.CompanyProfileId)
+            .Select(group => new
+            {
+                CompanyId = group.Key,
+                Average = group.Average(review => (double)review.RatingScore),
+                Count = group.Count()
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows.ToDictionary(row => row.CompanyId, row => (row.Average, row.Count));
     }
 }

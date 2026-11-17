@@ -86,12 +86,29 @@ public sealed class AdminService(
             expiredJobs));
     }
 
-    public async Task<ServiceResult<IReadOnlyList<AdminUserListItemDto>>> GetUsersAsync(CancellationToken cancellationToken = default)
+    public async Task<ServiceResult<PagedResponse<AdminUserListItemDto>>> GetUsersAsync(
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
     {
-        var users = await dbContext.Users
-            .Include(user => user.Candidate)
-            .Include(user => user.Employer)
+        (page, pageSize) = NormalizePage(page, pageSize);
+
+        var query = dbContext.Users
+            .AsNoTracking()
             .OrderByDescending(user => user.CreatedAt)
+            .ThenByDescending(user => user.Id);
+
+        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        var offset = (long)(page - 1) * pageSize;
+        if (offset >= total)
+        {
+            return ServiceResult<PagedResponse<AdminUserListItemDto>>.Ok(
+                new PagedResponse<AdminUserListItemDto> { TotalCount = total, Page = page, PageSize = pageSize });
+        }
+
+        var users = await query
+            .Skip((int)offset)
+            .Take(pageSize)
             .Select(user => new AdminUserListItemDto(
                 user.Id,
                 user.Email ?? string.Empty,
@@ -107,7 +124,13 @@ public sealed class AdminService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return ServiceResult<IReadOnlyList<AdminUserListItemDto>>.Ok(users);
+        return ServiceResult<PagedResponse<AdminUserListItemDto>>.Ok(new PagedResponse<AdminUserListItemDto>
+        {
+            Items = users,
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        });
     }
 
     public async Task<ServiceResult<bool>> ToggleUserActiveAsync(string userId, CancellationToken cancellationToken = default)
@@ -125,13 +148,28 @@ public sealed class AdminService(
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<IReadOnlyList<AdminCompanyListItemDto>>> GetCompaniesAsync(CancellationToken cancellationToken = default)
+    public async Task<ServiceResult<PagedResponse<AdminCompanyListItemDto>>> GetCompaniesAsync(
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
     {
-        var companies = await dbContext.CompanyProfiles
+        (page, pageSize) = NormalizePage(page, pageSize);
+
+        var query = dbContext.CompanyProfiles
             .AsNoTracking()
-            .Include(company => company.Employers)
-            .Include(company => company.VerifiedBy)
-            .OrderByDescending(company => company.Id)
+            .OrderByDescending(company => company.Id);
+
+        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        var offset = (long)(page - 1) * pageSize;
+        if (offset >= total)
+        {
+            return ServiceResult<PagedResponse<AdminCompanyListItemDto>>.Ok(
+                new PagedResponse<AdminCompanyListItemDto> { TotalCount = total, Page = page, PageSize = pageSize });
+        }
+
+        var companies = await query
+            .Skip((int)offset)
+            .Take(pageSize)
             .Select(company => new AdminCompanyListItemDto(
                 company.Id,
                 company.CompanyName,
@@ -144,13 +182,25 @@ public sealed class AdminService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return ServiceResult<IReadOnlyList<AdminCompanyListItemDto>>.Ok(companies);
+        return ServiceResult<PagedResponse<AdminCompanyListItemDto>>.Ok(new PagedResponse<AdminCompanyListItemDto>
+        {
+            Items = companies,
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        });
     }
 
-    public async Task<ServiceResult<bool>> UpdateCompanyStatusAsync(int companyId, CompanyStatus status, string? rejectionReason, CancellationToken cancellationToken = default)
+    public async Task<ServiceResult<bool>> UpdateCompanyStatusAsync(int companyId, CompanyStatus status, string? rejectionReason, string? adminUserId = null, CancellationToken cancellationToken = default)
     {
         if (companyId <= 0)
             return ServiceResult<bool>.Fail(ServiceErrorType.Validation, "Company id is invalid.");
+
+        if (status == CompanyStatus.Rejected && string.IsNullOrWhiteSpace(rejectionReason))
+            return ServiceResult<bool>.Fail(ServiceErrorType.Validation, "A rejection reason is required.");
+
+        if (string.IsNullOrWhiteSpace(adminUserId))
+            return ServiceResult<bool>.Fail(ServiceErrorType.Unauthorized, "Sign in as an administrator to review companies.");
 
         var company = await dbContext.CompanyProfiles
             .FirstOrDefaultAsync(company => company.Id == companyId, cancellationToken)
@@ -159,23 +209,37 @@ public sealed class AdminService(
             return ServiceResult<bool>.Fail(ServiceErrorType.NotFound, "Company not found.");
 
         company.Status = status;
-        company.RejectionReason = status == CompanyStatus.Rejected
-            ? (string.IsNullOrWhiteSpace(rejectionReason) ? "Rejected by admin." : rejectionReason)
-            : null;
+        company.RejectionReason = status == CompanyStatus.Rejected ? rejectionReason!.Trim() : null;
         company.VerifiedAt = DateTime.UtcNow;
-        company.VerifiedByAdminId = "admin";
+        company.VerifiedByAdminId = adminUserId;
 
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<IReadOnlyList<AdminJobListItemDto>>> GetJobsAsync(CancellationToken cancellationToken = default)
+    public async Task<ServiceResult<PagedResponse<AdminJobListItemDto>>> GetJobsAsync(
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
     {
-        var jobs = await dbContext.JobPostings
+        (page, pageSize) = NormalizePage(page, pageSize);
+
+        var query = dbContext.JobPostings
             .AsNoTracking()
-            .Include(job => job.Company)
-            .Include(job => job.Applications)
             .OrderByDescending(job => job.CreatedAt)
+            .ThenByDescending(job => job.Id);
+
+        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        var offset = (long)(page - 1) * pageSize;
+        if (offset >= total)
+        {
+            return ServiceResult<PagedResponse<AdminJobListItemDto>>.Ok(
+                new PagedResponse<AdminJobListItemDto> { TotalCount = total, Page = page, PageSize = pageSize });
+        }
+
+        var jobs = await query
+            .Skip((int)offset)
+            .Take(pageSize)
             .Select(job => new AdminJobListItemDto(
                 job.Id,
                 job.Title,
@@ -187,7 +251,13 @@ public sealed class AdminService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return ServiceResult<IReadOnlyList<AdminJobListItemDto>>.Ok(jobs);
+        return ServiceResult<PagedResponse<AdminJobListItemDto>>.Ok(new PagedResponse<AdminJobListItemDto>
+        {
+            Items = jobs,
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        });
     }
 
     public async Task<ServiceResult<bool>> DeleteJobAsync(int jobId, CancellationToken cancellationToken = default)
@@ -441,6 +511,9 @@ public sealed class AdminService(
 
         return ServiceResult.Ok();
     }
+
+    private static (int Page, int PageSize) NormalizePage(int page, int pageSize) =>
+        (Math.Max(page, 1), Math.Clamp(pageSize, 1, 200));
 
     // Classify only expected constraints; unrelated storage and concurrency errors must propagate.
     // MySQL codes: https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html

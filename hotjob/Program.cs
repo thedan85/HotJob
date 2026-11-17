@@ -199,6 +199,7 @@ builder.Services.AddScoped<IApplicantRepository, ApplicantRepository>();
 builder.Services.AddScoped<ICompanyRepository, CompanyRepository>();
 builder.Services.AddScoped<hotjob.Services.Company.ICompanyService, hotjob.Services.Company.CompanyService>();
 builder.Services.AddScoped<IJobService, JobService>();
+builder.Services.AddHostedService<hotjob.Services.Job.JobExpiryService>();
 builder.Services.AddScoped<IApplicantService, ApplicantService>();
 builder.Services.AddScoped<IInterviewService, InterviewService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();

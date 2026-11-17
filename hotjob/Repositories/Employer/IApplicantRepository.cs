@@ -17,6 +17,7 @@ public interface IApplicantRepository
         int page,
         int pageSize,
         string? sort = null,
+        double? minMatch = null,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyDictionary<(int JobPostingId, int ResumeId), double>> ListMatchScoresAsync(

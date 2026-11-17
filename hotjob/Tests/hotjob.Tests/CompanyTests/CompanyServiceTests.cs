@@ -7,6 +7,7 @@ using hotjob.Data;
 using hotjob.DTOs.Employer;
 using hotjob.Services.Common;
 using hotjob.Tests.Support;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace hotjob.Tests;
@@ -41,6 +42,29 @@ public sealed class CompanyServiceTests
             Location = location
         });
         await fx.Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task ListAndDetail_IncludeAverageRating()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await SeedCompanyAsync(fx, "Rated Co");
+        var company = await fx.Db.CompanyProfiles.AsNoTracking().SingleAsync(c => c.CompanyName == "Rated Co");
+        var first = await SeedCandidateAsync(fx, "first@example.com", "First");
+        var second = await SeedCandidateAsync(fx, "second@example.com", "Second");
+        fx.Db.Reviews.AddRange(
+            new Review { CompanyProfileId = company.Id, CandidateId = first.Id, RatingScore = 5 },
+            new Review { CompanyProfileId = company.Id, CandidateId = second.Id, RatingScore = 4 });
+        await fx.Db.SaveChangesAsync();
+
+        var list = await CreateService(fx).ListAsync(new CompanyListQuery());
+        var detail = await CreateService(fx).GetDetailAsync(company.Id);
+
+        var item = Assert.Single(list.Data!.Items);
+        Assert.Equal(4.5, item.AverageRating);
+        Assert.Equal(2, item.ReviewCount);
+        Assert.Equal(4.5, detail.Data!.AverageRating);
+        Assert.Equal(2, detail.Data.ReviewCount);
     }
 
     [Fact]

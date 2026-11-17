@@ -23,12 +23,17 @@ public sealed class ApplicantService(
         query.Page = Math.Max(query.Page, 1);
         query.PageSize = Math.Clamp(query.PageSize, 1, 100);
 
+        if (query.MinMatch is < 0 or > 100)
+            return ServiceResult<PagedResult<ApplicantListItemResponse>>.Fail(
+                ServiceErrorType.Validation, "Minimum match must be between 0 and 100.");
+
         var (items, total) = await repo.ListOwnedAsync(
             employerResult.Data!.CompanyProfileId,
             query.JobPostingId, query.Status,
             string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim(),
             query.Page, query.PageSize,
             query.Sort,
+            query.MinMatch,
             cancellationToken);
 
         var matchScores = await repo.ListMatchScoresAsync(

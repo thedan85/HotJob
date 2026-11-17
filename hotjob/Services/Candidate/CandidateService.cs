@@ -1,6 +1,7 @@
 using hotjob.Data;
 using hotjob.DTOs.Candidate;
 using hotjob.DTOs.Employer;
+using hotjob.DTOs.Job;
 using hotjob.Models;
 using hotjob.Models.Application;
 using hotjob.Services.Common;
@@ -67,24 +68,65 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
             .ToArray());
     }
 
-    public async Task<ServiceResult<IReadOnlyList<MyNotificationDto>>> GetMyNotificationsAsync(
+    public async Task<ServiceResult<PagedResponse<MyNotificationDto>>> GetMyNotificationsAsync(
+        string? userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return ServiceResult<PagedResponse<MyNotificationDto>>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
+
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        // Job alerts have their own page; this feed carries employer messages only.
+        // The null branch is explicit because SQL would reject NULL != 'JobAlert'.
+        var query = dbContext.Notifications
+            .AsNoTracking()
+            .Where(notification => notification.UserId == userId
+                && (notification.Kind == null || notification.Kind != NotificationKinds.JobAlert));
+
+        var total = await query.CountAsync(cancellationToken);
+        var offset = (long)(page - 1) * pageSize;
+        if (offset >= total)
+        {
+            return ServiceResult<PagedResponse<MyNotificationDto>>.Ok(
+                new PagedResponse<MyNotificationDto> { TotalCount = total, Page = page, PageSize = pageSize });
+        }
+
+        var notifications = await query
+            .OrderByDescending(notification => notification.CreatedAt)
+            .ThenByDescending(notification => notification.Id)
+            .Skip((int)offset)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return ServiceResult<PagedResponse<MyNotificationDto>>.Ok(new PagedResponse<MyNotificationDto>
+        {
+            Items = notifications.Select(ToDto).ToArray(),
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        });
+    }
+
+    public async Task<ServiceResult<int>> GetUnreadNotificationCountAsync(
         string? userId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(userId))
-            return ServiceResult<IReadOnlyList<MyNotificationDto>>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
+            return ServiceResult<int>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
 
-        // Job alerts have their own page; this feed carries employer messages only.
-        // The null branch is explicit because SQL would reject NULL != 'JobAlert'.
-        var notifications = await dbContext.Notifications
+        var unread = await dbContext.Notifications
             .AsNoTracking()
-            .Where(notification => notification.UserId == userId
-                && (notification.Kind == null || notification.Kind != NotificationKinds.JobAlert))
-            .OrderByDescending(notification => notification.CreatedAt)
-            .ThenByDescending(notification => notification.Id)
-            .ToListAsync(cancellationToken);
+            .CountAsync(
+                notification => notification.UserId == userId
+                    && !notification.IsRead
+                    && (notification.Kind == null || notification.Kind != NotificationKinds.JobAlert),
+                cancellationToken);
 
-        return ServiceResult<IReadOnlyList<MyNotificationDto>>.Ok(notifications.Select(ToDto).ToArray());
+        return ServiceResult<int>.Ok(unread);
     }
 
     public async Task<ServiceResult<MyNotificationDto>> MarkNotificationReadAsync(

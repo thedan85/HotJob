@@ -151,7 +151,7 @@
                         </p>
                     </div>
                     <div class="job-side">
-                        @if (matchScores.TryGetValue(job.Id, out var match))
+                        @if (matchScores.TryGetValue(job.Id, out var match) && match >= 20)
                         {
                             <span class="match-badge @MatchBadgeClass(match)" title="Match against your primary resume">@match.ToString("0")% match</span>
                         }

@@ -3,9 +3,11 @@
 @rendermode InteractiveServer
 @using System.Security.Claims
 @using hotjob.DTOs.JobAlerts
+@using hotjob.Services.Common
 @using hotjob.Services.JobAlerts
 @using Microsoft.Extensions.Options
 @inject IJobAlertService JobAlertService
+@inject CircuitDbGate CircuitDbGate
 @inject IOptions<JobAlertsOptions> JobAlertOptions
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuthSession AuthSession
@@ -22,7 +24,7 @@
                     <p class="workspace-lede">Roles that match your CV, collected here when employers publish them.</p>
                 </div>
                 <div class="workspace-actions">
-                    @if (!isLoading && feed is { Alerts.Count: > 0 })
+                    @if (!isLoading && feed is { TotalCount: > 0 })
                     {
                         <button class="workspace-btn workspace-btn-secondary" type="button"
                                 disabled="@(isMarking || feed.UnreadCount == 0)"
@@ -49,7 +51,7 @@
                 <div class="workspace-alert" role="alert">
                     @loadError
                     <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
-                            style="margin-left:12px" @onclick="LoadAsync">Try again</button>
+                            style="margin-left:12px" @onclick="() => LoadAsync()">Try again</button>
                 </div>
             }
             else if (feed is not null)
@@ -68,11 +70,12 @@
                         <div>
                             <h2>Your alerts</h2>
                             <p class="workspace-sub">
-                                @feed.Alerts.Count alert@(feed.Alerts.Count == 1 ? string.Empty : "s")
+                                @feed.TotalCount alert@(feed.TotalCount == 1 ? string.Empty : "s")
                                 @if (feed.UnreadCount > 0)
                                 {
-                                    <span>· @feed.UnreadCount unread</span>
+                                    <span> · @feed.UnreadCount unread</span>
                                 }
+                                <span> · page @feed.Page of @Math.Max(feed.TotalPages, 1)</span>
                             </p>
                         </div>
                         @if (feed.UnreadCount > 0)
@@ -81,7 +84,7 @@
                         }
                     </div>
 
-                    @if (feed.Alerts.Count == 0)
+                    @if (feed.TotalCount == 0)
                     {
                         <div class="workspace-empty">
                             <span class="workspace-empty-icon" aria-hidden="true">
@@ -125,6 +128,16 @@
                             }
                         </ul>
                     }
+                    @if (feed.TotalPages > 1)
+                    {
+                        <nav class="jobs-pager" aria-label="Job alert pages">
+                            <button type="button" class="page-btn" disabled="@(feed.Page <= 1)"
+                                    @onclick="() => LoadAsync(feed.Page - 1)">← Prev</button>
+                            <span class="page-info">Page @feed.Page of @feed.TotalPages · @feed.TotalCount alerts</span>
+                            <button type="button" class="page-btn" disabled="@(feed.Page >= feed.TotalPages)"
+                                    @onclick="() => LoadAsync(feed.Page + 1)">Next →</button>
+                        </nav>
+                    }
                 </section>
             }
         </div>
@@ -135,6 +148,8 @@
 </AuthorizeView>
 
 @code {
+    private const int PageSize = 20;
+
     private bool isLoading = true;
     private bool hasLoadedOnce;
     private bool isMarking;
@@ -176,7 +191,7 @@
         return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(int requestedPage = 0)
     {
         if (isLoading && hasLoadedOnce)
         {
@@ -188,7 +203,10 @@
         loadError = null;
         try
         {
-            var result = await JobAlertService.GetAlertsAsync(await GetUserIdAsync());
+            var page = requestedPage > 0 ? requestedPage : feed?.Page ?? 1;
+            var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(
+                () => JobAlertService.GetAlertsAsync(userId, page, PageSize));
             if (!result.Success || result.Data is null)
             {
                 loadError = result.Errors.FirstOrDefault() ?? "We could not load your job alerts.";
@@ -218,7 +236,9 @@
         actionMessage = actionError = null;
         try
         {
-            var result = await JobAlertService.MarkAllReadAsync(await GetUserIdAsync());
+            var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(
+                () => JobAlertService.MarkAllReadAsync(userId));
             if (!result.Success)
             {
                 actionError = result.Errors.FirstOrDefault() ?? "We could not mark your alerts as read.";
