@@ -79,7 +79,12 @@ public sealed class JobService(
             ExpiryDate = request.ExpiryDate,
             Status = request.Status ?? JobStatus.Draft,
             JobSkills = request.Skills
-                .Select(skill => new JobSkill { SkillId = skill.SkillId, ImportanceWeight = skill.ImportanceWeight })
+                .Select(skill => new JobSkill
+                {
+                    SkillId = skill.SkillId,
+                    ImportanceWeight = skill.ImportanceWeight,
+                    MinYears = skill.MinYears
+                })
                 .ToList(),
             CategoryMappings = request.CategoryIds
                 .Select(categoryId => new JobCategoryMapping { JobCategoryId = categoryId })
@@ -270,7 +275,7 @@ public sealed class JobService(
         }
 
         var skills = DistinctSkills(request?.Skills ?? new List<JobSkillInput>());
-        var errors = ValidateSkillWeights(skills);
+        var errors = ValidateSkillRequirements(skills);
         errors.AddRange(await MissingSkillsAsync(skills.Select(skill => skill.SkillId).ToList(), cancellationToken));
         if (errors.Count > 0)
         {
@@ -670,14 +675,14 @@ public sealed class JobService(
             errors.Add("Only Draft or Published status is allowed. Close a job via DELETE.");
         }
 
-        errors.AddRange(ValidateSkillWeights(request.Skills));
+        errors.AddRange(ValidateSkillRequirements(request.Skills));
         errors.AddRange(await MissingSkillsAsync(request.Skills.Select(skill => skill.SkillId).ToList(), cancellationToken));
         errors.AddRange(await MissingCategoriesAsync(request.CategoryIds, cancellationToken));
 
         return errors.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    private static List<string> ValidateSkillWeights(List<JobSkillInput> skills)
+    private static List<string> ValidateSkillRequirements(List<JobSkillInput> skills)
     {
         var errors = new List<string>();
         foreach (var skill in skills)
@@ -685,6 +690,11 @@ public sealed class JobService(
             if (skill.ImportanceWeight is < 0 or > 10)
             {
                 errors.Add($"ImportanceWeight for skill {skill.SkillId} must be between 0 and 10.");
+            }
+
+            if (skill.MinYears is < 0 or > 50)
+            {
+                errors.Add($"MinYears for skill {skill.SkillId} must be between 0 and 50.");
             }
         }
 
@@ -736,10 +746,13 @@ public sealed class JobService(
 
     private static bool ReplaceSkills(JobPosting job, List<JobSkillInput> skills)
     {
-        var wanted = skills.ToDictionary(skill => skill.SkillId, skill => skill.ImportanceWeight);
+        var wanted = skills.ToDictionary(
+            skill => skill.SkillId,
+            skill => (skill.ImportanceWeight, skill.MinYears));
         var changed = job.JobSkills.Count != wanted.Count
-            || job.JobSkills.Any(jobSkill => !wanted.TryGetValue(jobSkill.SkillId, out var weight)
-                || weight != jobSkill.ImportanceWeight);
+            || job.JobSkills.Any(jobSkill => !wanted.TryGetValue(jobSkill.SkillId, out var value)
+                || value.ImportanceWeight != jobSkill.ImportanceWeight
+                || value.MinYears != jobSkill.MinYears);
 
         foreach (var jobSkill in job.JobSkills.Where(jobSkill => !wanted.ContainsKey(jobSkill.SkillId)).ToList())
         {
@@ -748,13 +761,21 @@ public sealed class JobService(
 
         foreach (var jobSkill in job.JobSkills)
         {
-            jobSkill.ImportanceWeight = wanted[jobSkill.SkillId];
+            var value = wanted[jobSkill.SkillId];
+            jobSkill.ImportanceWeight = value.ImportanceWeight;
+            jobSkill.MinYears = value.MinYears;
         }
 
         var existing = job.JobSkills.Select(jobSkill => jobSkill.SkillId).ToHashSet();
-        foreach (var (skillId, weight) in wanted.Where(pair => !existing.Contains(pair.Key)))
+        foreach (var (skillId, value) in wanted.Where(pair => !existing.Contains(pair.Key)))
         {
-            job.JobSkills.Add(new JobSkill { JobPostingId = job.Id, SkillId = skillId, ImportanceWeight = weight });
+            job.JobSkills.Add(new JobSkill
+            {
+                JobPostingId = job.Id,
+                SkillId = skillId,
+                ImportanceWeight = value.ImportanceWeight,
+                MinYears = value.MinYears
+            });
         }
 
         return changed;
@@ -798,7 +819,11 @@ public sealed class JobService(
             job.ExpiryDate,
             job.Status,
             job.Company?.CompanyName ?? string.Empty,
-            job.JobSkills.Select(jobSkill => new JobSkillDto(jobSkill.SkillId, jobSkill.Skill?.Name ?? string.Empty, jobSkill.ImportanceWeight)).ToList(),
+            job.JobSkills.Select(jobSkill => new JobSkillDto(
+                jobSkill.SkillId,
+                jobSkill.Skill?.Name ?? string.Empty,
+                jobSkill.ImportanceWeight,
+                jobSkill.MinYears)).ToList(),
             job.CategoryMappings.Select(mapping => new JobCategoryDto(mapping.JobCategoryId, mapping.Category?.Name ?? string.Empty)).ToList(),
             applicationsCount,
             job.CreatedAt,

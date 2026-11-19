@@ -177,7 +177,7 @@ h2 {
 }
 
 .nav-inner {
-    width: min(100% - 40px, 1280px);
+    width: min(100% - 40px, 1460px);
     min-height: 72px;
     gap: 22px;
 }

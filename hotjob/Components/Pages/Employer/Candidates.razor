@@ -50,7 +50,7 @@
                                 <h2>Filters</h2>
                                 <p class="workspace-sub">Narrow the list by keyword, skill and minimum years.</p>
                             </div>
-                            @if (filterSkills.Count > 0)
+                            @if (HasFilters)
                             {
                                 <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
                                         @onclick="ClearFiltersAsync">Clear</button>
@@ -63,16 +63,21 @@
                                     <span>Keyword</span>
                                     <InputText @bind-Value="query.Keyword" placeholder="Position, summary or skill name" />
                                 </label>
-                                <label class="workspace-field">
+                                <div class="workspace-field">
                                     <span>Skill</span>
-                                    <select @bind="selectedSkillNames" multiple>
-                                        @foreach (var skill in filterSkills)
-                                        {
-                                            <option value="@skill.Name">@skill.Name</option>
-                                        }
-                                    </select>
-                                    <span class="workspace-hint">Hold Ctrl / Cmd to pick several.</span>
-                                </label>
+                                    <details class="ej-cand-skill-filter">
+                                        <summary aria-label="Skill filter">@SkillSummary</summary>
+                                        <div class="ej-cand-skill-panel">
+                                            <select @bind="selectedSkillNames" multiple aria-label="Skills">
+                                                @foreach (var skill in filterSkills)
+                                                {
+                                                    <option value="@skill.Name">@skill.Name</option>
+                                                }
+                                            </select>
+                                            <span class="workspace-hint">Hold Ctrl / Cmd to pick several.</span>
+                                        </div>
+                                    </details>
+                                </div>
                                 <label class="workspace-field">
                                     <span>Min years</span>
                                     <InputNumber @bind-Value="query.MinYears" min="0" max="50" />
@@ -201,6 +206,10 @@
     private bool hasLoadedOnce;
     private string? loadError;
     private string? actionMessage;
+
+    private string SkillSummary => selectedSkillNames.Length == 0
+        ? "Any skill"
+        : string.Join(", ", selectedSkillNames);
 
     private bool HasFilters =>
         !string.IsNullOrWhiteSpace(query.Keyword)

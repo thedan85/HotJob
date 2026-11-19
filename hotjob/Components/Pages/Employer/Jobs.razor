@@ -221,9 +221,9 @@
                                     <span class="workspace-hint">Numeric taxonomy ids separated by commas.</span>
                                 </label>
                                 <label class="workspace-field workspace-wide">
-                                    <span>Skills as id:weight</span>
-                                    <InputText @bind-Value="skillText" placeholder="e.g. 3:8, 5:6" />
-                                    <span class="workspace-hint">Comma-separated skill id and importance from 0–10. Example: 3:8 means skill 3 at weight 8.</span>
+                                    <span>Skills as id:weight[:minYears]</span>
+                                    <InputText @bind-Value="skillText" placeholder="e.g. 3:8:3, 5:6" />
+                                    <span class="workspace-hint">Comma-separated skill id, importance 0–10 and optional minimum years. Example: 3:8:3 means skill 3 at weight 8 with 3 years required.</span>
                                 </label>
                             </fieldset>
                             <div class="workspace-form-actions">
@@ -364,7 +364,7 @@
                             }
                             @foreach (var s in selected.Skills)
                             {
-                                <span class="workspace-chip">@s.SkillName · @s.ImportanceWeight/10</span>
+                                <span class="workspace-chip">@s.SkillName · @s.ImportanceWeight/10@(s.MinYears > 0 ? $" · {s.MinYears} y" : string.Empty)</span>
                             }
                         </div>
                         <div class="ej-detail-desc">@selected.Description</div>
@@ -553,10 +553,16 @@
             ExpiryDate = d.ExpiryDate,
             Status = d.Status,
             CategoryIds = d.Categories.Select(c => c.Id).ToList(),
-            Skills = d.Skills.Select(s => new JobSkillInput { SkillId = s.SkillId, ImportanceWeight = s.ImportanceWeight }).ToList()
+            Skills = d.Skills.Select(s => new JobSkillInput
+            {
+                SkillId = s.SkillId,
+                ImportanceWeight = s.ImportanceWeight,
+                MinYears = s.MinYears
+            }).ToList()
         };
         categoryText = string.Join(", ", jobForm.CategoryIds);
-        skillText = string.Join(", ", jobForm.Skills.Select(s => $"{s.SkillId}:{s.ImportanceWeight}"));
+        skillText = string.Join(", ", jobForm.Skills.Select(s =>
+            s.MinYears > 0 ? $"{s.SkillId}:{s.ImportanceWeight}:{s.MinYears}" : $"{s.SkillId}:{s.ImportanceWeight}"));
         showForm = true;
     }
 
@@ -614,13 +620,18 @@
                 .Select(part =>
                 {
                     var pieces = part.Split(':');
-                    return new JobSkillInput { SkillId = int.Parse(pieces[0]), ImportanceWeight = pieces.Length > 1 ? double.Parse(pieces[1]) : 1.0 };
+                    return new JobSkillInput
+                    {
+                        SkillId = int.Parse(pieces[0]),
+                        ImportanceWeight = pieces.Length > 1 ? double.Parse(pieces[1]) : 1.0,
+                        MinYears = pieces.Length > 2 ? int.Parse(pieces[2]) : 0
+                    };
                 }).ToList();
             return true;
         }
         catch
         {
-            error = "Category ids must be numbers (e.g. 1, 2); skills must look like id:weight (e.g. 3:8, 5:6).";
+            error = "Category ids must be numbers (e.g. 1, 2); skills must look like id:weight[:minYears] (e.g. 3:8:3, 5:6).";
             return false;
         }
     }

@@ -13,9 +13,10 @@ using Microsoft.ML.Trainers.FastTree;
 namespace hotjob.Services.ML;
 
 /// <summary>
-/// Match scoring and training (contract D9). Scores use the FastTree model when an
-/// active model file is usable and the weighted rule otherwise; model access is
-/// delegated to <see cref="IMatchModelStore"/> so circuits share one loaded model.
+/// Match scoring and training (contract D9). Scores use the weighted skill rule;
+/// the trained FastTree model is kept for inspection but no longer affects the
+/// displayed percentage. Model access is delegated to <see cref="IMatchModelStore"/>
+/// so circuits share one loaded model.
 /// </summary>
 public sealed class MatchScoreService(
     ApplicationDbContext dbContext,
@@ -25,10 +26,10 @@ public sealed class MatchScoreService(
     TimeProvider timeProvider,
     ILogger<MatchScoreService> logger) : IMatchScoreService
 {
-    /// <summary>Algorithm marker for the cold-start / fallback rule.</summary>
+    /// <summary>Algorithm marker for every score produced by the weighted skill rule.</summary>
     public const string WeightedRuleAlgorithm = "weighted-rule";
 
-    /// <summary>Algorithm marker for scores produced by the trained model.</summary>
+    /// <summary>Algorithm marker left on rows scored by the retired FastTree path.</summary>
     public const string ModelAlgorithm = "FastTreeBinary";
 
     private const int MinimumPerClass = 5;
@@ -83,21 +84,10 @@ public sealed class MatchScoreService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var activeLog = await dbContext.ModelTrainingLogs
-            .AsNoTracking()
-            .Where(log => log.IsActive)
-            .OrderByDescending(log => log.TrainedAt)
-            .ThenByDescending(log => log.Id)
-            .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var modelUsable = activeLog is not null && modelStore.IsModelAvailable;
-        var expectedAlgorithm = modelUsable ? ModelAlgorithm : WeightedRuleAlgorithm;
-
         var scores = new Dictionary<int, double>();
         foreach (var row in rows)
         {
-            if (row.AlgorithmUsed == expectedAlgorithm
-                && (!modelUsable || row.CalculatedAt >= activeLog!.TrainedAt))
+            if (row.AlgorithmUsed == WeightedRuleAlgorithm)
             {
                 scores[row.JobPostingId] = (double)row.MatchPercentage;
             }
@@ -158,6 +148,7 @@ public sealed class MatchScoreService(
                 skill.SkillId,
                 skill.SkillName,
                 skill.ImportanceWeight,
+                skill.MinYears,
                 match.ResumeYears[skill.SkillId]))
             .OrderByDescending(skill => skill.ImportanceWeight)
             .ThenBy(skill => skill.SkillName)
@@ -165,7 +156,12 @@ public sealed class MatchScoreService(
 
         var missing = match.JobSkills
             .Where(skill => !match.ResumeYears.ContainsKey(skill.SkillId))
-            .Select(skill => new MatchSkillDetailDto(skill.SkillId, skill.SkillName, skill.ImportanceWeight, 0))
+            .Select(skill => new MatchSkillDetailDto(
+                skill.SkillId,
+                skill.SkillName,
+                skill.ImportanceWeight,
+                skill.MinYears,
+                0))
             .OrderByDescending(skill => skill.ImportanceWeight)
             .ThenBy(skill => skill.SkillName)
             .ToArray();
@@ -179,7 +175,7 @@ public sealed class MatchScoreService(
             missing,
             match.Features.ExperienceGap,
             match.Features.HasAllRequired,
-            BuildHints(match, matched.Length, missing)));
+            BuildHints(match, matched, missing)));
     }
 
     public async Task<ServiceResult<MatchTrainingResultDto>> TrainAsync(
@@ -324,7 +320,7 @@ public sealed class MatchScoreService(
         var jobSkills = await dbContext.JobSkills
             .AsNoTracking()
             .Where(skill => skill.JobPostingId == jobId)
-            .Select(skill => new JobSkillRow(skill.SkillId, skill.Skill.Name, skill.ImportanceWeight))
+            .Select(skill => new JobSkillRow(skill.SkillId, skill.Skill.Name, skill.ImportanceWeight, skill.MinYears))
             .ToListAsync(cancellationToken);
         if (jobSkills.Count == 0)
         {
@@ -354,24 +350,16 @@ public sealed class MatchScoreService(
         var features = MatchFeatureExtractor.Extract(
             jobSkills.ToDictionary(skill => skill.SkillId, skill => skill.ImportanceWeight),
             resumeYears,
-            job.ExperienceRequired)!;
+            job.ExperienceRequired,
+            jobSkills.ToDictionary(skill => skill.SkillId, skill => skill.MinYears))!;
 
         var existing = await dbContext.MatchScores.FirstOrDefaultAsync(
             row => row.JobPostingId == jobId && row.ResumeId == resolvedResumeId.Value,
             cancellationToken);
 
-        var activeLog = await dbContext.ModelTrainingLogs
-            .AsNoTracking()
-            .Where(log => log.IsActive)
-            .OrderByDescending(log => log.TrainedAt)
-            .ThenByDescending(log => log.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-        var modelUsable = activeLog is not null && modelStore.IsModelAvailable;
-        var expectedAlgorithm = modelUsable ? ModelAlgorithm : WeightedRuleAlgorithm;
-
+        // Model training no longer changes the rule, so a weighted-rule row never goes stale.
         var fresh = existing is not null
-            && existing.AlgorithmUsed == expectedAlgorithm
-            && (!modelUsable || existing.CalculatedAt >= activeLog!.TrainedAt);
+            && existing.AlgorithmUsed == WeightedRuleAlgorithm;
         if (fresh)
         {
             return ServiceResult<ScoredMatch>.Ok(new ScoredMatch(
@@ -382,18 +370,8 @@ public sealed class MatchScoreService(
                 job.ExperienceRequired));
         }
 
-        double percentage;
-        string algorithm;
-        if (modelUsable && modelStore.TryPredict(features, out var probability))
-        {
-            percentage = Math.Clamp(probability * 100, 0, 100);
-            algorithm = ModelAlgorithm;
-        }
-        else
-        {
-            percentage = Math.Clamp(features.MatchedWeightRatio * 100, 0, 100);
-            algorithm = WeightedRuleAlgorithm;
-        }
+        var percentage = Math.Clamp(features.MatchedWeightRatio * 100, 0, 100);
+        const string algorithm = WeightedRuleAlgorithm;
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         if (existing is null)
@@ -545,7 +523,8 @@ public sealed class MatchScoreService(
             {
                 skill.JobPostingId,
                 skill.SkillId,
-                skill.ImportanceWeight
+                skill.ImportanceWeight,
+                skill.MinYears
             })
             .ToListAsync(cancellationToken);
         var resumeSkillRows = await dbContext.ResumeSkills
@@ -564,7 +543,9 @@ public sealed class MatchScoreService(
             .GroupBy(skill => skill.JobPostingId)
             .ToDictionary(
                 group => group.Key,
-                group => group.ToDictionary(skill => skill.SkillId, skill => skill.ImportanceWeight));
+                group => group.ToDictionary(
+                    skill => skill.SkillId,
+                    skill => (skill.ImportanceWeight, skill.MinYears)));
         var resumeYearsByResume = resumeSkillRows
             .GroupBy(skill => skill.ResumeId)
             .ToDictionary(
@@ -575,13 +556,17 @@ public sealed class MatchScoreService(
         foreach (var application in eligible)
         {
             if (!experienceByJob.TryGetValue(application.JobPostingId, out var experienceRequired)
-                || !jobSkillsByJob.TryGetValue(application.JobPostingId, out var jobSkillWeights)
+                || !jobSkillsByJob.TryGetValue(application.JobPostingId, out var jobSkillRequirements)
                 || !resumeYearsByResume.TryGetValue(application.ResumeId, out var resumeYears))
             {
                 continue;
             }
 
-            var features = MatchFeatureExtractor.Extract(jobSkillWeights, resumeYears, experienceRequired);
+            var features = MatchFeatureExtractor.Extract(
+                jobSkillRequirements.ToDictionary(pair => pair.Key, pair => pair.Value.ImportanceWeight),
+                resumeYears,
+                experienceRequired,
+                jobSkillRequirements.ToDictionary(pair => pair.Key, pair => pair.Value.MinYears));
             if (features is null)
             {
                 continue;
@@ -641,7 +626,7 @@ public sealed class MatchScoreService(
 
     private static IReadOnlyList<string> BuildHints(
         ScoredMatch match,
-        int matchedCount,
+        IReadOnlyList<MatchSkillDetailDto> matched,
         IReadOnlyList<MatchSkillDetailDto> missing)
     {
         var hints = new List<string>();
@@ -649,6 +634,17 @@ public sealed class MatchScoreService(
         {
             var names = string.Join(", ", missing.Select(skill => skill.SkillName));
             hints.Add($"Add {names} to your CV — the employer lists these as required skills.");
+        }
+
+        var shortSkills = matched
+            .Where(skill => skill.MinYears > 0 && skill.ResumeYears < skill.MinYears)
+            .Select(skill => $"{skill.SkillName} ({skill.ResumeYears}/{skill.MinYears} y)")
+            .ToArray();
+        if (shortSkills.Length > 0)
+        {
+            hints.Add(
+                $"These skills are below the posting's years: {string.Join(", ", shortSkills)}. " +
+                "Add hands-on experience to earn their full weight.");
         }
 
         var experienceGap = match.Features!.ExperienceGap;
@@ -660,12 +656,12 @@ public sealed class MatchScoreService(
                 $"{resumeYears:0.#}. Highlight relevant projects or responsibilities that close the gap.");
         }
 
-        if (missing.Count == 0 && experienceGap >= 0)
+        if (missing.Count == 0 && shortSkills.Length == 0 && experienceGap >= 0)
         {
             hints.Add("Your CV covers every required skill and the requested experience. " +
                 "Use your cover letter to show measurable results.");
         }
-        else if (matchedCount > 0)
+        else if (matched.Count > 0)
         {
             hints.Add("Lead with your strongest matched skills in the first lines of your CV summary.");
         }
@@ -673,7 +669,7 @@ public sealed class MatchScoreService(
         return hints;
     }
 
-    private sealed record JobSkillRow(int SkillId, string SkillName, double ImportanceWeight);
+    private sealed record JobSkillRow(int SkillId, string SkillName, double ImportanceWeight, int MinYears);
 
     private sealed record TrainingApplication(
         int Id,

@@ -99,7 +99,7 @@ public sealed class SyntheticMatchTrainingTests
         var score = await matchService.GetAsync(probeCandidate.UserId, jobs[0].Id, probeResume.Id);
 
         Assert.True(score.Success, string.Join("; ", score.Errors));
-        Assert.Equal(MatchScoreService.ModelAlgorithm, score.Data!.AlgorithmUsed);
+        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, score.Data!.AlgorithmUsed);
     }
 
     [Fact]

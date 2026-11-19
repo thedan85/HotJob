@@ -230,9 +230,71 @@
     min-height: 44px;
 }
 
-.ej-cand-filters select[multiple] {
+.ej-cand-skill-filter {
+    position: relative;
+}
+
+.ej-cand-skill-filter summary {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 9px 13px;
+    border: 1px solid var(--hj-border-strong);
+    border-radius: var(--hj-radius-sm);
+    background: #fff;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    list-style: none;
+}
+
+.ej-cand-skill-filter summary::-webkit-details-marker {
+    display: none;
+}
+
+.ej-cand-skill-filter summary::after {
+    content: "▾";
+    margin-left: auto;
+    padding-left: 8px;
+    color: var(--hj-muted);
+}
+
+.ej-cand-skill-filter[open] summary::after {
+    content: "▴";
+}
+
+.ej-cand-skill-filter summary:focus-visible {
+    outline: none;
+    border-color: var(--hj-accent-text);
+    box-shadow: var(--hj-focus);
+}
+
+.ej-cand-skill-panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 100%;
+    padding: 8px;
+    background: #fff;
+    border: 1px solid var(--hj-border-strong);
+    border-radius: var(--hj-radius-sm);
+    box-shadow: 0 12px 28px rgba(16, 45, 38, .16);
+}
+
+.ej-cand-skill-panel select[multiple] {
+    width: 100%;
     min-height: 96px;
     padding: 8px 10px;
+}
+
+.ej-cand-skill-panel .workspace-hint {
+    margin: 6px 2px 0;
 }
 
 .ej-cand-list {

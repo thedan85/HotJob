@@ -15,10 +15,15 @@ public static class MatchFeatureExtractor
     /// <param name="jobSkillWeights">Required skills mapped to their importance weight.</param>
     /// <param name="resumeSkillYears">Resume skills mapped to years of experience.</param>
     /// <param name="experienceRequired">Years requested by the posting.</param>
+    /// <param name="minimumYears">
+    /// Per-skill years required by the posting. A missing entry or 0 means presence is
+    /// enough. Years above the minimum earn no extra credit.
+    /// </param>
     public static MatchFeatures? Extract(
         IReadOnlyDictionary<int, double> jobSkillWeights,
         IReadOnlyDictionary<int, int> resumeSkillYears,
-        int experienceRequired)
+        int experienceRequired,
+        IReadOnlyDictionary<int, int>? minimumYears = null)
     {
         if (jobSkillWeights.Count == 0)
         {
@@ -30,7 +35,21 @@ public static class MatchFeatureExtractor
             .ToArray();
 
         var totalWeight = jobSkillWeights.Values.Sum();
-        var matchedWeight = matchedSkillIds.Sum(skillId => jobSkillWeights[skillId]);
+
+        // Partial credit only when the posting names a per-skill minimum. Extra years
+        // above it are capped at full credit so a senior is not penalized.
+        var matchedWeight = 0d;
+        foreach (var skillId in matchedSkillIds)
+        {
+            var requiredYears = minimumYears is not null
+                && minimumYears.TryGetValue(skillId, out var years)
+                ? years
+                : 0;
+            var credit = requiredYears > 0
+                ? Math.Min(1d, (double)resumeSkillYears[skillId] / requiredYears)
+                : 1d;
+            matchedWeight += jobSkillWeights[skillId] * credit;
+        }
 
         // ponytail: a job whose weights all sum to zero still needs a ranking signal,
         // so the contract falls back to the unweighted count ratio.

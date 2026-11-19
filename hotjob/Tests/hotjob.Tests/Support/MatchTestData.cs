@@ -81,7 +81,8 @@ internal static class MatchTestData
         IReadOnlyList<(int SkillId, double Weight)> skills,
         int experienceRequired = 1,
         JobStatus status = JobStatus.Published,
-        string title = "Test role")
+        string title = "Test role",
+        IReadOnlyDictionary<int, int>? minYears = null)
     {
         var job = new JobPosting
         {
@@ -92,7 +93,14 @@ internal static class MatchTestData
             JobType = JobType.FullTime,
             Status = status,
             JobSkills = skills
-                .Select(skill => new JobSkill { SkillId = skill.SkillId, ImportanceWeight = skill.Weight })
+                .Select(skill => new JobSkill
+                {
+                    SkillId = skill.SkillId,
+                    ImportanceWeight = skill.Weight,
+                    MinYears = minYears is not null && minYears.TryGetValue(skill.SkillId, out var years)
+                        ? years
+                        : 0
+                })
                 .ToList()
         };
         fx.Db.JobPostings.Add(job);

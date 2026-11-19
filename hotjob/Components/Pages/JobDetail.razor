@@ -82,7 +82,7 @@ else
                     <div class="job-tags">
                         @foreach (var skill in job.Skills)
                         {
-                            <span class="job-tag">@skill.SkillName@(skill.ImportanceWeight > 0 ? $" · {skill.ImportanceWeight:0.#}/10" : string.Empty)</span>
+                            <span class="job-tag">@skill.SkillName@(skill.ImportanceWeight > 0 ? $" · {skill.ImportanceWeight:0.#}/10" : string.Empty)@(skill.MinYears > 0 ? $" · {skill.MinYears} y" : string.Empty)</span>
                         }
                     </div>
                 </section>
@@ -185,7 +185,7 @@ else
                                             <ul class="job-match-skills">
                                                 @foreach (var skill in advancedMatch.MatchedSkills)
                                                 {
-                                                    <li><span>@skill.SkillName</span><span class="job-match-weight">weight @skill.ImportanceWeight.ToString("0.#")/10</span></li>
+                                                    <li><span>@skill.SkillName</span><span class="job-match-weight">@(skill.MinYears > 0 ? $"{skill.ResumeYears}/{skill.MinYears} y" : $"weight {skill.ImportanceWeight:0.#}/10")</span></li>
                                                 }
                                             </ul>
                                         }
@@ -200,7 +200,7 @@ else
                                             <ul class="job-match-skills">
                                                 @foreach (var skill in advancedMatch.MissingSkills)
                                                 {
-                                                    <li><span>@skill.SkillName</span><span class="job-match-weight">weight @skill.ImportanceWeight.ToString("0.#")/10</span></li>
+                                                    <li><span>@skill.SkillName</span><span class="job-match-weight">@(skill.MinYears > 0 ? $"needs {skill.MinYears} y" : $"weight {skill.ImportanceWeight:0.#}/10")</span></li>
                                                 }
                                             </ul>
                                         }

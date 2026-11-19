@@ -74,6 +74,51 @@ public sealed class MatchScoreServiceTests
     }
 
     [Fact]
+    public async Task PerSkillMinYears_ScoresPartialCreditInsteadOfFullPresence()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        using var temp = new TempModelDirectory();
+        var clock = new FakeTimeProvider(Start);
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "partial-years@example.com", ("React", 2));
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var react = await MatchTestData.GetOrCreateSkillAsync(fx, "React");
+        var job = await MatchTestData.CreateJobAsync(
+            fx,
+            company.Id,
+            [(react.Id, 10)],
+            experienceRequired: 2,
+            minYears: new Dictionary<int, int> { [react.Id] = 3 });
+
+        var result = await CreateService(fx, temp, clock).GetAsync(candidate.UserId, job.Id, resume.Id);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(66.667, result.Data!.MatchPercentage, 3);
+        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, result.Data.AlgorithmUsed);
+    }
+
+    [Fact]
+    public async Task PerSkillMinYears_ExtraYearsDoNotScoreAboveFullWeight()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        using var temp = new TempModelDirectory();
+        var clock = new FakeTimeProvider(Start);
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "senior@example.com", ("React", 5));
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var react = await MatchTestData.GetOrCreateSkillAsync(fx, "React");
+        var job = await MatchTestData.CreateJobAsync(
+            fx,
+            company.Id,
+            [(react.Id, 10)],
+            experienceRequired: 2,
+            minYears: new Dictionary<int, int> { [react.Id] = 3 });
+
+        var result = await CreateService(fx, temp, clock).GetAsync(candidate.UserId, job.Id, resume.Id);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(100, result.Data!.MatchPercentage, 6);
+    }
+
+    [Fact]
     public async Task TwoResumes_GetDifferentScoresForTheSameJob()
     {
         await using var fx = await TestFixture.CreateAsync();

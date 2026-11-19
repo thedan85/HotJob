@@ -514,6 +514,9 @@ namespace hotjob.Migrations
                     b.Property<double>("ImportanceWeight")
                         .HasColumnType("double");
 
+                    b.Property<int>("MinYears")
+                        .HasColumnType("int");
+
                     b.HasKey("JobPostingId", "SkillId");
 
                     b.HasIndex("SkillId");

@@ -107,7 +107,7 @@ public sealed class MatchTrainingTests
     }
 
     [Fact]
-    public async Task Train_WithEnoughBalancedData_PromotesModel_AndScoresWithFastTree()
+    public async Task Train_WithEnoughBalancedData_PromotesModel_ButScoresWithWeightedRule()
     {
         await using var fx = await TestFixture.CreateAsync();
         using var temp = new TempModelDirectory();
@@ -150,19 +150,23 @@ public sealed class MatchTrainingTests
         Assert.Equal(clock.GetUtcNow().UtcDateTime, log.TrainedAt);
 
         var after = await service.GetAsync(candidate.UserId, probe.Id, resume.Id);
-        Assert.Equal(MatchScoreService.ModelAlgorithm, after.Data!.AlgorithmUsed);
-        Assert.InRange(after.Data.MatchPercentage, 0, 100);
+        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, after.Data!.AlgorithmUsed);
+        Assert.Equal(100, after.Data.MatchPercentage, 6);
 
-        // A model promoted after a score was calculated makes that score stale.
+        // A partial skill match must show its real coverage even with a promoted model active.
+        var partial = await MatchTestData.CreateJobAsync(
+            fx, company.Id, [(csharp.Id, 10), (java.Id, 10)], experienceRequired: 1);
+        var partialScore = await service.GetAsync(candidate.UserId, partial.Id, resume.Id);
+        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, partialScore.Data!.AlgorithmUsed);
+        Assert.Equal(50, partialScore.Data.MatchPercentage, 6);
+
+        // A promoted model no longer changes scoring, so the cached row stays valid.
         clock.Advance(TimeSpan.FromHours(1));
-        var active = await fx.Db.ModelTrainingLogs.SingleAsync(entry => entry.IsActive);
-        active.TrainedAt = clock.GetUtcNow().UtcDateTime;
-        await fx.Db.SaveChangesAsync();
 
         var refreshed = await service.GetAsync(candidate.UserId, probe.Id, resume.Id);
 
-        Assert.Equal(clock.GetUtcNow().UtcDateTime, refreshed.Data!.CalculatedAt);
-        Assert.Equal(MatchScoreService.ModelAlgorithm, refreshed.Data.AlgorithmUsed);
+        Assert.Equal(after.Data.CalculatedAt, refreshed.Data!.CalculatedAt);
+        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, refreshed.Data.AlgorithmUsed);
         Assert.Equal(1, await fx.Db.MatchScores.CountAsync(score => score.JobPostingId == probe.Id));
     }
 

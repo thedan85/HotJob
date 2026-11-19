@@ -33,7 +33,11 @@
     gap: 4px;
     flex: 1 1 auto;
     min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
 }
+
+.nav-scrollable::-webkit-scrollbar { display: none; }
 
 .nav-scrollable > * { flex: 0 0 auto; }
 

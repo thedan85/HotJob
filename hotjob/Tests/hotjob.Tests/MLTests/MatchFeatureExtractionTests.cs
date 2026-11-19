@@ -68,6 +68,34 @@ public sealed class MatchFeatureExtractionTests
     }
 
     [Fact]
+    public void Extract_PerSkillMinYears_GivesPartialCredit_AndCapsAtFull()
+    {
+        var weights = new Dictionary<int, double> { [1] = 10, [2] = 10 };
+        var features = MatchFeatureExtractor.Extract(
+            weights,
+            new Dictionary<int, int> { [1] = 2, [2] = 5 },
+            experienceRequired: 0,
+            minimumYears: new Dictionary<int, int> { [1] = 3, [2] = 3 });
+
+        Assert.NotNull(features);
+        Assert.Equal((2d / 3 + 1) / 2, features.MatchedWeightRatio, 10);
+        Assert.True(features.HasAllRequired);
+    }
+
+    [Fact]
+    public void Extract_SkillWithNoYears_WhenMinimumExists_EarnsNoCredit()
+    {
+        var features = MatchFeatureExtractor.Extract(
+            new Dictionary<int, double> { [1] = 10 },
+            new Dictionary<int, int> { [1] = 0 },
+            experienceRequired: 0,
+            minimumYears: new Dictionary<int, int> { [1] = 3 });
+
+        Assert.NotNull(features);
+        Assert.Equal(0, features.MatchedWeightRatio, 10);
+    }
+
+    [Fact]
     public void Extract_JobWithoutSkills_HasNoFeatures()
     {
         var features = MatchFeatureExtractor.Extract(

@@ -24,11 +24,12 @@ public sealed record MatchScoreDto(
     DateTime? CalculatedAt,
     string? Message);
 
-/// <summary>A required job skill, optionally with the candidate's years on that skill.</summary>
+/// <summary>A required job skill with the candidate's years and the posting's per-skill minimum.</summary>
 public sealed record MatchSkillDetailDto(
     int SkillId,
     string SkillName,
     double ImportanceWeight,
+    int MinYears,
     int ResumeYears);
 
 /// <summary>Premium-only breakdown of a match with concrete improvement hints.</summary>

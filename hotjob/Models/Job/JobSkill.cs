@@ -12,6 +12,10 @@ public class JobSkill
     [Range(0, 10)]
     public double ImportanceWeight { get; set; } = 1.0;
 
+    /// <summary>Minimum years of this skill the posting asks for; 0 means presence is enough.</summary>
+    [Range(0, 50)]
+    public int MinYears { get; set; }
+
     /// <summary>Posting requiring the skill.</summary>
     public JobPosting JobPosting { get; set; } = default!;
 

@@ -10,6 +10,10 @@ public sealed class JobSkillInput
 
     [Range(0, 10)]
     public double ImportanceWeight { get; set; } = 1.0;
+
+    /// <summary>Years of this skill required; 0 means presence is enough.</summary>
+    [Range(0, 50)]
+    public int MinYears { get; set; }
 }
 
 public class CreateJobRequest
@@ -58,7 +62,7 @@ public sealed class AssignSkillsRequest
     public List<JobSkillInput> Skills { get; set; } = new();
 }
 
-public sealed record JobSkillDto(int SkillId, string SkillName, double ImportanceWeight);
+public sealed record JobSkillDto(int SkillId, string SkillName, double ImportanceWeight, int MinYears);
 
 public sealed record JobCategoryDto(int Id, string Name);
 

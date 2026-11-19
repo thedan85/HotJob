@@ -21,26 +21,34 @@ public static class DatabaseSeeder
 
         try
         {
-            if (!await db.JobCategories.AnyAsync(cancellationToken).ConfigureAwait(false))
+            // Insert by name rather than only-on-empty so existing dev databases pick up
+            // catalog additions. Admin edits to an existing row are never overwritten.
+            var categoryNames = await db.JobCategories
+                .Select(category => category.Name)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var missingCategories = JobCategoryCatalog
+                .Where(name => !categoryNames.Contains(name))
+                .Select(name => new Models.Job.JobCategory { Name = name })
+                .ToList();
+            if (missingCategories.Count > 0)
             {
-                await db.JobCategories.AddRangeAsync(
-                [
-                    new Models.Job.JobCategory { Name = "IT - Software" },
-                    new Models.Job.JobCategory { Name = "Design" },
-                    new Models.Job.JobCategory { Name = "Marketing" },
-                ], cancellationToken).ConfigureAwait(false);
-                logger.LogInformation("Seeded job categories.");
+                await db.JobCategories.AddRangeAsync(missingCategories, cancellationToken).ConfigureAwait(false);
+                logger.LogInformation("Seeded {Count} job categories.", missingCategories.Count);
             }
 
-            if (!await db.Skills.AnyAsync(cancellationToken).ConfigureAwait(false))
+            var skillNames = await db.Skills
+                .Select(skill => skill.Name)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var missingSkills = SkillCatalog
+                .Where(skill => !skillNames.Contains(skill.Name))
+                .Select(skill => new Models.Skill { Name = skill.Name, Category = skill.Category })
+                .ToList();
+            if (missingSkills.Count > 0)
             {
-                await db.Skills.AddRangeAsync(
-                [
-                    new Models.Skill { Name = "C#", Category = "Backend" },
-                    new Models.Skill { Name = "SQL", Category = "Database" },
-                    new Models.Skill { Name = "React", Category = "Frontend" },
-                ], cancellationToken).ConfigureAwait(false);
-                logger.LogInformation("Seeded skills.");
+                await db.Skills.AddRangeAsync(missingSkills, cancellationToken).ConfigureAwait(false);
+                logger.LogInformation("Seeded {Count} skills.", missingSkills.Count);
             }
 
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -53,6 +61,89 @@ public static class DatabaseSeeder
             throw;
         }
     }
+
+    /// <summary>Job category catalog shared by public browse filters and employer forms.</summary>
+    private static readonly string[] JobCategoryCatalog =
+    [
+        "IT - Software",
+        "Data & Analytics",
+        "DevOps & Cloud",
+        "Mobile",
+        "QA & Testing",
+        "Product",
+        "Design",
+        "Marketing",
+        "Cybersecurity",
+        "IT Support"
+    ];
+
+    /// <summary>Skill catalog with coarse categories, sized for realistic resume/job matching.</summary>
+    private static readonly (string Name, string Category)[] SkillCatalog =
+    [
+        ("C#", "Backend"),
+        ("ASP.NET Core", "Backend"),
+        (".NET", "Backend"),
+        ("SQL", "Database"),
+        ("MySQL", "Database"),
+        ("PostgreSQL", "Database"),
+        ("MongoDB", "Database"),
+        ("Redis", "Database"),
+        ("Elasticsearch", "Database"),
+        ("JavaScript", "Frontend"),
+        ("TypeScript", "Frontend"),
+        ("React", "Frontend"),
+        ("Next.js", "Frontend"),
+        ("Vue.js", "Frontend"),
+        ("Angular", "Frontend"),
+        ("HTML", "Frontend"),
+        ("CSS", "Frontend"),
+        ("Tailwind CSS", "Frontend"),
+        ("Node.js", "Backend"),
+        ("Java", "Backend"),
+        ("Spring Boot", "Backend"),
+        ("Python", "Backend"),
+        ("Django", "Backend"),
+        ("FastAPI", "Backend"),
+        ("Go", "Backend"),
+        ("PHP", "Backend"),
+        ("Laravel", "Backend"),
+        ("Kotlin", "Mobile"),
+        ("Swift", "Mobile"),
+        ("Flutter", "Mobile"),
+        ("React Native", "Mobile"),
+        ("Docker", "DevOps"),
+        ("Kubernetes", "DevOps"),
+        ("AWS", "Cloud"),
+        ("Azure", "Cloud"),
+        ("GCP", "Cloud"),
+        ("Terraform", "DevOps"),
+        ("CI/CD", "DevOps"),
+        ("Linux", "DevOps"),
+        ("RabbitMQ", "Messaging"),
+        ("Kafka", "Messaging"),
+        ("Git", "Tools"),
+        ("Machine Learning", "Data"),
+        ("TensorFlow", "Data"),
+        ("PyTorch", "Data"),
+        ("Pandas", "Data"),
+        ("Power BI", "Data"),
+        ("Manual Testing", "QA"),
+        ("Selenium", "QA"),
+        ("Playwright", "QA"),
+        ("Cypress", "QA"),
+        ("Figma", "Design"),
+        ("UI/UX Design", "Design"),
+        ("Product Management", "Product"),
+        ("Agile/Scrum", "Product"),
+        ("Business Analysis", "Product"),
+        ("Digital Marketing", "Marketing"),
+        ("SEO", "Marketing"),
+        ("Content Marketing", "Marketing"),
+        ("Cybersecurity", "Security"),
+        ("Windows Server", "IT Support"),
+        ("Communication", "Soft Skills"),
+        ("English", "Soft Skills")
+    ];
 
     /// <summary>The plan catalogue (contract D3). Prices here are only the initial values; admins may edit them later.</summary>
     public static IReadOnlyList<Plan> DefaultPlans() =>

@@ -2,6 +2,8 @@ using hotjob.Data;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Models.Users;
+using hotjob.Repositories.Employer;
+using hotjob.Services.Employer;
 using hotjob.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -72,6 +74,28 @@ public sealed class DemoSeederTests
     }
 
     [Fact]
+    public async Task SeedAsync_DemoCandidate_IsDiscoverableAndOffersFilterSkills()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await DatabaseSeeder.SeedAsync(fx.Db, NullLogger.Instance);
+
+        await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, DemoSeed(), NullLogger.Instance);
+
+        var candidateUser = await fx.UserManager.FindByEmailAsync("candidate@example.com");
+        Assert.NotNull(candidateUser);
+        var candidate = await fx.Db.Candidates.SingleAsync(c => c.UserId == candidateUser.Id);
+        Assert.True(candidate.IsDiscoverable);
+
+        var employerUser = await fx.UserManager.FindByEmailAsync("employer@example.com");
+        Assert.NotNull(employerUser);
+        var search = new CandidateSearchService(fx.Db, new ApplicantRepository(fx.Db), TimeProvider.System);
+        var skills = await search.GetFilterSkillsAsync(employerUser.Id);
+        Assert.True(skills.Success, string.Join("; ", skills.Errors));
+        Assert.Contains(skills.Data!, s => s.Name == "C#");
+        Assert.Contains(skills.Data!, s => s.Name == "SQL");
+    }
+
+    [Fact]
     public async Task SeedAsync_SecondRun_IsIdempotent()
     {
         await using var fx = await TestFixture.CreateAsync();
@@ -79,6 +103,11 @@ public sealed class DemoSeederTests
         var seed = DemoSeed();
 
         await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, seed, NullLogger.Instance);
+        var applicationCount = await fx.Db.Applications.CountAsync();
+        var jobCount = await fx.Db.JobPostings.CountAsync();
+        var candidateCount = await fx.Db.Candidates.CountAsync();
+        var resumeCount = await fx.Db.Resumes.CountAsync();
+
         await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, seed, NullLogger.Instance);
 
         Assert.Equal(1, await fx.Db.CompanyProfiles.CountAsync(c => c.CompanyName == "Acme Corp"));
@@ -86,7 +115,10 @@ public sealed class DemoSeederTests
         Assert.Equal(1, await fx.Db.JobPostings.CountAsync(j => j.Title == "Frontend React Developer"));
         Assert.Equal(1, await fx.Db.JobPostings.CountAsync(j => j.Title == "Full Stack .NET Developer"));
         Assert.Equal(1, await fx.Db.JobPostings.CountAsync(j => j.Title == "QA Engineer"));
-        Assert.Equal(3, await fx.Db.Applications.CountAsync());
+        Assert.Equal(jobCount, await fx.Db.JobPostings.CountAsync());
+        Assert.Equal(candidateCount, await fx.Db.Candidates.CountAsync());
+        Assert.Equal(resumeCount, await fx.Db.Resumes.CountAsync());
+        Assert.Equal(applicationCount, await fx.Db.Applications.CountAsync());
     }
 
     [Fact]
@@ -124,7 +156,12 @@ public sealed class DemoSeederTests
         await DemoSeeder.SeedAsync(fx.Db, fx.UserManager, fx.RoleManager, DemoSeed(), NullLogger.Instance);
 
         var catalogCount = await fx.Db.CompanyProfiles.CountAsync(c => c.CompanyName != "Acme Corp");
-        Assert.True(catalogCount >= 20, $"Expected at least 20 catalog companies, got {catalogCount}.");
+        Assert.True(catalogCount >= 50, $"Expected at least 50 catalog companies, got {catalogCount}.");
+
+        Assert.True(await fx.Db.Skills.CountAsync() >= 50);
+        Assert.True(await fx.Db.JobPostings.CountAsync() >= 50);
+        Assert.True(await fx.Db.Candidates.CountAsync() >= 10);
+        Assert.True(await fx.Db.Applications.CountAsync() >= 20);
 
         var approved = await fx.Db.CompanyProfiles.CountAsync(c => c.Status == CompanyStatus.Approved);
         Assert.Equal(await fx.Db.CompanyProfiles.CountAsync(), approved);
