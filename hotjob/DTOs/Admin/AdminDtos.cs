@@ -55,3 +55,13 @@ public sealed record AdminTrainingLogDto(
     string? TrainedByEmail,
     DateTime TrainedAt,
     bool IsActive);
+
+public sealed record AdminAuditLogDto(
+    int Id,
+    DateTime CreatedAt,
+    string AdminUserId,
+    string AdminEmail,
+    string Action,
+    string TargetType,
+    string TargetId,
+    string? Detail);

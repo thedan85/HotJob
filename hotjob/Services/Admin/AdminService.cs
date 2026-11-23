@@ -3,6 +3,7 @@ using hotjob.Data;
 using hotjob.DTOs.Admin;
 using hotjob.DTOs.Job;
 using hotjob.Models;
+using hotjob.Models.Admin;
 using hotjob.Models.Job;
 using hotjob.Models.Users;
 using hotjob.Services.Common;
@@ -15,7 +16,8 @@ namespace hotjob.Services.Admin;
 public sealed class AdminService(
     ApplicationDbContext dbContext,
     UserManager<ApplicationUser> userManager,
-    RoleManager<IdentityRole> roleManager) : IAdminService
+    RoleManager<IdentityRole> roleManager,
+    IAdminAuditService auditService) : IAdminService
 {
     public async Task<ServiceResult<AdminDashboardDto>> GetDashboardAsync(CancellationToken cancellationToken = default)
     {
@@ -135,6 +137,7 @@ public sealed class AdminService(
 
     public async Task<ServiceResult<bool>> ToggleUserActiveAsync(string userId, CancellationToken cancellationToken = default)
     {
+        EnsureNoTransaction();
         if (string.IsNullOrWhiteSpace(userId))
             return ServiceResult<bool>.Fail(ServiceErrorType.Validation, "User id is required.");
 
@@ -142,10 +145,33 @@ public sealed class AdminService(
         if (user is null)
             return ServiceResult<bool>.Fail(ServiceErrorType.NotFound, "User not found.");
 
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var committed = false;
+        try
+        {
         user.IsActive = !user.IsActive;
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        await auditService.LogAsync(
+            user.IsActive ? AuditActions.UserUnlock : AuditActions.UserLock,
+            AuditTargetTypes.User,
+            user.Id,
+            user.IsActive
+                ? $"Enabled account for {user.Email}."
+                : $"Disabled account for {user.Email}.").ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        committed = true;
         return ServiceResult<bool>.Ok(true);
+        }
+        finally
+        {
+            if (!committed)
+            {
+                try { await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false); }
+                finally { dbContext.ChangeTracker.Clear(); }
+            }
+        }
     }
 
     public async Task<ServiceResult<PagedResponse<AdminCompanyListItemDto>>> GetCompaniesAsync(
@@ -193,6 +219,7 @@ public sealed class AdminService(
 
     public async Task<ServiceResult<bool>> UpdateCompanyStatusAsync(int companyId, CompanyStatus status, string? rejectionReason, string? adminUserId = null, CancellationToken cancellationToken = default)
     {
+        EnsureNoTransaction();
         if (companyId <= 0)
             return ServiceResult<bool>.Fail(ServiceErrorType.Validation, "Company id is invalid.");
 
@@ -208,13 +235,46 @@ public sealed class AdminService(
         if (company is null)
             return ServiceResult<bool>.Fail(ServiceErrorType.NotFound, "Company not found.");
 
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var committed = false;
+        try
+        {
         company.Status = status;
         company.RejectionReason = status == CompanyStatus.Rejected ? rejectionReason!.Trim() : null;
         company.VerifiedAt = DateTime.UtcNow;
         company.VerifiedByAdminId = adminUserId;
 
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        if (status == CompanyStatus.Approved)
+        {
+            await auditService.LogAsync(
+                AuditActions.CompanyApprove,
+                AuditTargetTypes.Company,
+                company.Id.ToString(),
+                $"Approved company '{company.CompanyName}'.").ConfigureAwait(false);
+        }
+        else if (status == CompanyStatus.Rejected)
+        {
+            await auditService.LogAsync(
+                AuditActions.CompanyReject,
+                AuditTargetTypes.Company,
+                company.Id.ToString(),
+                $"Rejected company '{company.CompanyName}': {company.RejectionReason}").ConfigureAwait(false);
+        }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        committed = true;
         return ServiceResult<bool>.Ok(true);
+        }
+        finally
+        {
+            if (!committed)
+            {
+                try { await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false); }
+                finally { dbContext.ChangeTracker.Clear(); }
+            }
+        }
     }
 
     public async Task<ServiceResult<PagedResponse<AdminJobListItemDto>>> GetJobsAsync(
@@ -262,19 +322,45 @@ public sealed class AdminService(
 
     public async Task<ServiceResult<bool>> DeleteJobAsync(int jobId, CancellationToken cancellationToken = default)
     {
+        EnsureNoTransaction();
         if (jobId <= 0)
             return ServiceResult<bool>.Fail(ServiceErrorType.Validation, "Job id is invalid.");
 
         var job = await dbContext.JobPostings
+            .Include(job => job.Company)
             .FirstOrDefaultAsync(job => job.Id == jobId, cancellationToken)
             .ConfigureAwait(false);
         if (job is null)
             return ServiceResult<bool>.Fail(ServiceErrorType.NotFound, "Job not found.");
 
+        var jobTitle = job.Title;
+        var companyName = job.Company.CompanyName;
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var committed = false;
+        try
+        {
         dbContext.JobPostings.Remove(job);
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        await auditService.LogAsync(
+            AuditActions.JobDelete,
+            AuditTargetTypes.Job,
+            jobId.ToString(),
+            $"Deleted job '{jobTitle}' at '{companyName}'.").ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        committed = true;
         return ServiceResult<bool>.Ok(true);
+        }
+        finally
+        {
+            if (!committed)
+            {
+                try { await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false); }
+                finally { dbContext.ChangeTracker.Clear(); }
+            }
+        }
     }
 
     public async Task<ServiceResult<IReadOnlyList<AdminTrainingLogDto>>> GetTrainingLogsAsync(
@@ -385,6 +471,7 @@ public sealed class AdminService(
         CreateSkillRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsureNoTransaction();
         if (request is null)
             return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Validation, "Skill data is required.");
 
@@ -400,6 +487,10 @@ public sealed class AdminService(
         if (exists)
             return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
 
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var committed = false;
+        try
+        {
         var entity = new Skill { Name = name, Category = category };
         dbContext.Skills.Add(entity);
 
@@ -412,8 +503,25 @@ public sealed class AdminService(
             return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
         }
 
+        await auditService.LogAsync(
+            AuditActions.SkillCreate,
+            AuditTargetTypes.Skill,
+            entity.Id.ToString(),
+            $"Created skill '{entity.Name}'.").ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        committed = true;
         return ServiceResult<AdminSkillDto>.Ok(
             new AdminSkillDto(entity.Id, entity.Name, entity.Category, 0, 0));
+        }
+        finally
+        {
+            if (!committed)
+            {
+                try { await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false); }
+                finally { dbContext.ChangeTracker.Clear(); }
+            }
+        }
     }
 
     public async Task<ServiceResult<AdminSkillDto>> UpdateSkillAsync(
@@ -421,6 +529,7 @@ public sealed class AdminService(
         UpdateSkillRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsureNoTransaction();
         var entity = await dbContext.Skills
             .FirstOrDefaultAsync(skill => skill.Id == skillId, cancellationToken)
             .ConfigureAwait(false);
@@ -445,6 +554,10 @@ public sealed class AdminService(
         if (exists)
             return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
 
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var committed = false;
+        try
+        {
         entity.Name = name;
         entity.Category = category;
 
@@ -457,6 +570,14 @@ public sealed class AdminService(
             return ServiceResult<AdminSkillDto>.Fail(ServiceErrorType.Conflict, "Skill name already exists.");
         }
 
+        await auditService.LogAsync(
+            AuditActions.SkillUpdate,
+            AuditTargetTypes.Skill,
+            skillId.ToString(),
+            $"Updated skill '{entity.Name}'.").ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        committed = true;
         var dto = await dbContext.Skills
             .AsNoTracking()
             .Where(skill => skill.Id == skillId)
@@ -470,12 +591,22 @@ public sealed class AdminService(
             .ConfigureAwait(false);
 
         return ServiceResult<AdminSkillDto>.Ok(dto);
+        }
+        finally
+        {
+            if (!committed)
+            {
+                try { await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false); }
+                finally { dbContext.ChangeTracker.Clear(); }
+            }
+        }
     }
 
     public async Task<ServiceResult> DeleteSkillAsync(
         int skillId,
         CancellationToken cancellationToken = default)
     {
+        EnsureNoTransaction();
         var entity = await dbContext.Skills
             .FirstOrDefaultAsync(skill => skill.Id == skillId, cancellationToken)
             .ConfigureAwait(false);
@@ -498,6 +629,10 @@ public sealed class AdminService(
                 $"Cannot delete skill '{entity.Name}': used in {resumeCount} resumes and {jobCount} job postings.");
         }
 
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var committed = false;
+        try
+        {
         dbContext.Skills.Remove(entity);
 
         try
@@ -509,7 +644,30 @@ public sealed class AdminService(
             return ServiceResult.Fail(ServiceErrorType.Conflict, "Cannot delete skill: it is in use.");
         }
 
+        await auditService.LogAsync(
+            AuditActions.SkillDelete,
+            AuditTargetTypes.Skill,
+            skillId.ToString(),
+            $"Deleted skill '{entity.Name}'.").ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        committed = true;
         return ServiceResult.Ok();
+        }
+        finally
+        {
+            if (!committed)
+            {
+                try { await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false); }
+                finally { dbContext.ChangeTracker.Clear(); }
+            }
+        }
+    }
+
+    private void EnsureNoTransaction()
+    {
+        if (dbContext.Database.CurrentTransaction is not null)
+            throw new InvalidOperationException("Admin write operations require ownership of the database transaction.");
     }
 
     private static (int Page, int PageSize) NormalizePage(int page, int pageSize) =>
