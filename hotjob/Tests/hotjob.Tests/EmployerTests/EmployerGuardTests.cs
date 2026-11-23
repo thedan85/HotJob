@@ -112,7 +112,7 @@ public sealed class EmployerGuardTests
         await using var fx = await TestFixture.CreateAsync();
         var (userId, companyId) = await SeedEmployerAsync(fx, "hr@example.com", CompanyStatus.Rejected);
         var appId = await SeedApplicationAsync(fx, companyId);
-        var svc = new InterviewService(new ApplicantRepository(fx.Db), NullLogger<InterviewService>.Instance);
+        var svc = new InterviewService(new ApplicantRepository(fx.Db), TimeProvider.System, NullLogger<InterviewService>.Instance);
 
         foreach (var e in fx.Db.ChangeTracker.Entries().ToArray()) e.State = EntityState.Detached;
         var result = await svc.CreateAsync(userId, appId, new CreateInterviewRequest

@@ -28,7 +28,7 @@ public sealed class EmployerAtsTests
         new(new ApplicantRepository(fx.Db), NullLogger<ApplicantService>.Instance);
 
     private static InterviewService Interviews(TestFixture fx) =>
-        new(new ApplicantRepository(fx.Db), NullLogger<InterviewService>.Instance);
+        new(new ApplicantRepository(fx.Db), TimeProvider.System, NullLogger<InterviewService>.Instance);
 
     private static NotificationService Notifier(TestFixture fx) =>
         new(new ApplicantRepository(fx.Db));
@@ -451,6 +451,87 @@ public sealed class EmployerAtsTests
         Assert.Equal("Room 2", updated.Data.LocationOrLink);
         Assert.Equal("moved", updated.Data.Notes);
         Assert.Equal(InterviewStatus.Scheduled, updated.Data.Status);
+    }
+
+    [Fact]
+    public async Task UpdateInterview_Reschedules_NotifiesCandidate()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, candidateUserId, jobId) = await SeedApplicationAsync(fx, companyId);
+        var jobTitle = (await fx.Db.JobPostings.FindAsync(jobId))!.Title;
+        Detach(fx);
+
+        var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(2),
+            InterviewType = InterviewType.Online
+        });
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        fx.Db.Notifications.RemoveRange(fx.Db.Notifications);
+        await fx.Db.SaveChangesAsync();
+
+        var updated = await Interviews(fx).UpdateAsync(owner, created.Data!.Id, new UpdateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(3),
+            LocationOrLink = "Room 2"
+        });
+
+        Assert.True(updated.Success, string.Join("; ", updated.Errors));
+        var notification = Assert.Single(fx.Db.Notifications);
+        Assert.Equal(candidateUserId, notification.UserId);
+        Assert.Equal("Interview updated", notification.Title);
+        Assert.Contains(jobTitle, notification.Content);
+    }
+
+    [Fact]
+    public async Task UpdateInterview_NoFields_DoesNotNotify()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, _, _) = await SeedApplicationAsync(fx, companyId);
+        Detach(fx);
+
+        var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(2),
+            InterviewType = InterviewType.Online
+        });
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        fx.Db.Notifications.RemoveRange(fx.Db.Notifications);
+        await fx.Db.SaveChangesAsync();
+
+        var updated = await Interviews(fx).UpdateAsync(owner, created.Data!.Id, new UpdateInterviewRequest());
+
+        Assert.True(updated.Success, string.Join("; ", updated.Errors));
+        Assert.Empty(fx.Db.Notifications);
+    }
+
+    [Fact]
+    public async Task CancelInterview_NotifiesCandidate()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, candidateUserId, jobId) = await SeedApplicationAsync(fx, companyId);
+        var jobTitle = (await fx.Db.JobPostings.FindAsync(jobId))!.Title;
+        Detach(fx);
+
+        var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(2),
+            InterviewType = InterviewType.Online
+        });
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        fx.Db.Notifications.RemoveRange(fx.Db.Notifications);
+        await fx.Db.SaveChangesAsync();
+
+        var cancelled = await Interviews(fx).CancelAsync(owner, created.Data!.Id);
+
+        Assert.True(cancelled.Success, string.Join("; ", cancelled.Errors));
+        var notification = Assert.Single(fx.Db.Notifications);
+        Assert.Equal(candidateUserId, notification.UserId);
+        Assert.Equal("Interview cancelled", notification.Title);
+        Assert.Contains(jobTitle, notification.Content);
     }
 
     [Fact]

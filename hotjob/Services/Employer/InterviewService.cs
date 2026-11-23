@@ -9,6 +9,7 @@ namespace hotjob.Services.Employer;
 
 public sealed class InterviewService(
     IApplicantRepository repo,
+    TimeProvider timeProvider,
     ILogger<InterviewService> logger) : IInterviewService
 {
     public async Task<ServiceResult<InterviewResponse>> CreateAsync(
@@ -21,7 +22,8 @@ public sealed class InterviewService(
         if (!employerResult.Success)
             return ServiceResult<InterviewResponse>.Fail(employerResult.ErrorType!.Value, employerResult.Errors);
 
-        if (request.InterviewDate.ToUniversalTime() <= DateTime.UtcNow)
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        if (request.InterviewDate.ToUniversalTime() <= now)
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "InterviewDate must be in the future.");
         if (!request.InterviewType.HasValue || !Enum.IsDefined(request.InterviewType.Value))
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "A valid interview type is required.");
@@ -59,7 +61,7 @@ public sealed class InterviewService(
                     Status = ApplicationStatus.Interviewing,
                     ChangedByUserId = userId,
                     Notes = "Interview scheduled.",
-                    ChangedAt = DateTime.UtcNow
+                    ChangedAt = now
                 });
             }
 
@@ -70,7 +72,7 @@ public sealed class InterviewService(
                 Content = $"An interview for \"{app.JobPosting.Title}\" is scheduled at {interview.InterviewDate:u}."
                     + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}."),
                 IsRead = false,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = now
             });
 
             await repo.SaveChangesAsync(cancellationToken);
@@ -113,12 +115,16 @@ public sealed class InterviewService(
         if (!employerResult.Success)
             return ServiceResult<InterviewResponse>.Fail(employerResult.ErrorType!.Value, employerResult.Errors);
 
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         if (request.InterviewType.HasValue && !Enum.IsDefined(request.InterviewType.Value))
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "Invalid interview type.");
         if (request.Status.HasValue && !Enum.IsDefined(request.Status.Value))
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "Invalid interview status.");
-        if (request.InterviewDate.HasValue && request.InterviewDate.Value.ToUniversalTime() <= DateTime.UtcNow)
+        if (request.InterviewDate.HasValue && request.InterviewDate.Value.ToUniversalTime() <= now)
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "InterviewDate must be in the future.");
+
+        var hasChanges = request.InterviewDate.HasValue || request.LocationOrLink is not null
+            || request.InterviewType.HasValue || request.Notes is not null || request.Status.HasValue;
 
         var interview = await repo.GetOwnedInterviewForUpdateAsync(
             employerResult.Data!.CompanyProfileId, interviewId, cancellationToken);
@@ -135,6 +141,19 @@ public sealed class InterviewService(
             interview.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
         if (request.Status.HasValue)
             interview.Status = request.Status.Value;
+
+        if (hasChanges)
+        {
+            repo.AddNotification(new Notification
+            {
+                UserId = interview.Application.Candidate.UserId,
+                Title = "Interview updated",
+                Content = $"The interview for \"{interview.Application.JobPosting.Title}\" was updated to {interview.InterviewDate:u}."
+                    + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}."),
+                IsRead = false,
+                CreatedAt = now
+            });
+        }
 
         await repo.SaveChangesAsync(cancellationToken);
         return ServiceResult<InterviewResponse>.Ok(ApplicantMapping.ToInterviewResponse(interview));
@@ -155,6 +174,15 @@ public sealed class InterviewService(
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.NotFound, "Interview not found.");
 
         interview.Status = InterviewStatus.Cancelled;
+        repo.AddNotification(new Notification
+        {
+            UserId = interview.Application.Candidate.UserId,
+            Title = "Interview cancelled",
+            Content = $"The interview for \"{interview.Application.JobPosting.Title}\" scheduled at {interview.InterviewDate:u} was cancelled.",
+            IsRead = false,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime
+        });
+
         await repo.SaveChangesAsync(cancellationToken);
         return ServiceResult<InterviewResponse>.Ok(ApplicantMapping.ToInterviewResponse(interview));
     }
