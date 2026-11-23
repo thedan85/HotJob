@@ -317,6 +317,7 @@
                                                     <div>
                                                         <strong>@h.Status</strong>
                                                         <span class="ei-timeline-note">@(h.Notes ?? "No note")</span>
+                                                        <span class="ei-timeline-note">@(h.ChangedByName ?? "System")</span>
                                                         <time>@h.ChangedAt.ToString("dd MMM yyyy HH:mm")</time>
                                                     </div>
                                                 </li>

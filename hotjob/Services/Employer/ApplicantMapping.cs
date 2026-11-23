@@ -35,7 +35,9 @@ internal static class ApplicantMapping
             Resume = snapshot is not null ? FromSnapshot(snapshot) : FromResume(a.Resume),
             StatusHistory = a.StatusHistory
                 .OrderByDescending(h => h.ChangedAt)
-                .Select(h => new HistoryDto(h.Id, h.Status, h.ChangedByUserId, h.Notes, h.ChangedAt))
+                .Select(h => new HistoryDto(
+                    h.Id, h.Status, h.ChangedByUserId, h.Notes, h.ChangedAt,
+                    h.ChangedBy?.Email ?? h.ChangedBy?.UserName ?? h.ChangedByUserId))
                 .ToArray(),
             Interviews = a.Interviews
                 .OrderBy(i => i.InterviewDate)

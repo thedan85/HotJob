@@ -119,7 +119,7 @@ public sealed class ApplicantRepository(ApplicationDbContext db) : IApplicantRep
             .Include(a => a.Resume).ThenInclude(r => r.Educations)
             .Include(a => a.Resume).ThenInclude(r => r.WorkExperiences)
             .Include(a => a.Resume).ThenInclude(r => r.ResumeSkills).ThenInclude(rs => rs.Skill)
-            .Include(a => a.StatusHistory)
+            .Include(a => a.StatusHistory).ThenInclude(h => h.ChangedBy)
             .Include(a => a.Interviews)
             .FirstOrDefaultAsync(
                 a => a.Id == applicationId && a.JobPosting.CompanyProfileId == companyProfileId,

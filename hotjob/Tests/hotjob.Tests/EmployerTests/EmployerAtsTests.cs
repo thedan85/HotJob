@@ -285,6 +285,29 @@ public sealed class EmployerAtsTests
     }
 
     [Fact]
+    public async Task GetDetail_History_IncludesActorEmail()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, _, _) = await SeedApplicationAsync(fx, companyId);
+        fx.Db.ApplicationStatusHistories.Add(new ApplicationStatusHistory
+        {
+            ApplicationId = appId,
+            Status = ApplicationStatus.Viewed,
+            ChangedByUserId = owner,
+            Notes = "reviewed",
+            ChangedAt = new DateTime(2026, 11, 23, 9, 0, 0, DateTimeKind.Utc)
+        });
+        await fx.Db.SaveChangesAsync();
+        Detach(fx);
+
+        var result = await Applicants(fx).GetDetailAsync(owner, appId);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal("hr@example.com", Assert.Single(result.Data!.StatusHistory).ChangedByName);
+    }
+
+    [Fact]
     public async Task GetDetail_ForeignApplication_NotFound()
     {
         await using var fx = await TestFixture.CreateAsync();

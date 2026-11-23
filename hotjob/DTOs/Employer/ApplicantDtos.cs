@@ -99,7 +99,8 @@ public sealed record HistoryDto(
     ApplicationStatus Status,
     string? ChangedByUserId,
     string? Notes,
-    DateTime ChangedAt);
+    DateTime ChangedAt,
+    string? ChangedByName = null);
 
 public sealed record InterviewDto(
     int Id,
