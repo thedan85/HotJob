@@ -235,7 +235,7 @@
                                         <div class="workspace-section-head">
                                             <div>
                                                 <h2>Resume</h2>
-                                                <p class="workspace-sub">@selected.Resume.Title@(selected.Resume.IsPrimary ? " · primary CV" : string.Empty)</p>
+                                                <p class="workspace-sub">@selected.Resume.Title@(selected.IsSnapshot ? " · snapshot at apply" : " · current CV")@(selected.Resume.IsPrimary ? " · primary CV" : string.Empty)</p>
                                             </div>
                                         </div>
                                         <p class="ei-copy">@(string.IsNullOrWhiteSpace(selected.Resume.Summary) ? "No resume summary." : selected.Resume.Summary)</p>

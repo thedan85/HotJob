@@ -1,3 +1,4 @@
+using System.Text.Json;
 using hotjob.Data;
 using hotjob.DTOs.Employer;
 using hotjob.Models;
@@ -224,6 +225,63 @@ public sealed class EmployerAtsTests
         Assert.Single(detail.Resume.WorkExperiences);
         Assert.Single(detail.Resume.Skills);
         Assert.Equal(3, detail.Resume.Skills[0].YearsOfExperience);
+    }
+
+    [Fact]
+    public async Task GetDetail_UsesFrozenSnapshot_AfterLiveResumeChanges()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, _, _) = await SeedApplicationAsync(
+            fx, companyId, "cand@example.com", "Cand", ApplicationStatus.Pending, withResumeDetail: true);
+        var application = await fx.Db.Applications.SingleAsync(a => a.Id == appId);
+        var snapshot = new ResumeSnapshot(
+            "Cand CV", "frozen summary", null,
+            new[] { new SnapshotEducation("Frozen U", "CS", null, null, null, null) },
+            Array.Empty<SnapshotWorkExperience>(),
+            Array.Empty<SnapshotSkill>());
+        application.SnapshotJson = JsonSerializer.Serialize(snapshot);
+        await fx.Db.SaveChangesAsync();
+
+        var education = await fx.Db.Educations.SingleAsync();
+        education.SchoolName = "Live U";
+        var liveSkill = new Skill { Name = "Live only", Category = "Other" };
+        fx.Db.Skills.Add(liveSkill);
+        await fx.Db.SaveChangesAsync();
+        fx.Db.ResumeSkills.Add(new ResumeSkill
+        {
+            ResumeId = application.ResumeId,
+            SkillId = liveSkill.Id,
+            YearsOfExperience = 1
+        });
+        await fx.Db.SaveChangesAsync();
+        Detach(fx);
+
+        var result = await Applicants(fx).GetDetailAsync(owner, appId);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.True(result.Data!.IsSnapshot);
+        Assert.Equal("Frozen U", Assert.Single(result.Data.Resume.Educations).SchoolName);
+        Assert.DoesNotContain(result.Data.Resume.Skills, skill => skill.SkillName == "Live only");
+    }
+
+    [Fact]
+    public async Task GetDetail_LegacyNullSnapshot_FallsBackToLiveResume()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, _, _) = await SeedApplicationAsync(
+            fx, companyId, "cand@example.com", "Cand", ApplicationStatus.Pending, withResumeDetail: true);
+        var application = await fx.Db.Applications.SingleAsync(a => a.Id == appId);
+        Assert.Null(application.SnapshotJson);
+        Detach(fx);
+
+        var result = await Applicants(fx).GetDetailAsync(owner, appId);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.False(result.Data!.IsSnapshot);
+        Assert.Single(result.Data.Resume.Skills);
+        Assert.Contains("C#", result.Data.Resume.Skills[0].SkillName);
     }
 
     [Fact]

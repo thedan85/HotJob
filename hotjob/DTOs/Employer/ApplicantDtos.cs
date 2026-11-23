@@ -54,6 +54,7 @@ public sealed class ApplicantDetailResponse
     public string? SnapshotFileUrl { get; set; }
     public string? SnapshotSummary { get; set; }
     public DateTime AppliedAt { get; set; }
+    public bool IsSnapshot { get; set; }
     public ResumeDetailDto Resume { get; set; } = new();
     public IReadOnlyList<HistoryDto> StatusHistory { get; set; } = Array.Empty<HistoryDto>();
     public IReadOnlyList<InterviewDto> Interviews { get; set; } = Array.Empty<InterviewDto>();

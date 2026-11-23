@@ -1,6 +1,8 @@
+using System.Text.Json;
 using hotjob.DTOs.Employer;
 using hotjob.Models;
 using hotjob.Models.Application;
+using hotjob.Models.Resume;
 
 namespace hotjob.Services.Employer;
 
@@ -12,8 +14,10 @@ internal static class ApplicantMapping
             a.CandidateId, a.Candidate.FullName, a.Candidate.User?.Email,
             a.ResumeId, a.Resume.Title, a.CurrentStatus, a.AppliedAt, matchPercentage);
 
-    public static ApplicantDetailResponse ToDetail(Application a) =>
-        new()
+    public static ApplicantDetailResponse ToDetail(Application a)
+    {
+        var snapshot = DeserializeSnapshot(a.SnapshotJson);
+        return new()
         {
             ApplicationId = a.Id,
             JobPostingId = a.JobPostingId,
@@ -27,23 +31,8 @@ internal static class ApplicantMapping
             SnapshotFileUrl = a.SnapshotFileUrl,
             SnapshotSummary = a.SnapshotSummary,
             AppliedAt = a.AppliedAt,
-            Resume = new ResumeDetailDto
-            {
-                Id = a.Resume.Id,
-                Title = a.Resume.Title,
-                Summary = a.Resume.Summary,
-                FileUrl = a.Resume.FileUrl,
-                IsPrimary = a.Resume.IsPrimary,
-                Educations = a.Resume.Educations
-                    .Select(e => new EducationDto(e.Id, e.SchoolName, e.Major, e.StartDate, e.EndDate, e.Gpa, e.Description))
-                    .ToArray(),
-                WorkExperiences = a.Resume.WorkExperiences
-                    .Select(w => new WorkExperienceDto(w.Id, w.CompanyName, w.JobTitle, w.StartDate, w.EndDate, w.Description))
-                    .ToArray(),
-                Skills = a.Resume.ResumeSkills
-                    .Select(rs => new ResumeSkillDto(rs.SkillId, rs.Skill.Name, rs.YearsOfExperience))
-                    .ToArray()
-            },
+            IsSnapshot = snapshot is not null,
+            Resume = snapshot is not null ? FromSnapshot(snapshot) : FromResume(a.Resume),
             StatusHistory = a.StatusHistory
                 .OrderByDescending(h => h.ChangedAt)
                 .Select(h => new HistoryDto(h.Id, h.Status, h.ChangedByUserId, h.Notes, h.ChangedAt))
@@ -53,6 +42,55 @@ internal static class ApplicantMapping
                 .Select(ToInterviewDto)
                 .ToArray()
         };
+    }
+
+    private static ResumeDetailDto FromResume(Resume r) => new()
+    {
+        Id = r.Id,
+        Title = r.Title,
+        Summary = r.Summary,
+        FileUrl = r.FileUrl,
+        IsPrimary = r.IsPrimary,
+        Educations = r.Educations
+            .Select(e => new EducationDto(e.Id, e.SchoolName, e.Major, e.StartDate, e.EndDate, e.Gpa, e.Description))
+            .ToArray(),
+        WorkExperiences = r.WorkExperiences
+            .Select(w => new WorkExperienceDto(w.Id, w.CompanyName, w.JobTitle, w.StartDate, w.EndDate, w.Description))
+            .ToArray(),
+        Skills = r.ResumeSkills
+            .Select(rs => new ResumeSkillDto(rs.SkillId, rs.Skill.Name, rs.YearsOfExperience))
+            .ToArray()
+    };
+
+    private static ResumeDetailDto FromSnapshot(ResumeSnapshot s) => new()
+    {
+        Title = s.Title,
+        Summary = s.Summary,
+        FileUrl = s.FileUrl,
+        Educations = (s.Educations ?? Array.Empty<SnapshotEducation>())
+            .Select(e => new EducationDto(0, e.SchoolName, e.Major, e.StartDate, e.EndDate, e.Gpa, e.Description))
+            .ToArray(),
+        WorkExperiences = (s.WorkExperiences ?? Array.Empty<SnapshotWorkExperience>())
+            .Select(w => new WorkExperienceDto(0, w.CompanyName, w.JobTitle, w.StartDate, w.EndDate, w.Description))
+            .ToArray(),
+        Skills = (s.Skills ?? Array.Empty<SnapshotSkill>())
+            .Select(skill => new ResumeSkillDto(skill.SkillId, skill.SkillName, skill.YearsOfExperience))
+            .ToArray()
+    };
+
+    private static ResumeSnapshot? DeserializeSnapshot(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<ResumeSnapshot>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     public static InterviewDto ToInterviewDto(Interview i) =>
         new(i.Id, i.ApplicationId, i.InterviewDate, i.LocationOrLink, i.InterviewType, i.Notes, i.Status);
