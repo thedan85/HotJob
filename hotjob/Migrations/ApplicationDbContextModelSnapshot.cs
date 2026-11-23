@@ -185,6 +185,9 @@ namespace hotjob.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("varchar(2048)");
 
+                    b.Property<string>("SnapshotJson")
+                        .HasColumnType("longtext");
+
                     b.Property<string>("SnapshotSummary")
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
