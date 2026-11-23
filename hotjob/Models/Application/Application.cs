@@ -36,6 +36,9 @@ public class Application
     [MaxLength(2000)]
     public string? SnapshotSummary { get; set; }
 
+    /// <summary>Full resume frozen as JSON when the application was submitted.</summary>
+    public string? SnapshotJson { get; set; }
+
     public DateTime AppliedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>Posting the candidate applied to.</summary>

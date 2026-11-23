@@ -1,3 +1,4 @@
+using System.Text.Json;
 using hotjob.Data;
 using hotjob.DTOs.Candidate;
 using hotjob.Models;
@@ -101,11 +102,33 @@ public sealed class ApplicationService(
 
         var resume = await dbContext.Resumes
             .AsNoTracking()
-            .Where(row => row.Id == resumeId && row.CandidateId == candidate.Data.Id)
-            .Select(row => new { row.Id, row.Title, row.Summary, row.FileUrl })
-            .FirstOrDefaultAsync(cancellationToken);
+            .Include(row => row.Educations)
+            .Include(row => row.WorkExperiences)
+            .Include(row => row.ResumeSkills).ThenInclude(row => row.Skill)
+            .FirstOrDefaultAsync(
+                row => row.Id == resumeId && row.CandidateId == candidate.Data.Id,
+                cancellationToken);
         if (resume is null)
             return ServiceResult<ApplyResultDto>.Fail(ServiceErrorType.NotFound, "Resume not found.");
+
+        var snapshot = new ResumeSnapshot(
+            resume.Title,
+            resume.Summary,
+            resume.FileUrl,
+            resume.Educations
+                .OrderBy(entry => entry.Id)
+                .Select(entry => new SnapshotEducation(
+                    entry.SchoolName, entry.Major, entry.StartDate, entry.EndDate, entry.Gpa, entry.Description))
+                .ToArray(),
+            resume.WorkExperiences
+                .OrderBy(entry => entry.Id)
+                .Select(entry => new SnapshotWorkExperience(
+                    entry.CompanyName, entry.JobTitle, entry.StartDate, entry.EndDate, entry.Description))
+                .ToArray(),
+            resume.ResumeSkills
+                .OrderBy(entry => entry.SkillId)
+                .Select(entry => new SnapshotSkill(entry.SkillId, entry.Skill.Name, entry.YearsOfExperience))
+                .ToArray());
 
         var alreadyApplied = await dbContext.Applications
             .AsNoTracking()
@@ -129,6 +152,7 @@ public sealed class ApplicationService(
                 CurrentStatus = ApplicationStatus.Pending,
                 SnapshotSummary = resume.Summary,
                 SnapshotFileUrl = resume.FileUrl,
+                SnapshotJson = JsonSerializer.Serialize(snapshot),
                 AppliedAt = now
             };
             dbContext.Applications.Add(application);

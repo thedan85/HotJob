@@ -1,3 +1,4 @@
+using System.Text.Json;
 using hotjob.Data;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
@@ -162,6 +163,18 @@ public sealed class ApplicationServiceTests
         var clock = new FakeTimeProvider(Start);
         var (userId, candidateId) = await SeedCandidateAsync(fx);
         var resumeId = await SeedResumeAsync(fx, candidateId);
+        var skill = new Skill { Name = "C#", Category = "Backend" };
+        fx.Db.Skills.Add(skill);
+        fx.Db.Educations.Add(new Education { ResumeId = resumeId, SchoolName = "HUST", Major = "CS" });
+        fx.Db.WorkExperiences.Add(new WorkExperience { ResumeId = resumeId, CompanyName = "Acme", JobTitle = "Dev" });
+        await fx.Db.SaveChangesAsync();
+        fx.Db.ResumeSkills.Add(new ResumeSkill
+        {
+            ResumeId = resumeId,
+            SkillId = skill.Id,
+            YearsOfExperience = 3
+        });
+        await fx.Db.SaveChangesAsync();
         var job = await SeedJobAsync(fx);
 
         var result = await NewService(fx, clock).ApplyAsync(
@@ -178,6 +191,13 @@ public sealed class ApplicationServiceTests
         Assert.Equal(ApplicationStatus.Pending, application.CurrentStatus);
         Assert.Equal("3 years .NET + SQL.", application.SnapshotSummary);
         Assert.Equal("/uploads/cv/1/cv.pdf", application.SnapshotFileUrl);
+        Assert.False(string.IsNullOrWhiteSpace(application.SnapshotJson));
+        var snapshot = JsonSerializer.Deserialize<ResumeSnapshot>(application.SnapshotJson!);
+        Assert.NotNull(snapshot);
+        Assert.Equal("Backend CV", snapshot!.Title);
+        Assert.Equal("HUST", Assert.Single(snapshot.Educations).SchoolName);
+        Assert.Equal("Acme", Assert.Single(snapshot.WorkExperiences).CompanyName);
+        Assert.Equal("C#", Assert.Single(snapshot.Skills).SkillName);
         Assert.Equal("I would love to join.", application.CoverLetter);
         Assert.Equal(Start.UtcDateTime, application.AppliedAt);
 
