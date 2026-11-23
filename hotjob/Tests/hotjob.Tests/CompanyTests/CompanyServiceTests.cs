@@ -12,8 +12,8 @@ namespace hotjob.Tests;
 
 public sealed class CompanyServiceTests
 {
-    private static Services.Company.CompanyService CreateService(TestFixture fx) =>
-        new(new CompanyRepository(fx.Db), NullLogger<Services.Company.CompanyService>.Instance);
+    private static Services.Company.CompanyDirectoryService CreateService(TestFixture fx) =>
+        new(new CompanyRepository(fx.Db), NullLogger<Services.Company.CompanyDirectoryService>.Instance);
 
     private static async Task SeedCompanyAsync(
         TestFixture fx,
@@ -196,8 +196,8 @@ public sealed class CompanyServiceTests
 
 public sealed class EmployerCompanyServiceTests
 {
-    private static global::hotjob.Services.Employer.CompanyService CreateService(TestFixture fx) =>
-        new(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+    private static global::hotjob.Services.Employer.EmployerCompanyService CreateService(TestFixture fx) =>
+        new(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
     private static async Task<(string OwnerId, int CompanyId, string OwnerUserId)> SeedCompanyAsync(
         TestFixture fx, string email, int? pendingCount = 0)
@@ -236,7 +236,7 @@ public sealed class EmployerCompanyServiceTests
     {
         await using var fx = await TestFixture.CreateAsync();
         var (ownerId, _, _) = await SeedCompanyAsync(fx, "owner@example.com", pendingCount: 1);
-        var svc = new global::hotjob.Services.Employer.CompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+        var svc = new global::hotjob.Services.Employer.EmployerCompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
         var result = await svc.GetPageAsync(ownerId);
 
@@ -261,7 +261,7 @@ public sealed class EmployerCompanyServiceTests
             MembershipStatus = MembershipStatus.Pending
         });
         await fx.Db.SaveChangesAsync();
-        var svc = new global::hotjob.Services.Employer.CompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+        var svc = new global::hotjob.Services.Employer.EmployerCompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
         var result = await svc.GetPageAsync(pending.Id);
 
@@ -274,7 +274,7 @@ public sealed class EmployerCompanyServiceTests
     {
         await using var fx = await TestFixture.CreateAsync();
         var (ownerId, _, _) = await SeedCompanyAsync(fx, "owner@example.com");
-        var svc = new global::hotjob.Services.Employer.CompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+        var svc = new global::hotjob.Services.Employer.EmployerCompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
         var result = await svc.UpdateAsync(ownerId, new UpdateCompanyRequest
         {
@@ -305,7 +305,7 @@ public sealed class EmployerCompanyServiceTests
             MembershipStatus = MembershipStatus.Active
         });
         await fx.Db.SaveChangesAsync();
-        var svc = new global::hotjob.Services.Employer.CompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+        var svc = new global::hotjob.Services.Employer.EmployerCompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
         var result = await svc.UpdateAsync(member.Id, new UpdateCompanyRequest { Industry = "X" });
 
@@ -319,7 +319,7 @@ public sealed class EmployerCompanyServiceTests
         await using var fx = await TestFixture.CreateAsync();
         var (ownerId, _, _) = await SeedCompanyAsync(fx, "owner@example.com", pendingCount: 1);
         var pendingId = fx.Db.Employers.Where(e => !e.IsOwner).Select(e => e.Id).First();
-        var svc = new global::hotjob.Services.Employer.CompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+        var svc = new global::hotjob.Services.Employer.EmployerCompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
         var result = await svc.ApproveMemberAsync(ownerId, pendingId);
 
@@ -333,7 +333,7 @@ public sealed class EmployerCompanyServiceTests
         await using var fx = await TestFixture.CreateAsync();
         var (ownerId, _, _) = await SeedCompanyAsync(fx, "owner@example.com", pendingCount: 1);
         var pendingId = fx.Db.Employers.Where(e => !e.IsOwner).Select(e => e.Id).First();
-        var svc = new global::hotjob.Services.Employer.CompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+        var svc = new global::hotjob.Services.Employer.EmployerCompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
         var result = await svc.RejectMemberAsync(ownerId, pendingId);
 
@@ -347,12 +347,59 @@ public sealed class EmployerCompanyServiceTests
         await using var fx = await TestFixture.CreateAsync();
         var (ownerId, _, _) = await SeedCompanyAsync(fx, "owner@example.com");
         var ownerRowId = fx.Db.Employers.Where(e => e.IsOwner).Select(e => e.Id).First();
-        var svc = new global::hotjob.Services.Employer.CompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+        var svc = new global::hotjob.Services.Employer.EmployerCompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
         var result = await svc.ApproveMemberAsync(ownerId, ownerRowId);
 
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+    }
+
+    [Theory]
+    [InlineData(CompanyStatus.Pending)]
+    [InlineData(CompanyStatus.Rejected)]
+    public async Task NonApprovedCompany_OwnerCanRead_ButNotWrite(CompanyStatus status)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (ownerId, companyId, _) = await SeedCompanyAsync(fx, "owner@example.com", pendingCount: 1);
+        fx.Db.CompanyProfiles.Single(c => c.Id == companyId).Status = status;
+        await fx.Db.SaveChangesAsync();
+        var pendingId = fx.Db.Employers.Where(e => !e.IsOwner).Select(e => e.Id).First();
+        var svc = CreateService(fx);
+
+        var page = await svc.GetPageAsync(ownerId);
+        var update = await svc.UpdateAsync(ownerId, new UpdateCompanyRequest { Industry = "X" });
+        var approve = await svc.ApproveMemberAsync(ownerId, pendingId);
+
+        Assert.True(page.Success, string.Join("; ", page.Errors));
+        Assert.Equal(status, page.Data!.Company.Status);
+        Assert.Equal(ServiceErrorType.Unauthorized, update.ErrorType);
+        Assert.Equal(ServiceErrorType.Unauthorized, approve.ErrorType);
+        Assert.Equal(MembershipStatus.Pending, fx.Db.Employers.Single(e => e.Id == pendingId).MembershipStatus);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task DeactivatedEmployerOrCompany_BlockedEverywhere(bool deactivateEmployer, bool deactivateCompany)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (ownerId, companyId, _) = await SeedCompanyAsync(fx, "owner@example.com", pendingCount: 1);
+        if (deactivateEmployer)
+            fx.Db.Employers.Single(e => e.IsOwner).IsActive = false;
+        if (deactivateCompany)
+            fx.Db.CompanyProfiles.Single(c => c.Id == companyId).IsActive = false;
+        await fx.Db.SaveChangesAsync();
+        var pendingId = fx.Db.Employers.Where(e => !e.IsOwner).Select(e => e.Id).First();
+        var svc = CreateService(fx);
+
+        var page = await svc.GetPageAsync(ownerId);
+        var update = await svc.UpdateAsync(ownerId, new UpdateCompanyRequest { Industry = "X" });
+        var reject = await svc.RejectMemberAsync(ownerId, pendingId);
+
+        Assert.Equal(ServiceErrorType.Unauthorized, page.ErrorType);
+        Assert.Equal(ServiceErrorType.Unauthorized, update.ErrorType);
+        Assert.Equal(ServiceErrorType.Unauthorized, reject.ErrorType);
     }
 
     [Fact]
@@ -373,7 +420,7 @@ public sealed class EmployerCompanyServiceTests
         };
         fx.Db.Employers.Add(foreign);
         await fx.Db.SaveChangesAsync();
-        var svc = new global::hotjob.Services.Employer.CompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.CompanyService>.Instance);
+        var svc = new global::hotjob.Services.Employer.EmployerCompanyService(fx.Db, NullLogger<global::hotjob.Services.Employer.EmployerCompanyService>.Instance);
 
         var result = await svc.ApproveMemberAsync(ownerId, foreign.Id);
 

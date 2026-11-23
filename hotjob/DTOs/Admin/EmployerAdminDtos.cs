@@ -29,9 +29,6 @@ public record EmployerDetailDto(
     int CompanyId,
     string? CompanyName);
 
-public record ApproveEmployerRequest(
-    [Required] string AdminUserId);
-
+/// <summary>Body for rejecting or deactivating an employer. The admin is taken from the token.</summary>
 public record RejectEmployerRequest(
-    [Required] string AdminUserId,
     [Required, MinLength(1), MaxLength(500)] string Reason);

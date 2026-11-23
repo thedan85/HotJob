@@ -7,7 +7,9 @@ public enum MembershipStatus
 {
     Pending,
     Active,
-    Rejected
+    Rejected,
+    /// <summary>Soft-removed from the company by the owner; can be restored.</summary>
+    Removed
 }
 
 /// <summary>Employer profile linked one-to-one to an application user and to a company.</summary>
@@ -45,6 +47,12 @@ public class Employer
     /// <summary>Reason for deactivation.</summary>
     [MaxLength(500)]
     public string? DeactivationReason { get; set; }
+
+    /// <summary>When the company owner removed this member (soft delete).</summary>
+    public DateTime? RemovedAt { get; set; }
+
+    /// <summary>Owner employer id who removed this member. Plain id (no FK).</summary>
+    public int? RemovedByEmployerId { get; set; }
 
     /// <summary>Identity user owning this profile.</summary>
     public ApplicationUser User { get; set; } = default!;

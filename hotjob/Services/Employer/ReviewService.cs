@@ -1,7 +1,6 @@
 using hotjob.Data;
 using hotjob.DTOs.Employer;
 using hotjob.DTOs.Job;
-using hotjob.Models.Users;
 using hotjob.Services.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -17,6 +16,7 @@ public sealed class ReviewService(ApplicationDbContext db, ILogger<ReviewService
         string? userId,
         int page,
         int pageSize,
+        int? rating = null,
         CancellationToken cancellationToken = default)
     {
         var employer = await RequireActiveEmployerAsync(userId, cancellationToken);
@@ -30,20 +30,24 @@ public sealed class ReviewService(ApplicationDbContext db, ILogger<ReviewService
         if (pageSize < 1 || pageSize > 100)
             return ServiceResult<PagedResponse<ReviewListItemDto>>.Fail(
                 ServiceErrorType.Validation, "Page size must be between 1 and 100.");
+        if (rating is < 1 or > 5)
+            return ServiceResult<PagedResponse<ReviewListItemDto>>.Fail(
+                ServiceErrorType.Validation, "Rating filter must be between 1 and 5.");
 
         var companyId = employer.Data!.CompanyProfileId;
 
-        // Get total count of non-deleted reviews
-        var totalCount = await db.Reviews
-            .Where(r => r.CompanyProfileId == companyId && !r.IsDeleted)
-            .CountAsync(cancellationToken);
-
-        // Get paginated reviews
-        var reviews = await db.Reviews
+        // Admin-deleted (moderated) reviews are never shown to the company.
+        var query = db.Reviews
             .AsNoTracking()
-            .Include(r => r.Candidate).ThenInclude(c => c.User)
-            .Where(r => r.CompanyProfileId == companyId && !r.IsDeleted)
+            .Where(r => r.CompanyProfileId == companyId && !r.IsDeleted);
+        if (rating.HasValue)
+            query = query.Where(r => r.RatingScore == rating.Value);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var reviews = await query
             .OrderByDescending(r => r.CreatedAt)
+            .ThenByDescending(r => r.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(r => new ReviewListItemDto(
@@ -116,12 +120,11 @@ public sealed class ReviewService(ApplicationDbContext db, ILogger<ReviewService
 
         var employer = await db.Employers
             .AsNoTracking()
+            .Include(e => e.Company)
             .SingleOrDefaultAsync(e => e.UserId == userId, cancellationToken);
 
-        if (employer is null || employer.MembershipStatus != MembershipStatus.Active)
-            return ServiceResult<global::hotjob.Models.Users.Employer>.Fail(
-                ServiceErrorType.Unauthorized, "Employer membership is not active.");
-
-        return ServiceResult<global::hotjob.Models.Users.Employer>.Ok(employer);
+        // Same rules as every other employer feature (deactivated account/company, removed member are blocked).
+        // Reading reviews is allowed while the company is still Pending/Rejected, like the company page.
+        return EmployerGuard.Evaluate(employer, requireApprovedCompany: false);
     }
 }

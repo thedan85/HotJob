@@ -6,9 +6,9 @@ using Microsoft.Extensions.Logging;
 
 namespace hotjob.Services.Company;
 
-public sealed class CompanyService(
+public sealed class CompanyDirectoryService(
     ICompanyRepository repository,
-    ILogger<CompanyService> logger) : ICompanyService
+    ILogger<CompanyDirectoryService> logger) : ICompanyDirectoryService
 {
     public const int PageSize = 20;
 

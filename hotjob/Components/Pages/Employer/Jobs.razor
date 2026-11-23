@@ -71,7 +71,7 @@
                 {
                     <section class="ej-panel" aria-label="@(editingId is null ? "Post a new job" : "Edit job")">
                         <h2>@(editingId is null ? "Post a new job" : $"Edit job #{editingId}")</h2>
-                        <p class="ej-sub">Status may only be Draft or Published — close via the table action.</p>
+                        <p class="ej-sub">Choose Draft to keep editing, or Published to submit for approval (recruiter postings go to the company owner first, then HotJob admin). Close via the table action.</p>
                         <EditForm Model="jobForm" OnValidSubmit="SaveAsync">
                             <DataAnnotationsValidator />
                             <ValidationSummary />
@@ -150,6 +150,18 @@
                     <section class="ej-panel" aria-label="Job detail">
                         <h2>@selected.Title</h2>
                         <p class="ej-sub">@selected.CompanyName · @selected.Status · @selected.ApplicationsCount applications · @SalaryDetail(selected)</p>
+                        @if (selected.Status == JobStatus.PendingCompanyApproval)
+                        {
+                            <p class="ej-sub">Waiting for the company owner to approve, then HotJob admin review.</p>
+                        }
+                        else if (selected.Status == JobStatus.PendingApproval)
+                        {
+                            <p class="ej-sub">Waiting for HotJob admin review.</p>
+                        }
+                        else if (selected.Status == JobStatus.Rejected && !string.IsNullOrWhiteSpace(selected.RejectionReason))
+                        {
+                            <p class="ej-sub" style="color:#b3261e">Rejected: @selected.RejectionReason — edit and save as Published to resubmit.</p>
+                        }
                         <div class="ej-chip-row">
                             @foreach (var c in selected.Categories)
                             {

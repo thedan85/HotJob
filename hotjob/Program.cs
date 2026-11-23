@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using hotjob.Components;
 using hotjob.Data;
 using hotjob.Middleware;
@@ -114,7 +115,7 @@ var jwtAudience = jwtSection["Audience"];
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     {
         options.User.RequireUniqueEmail = true;
-        options.Password.RequiredLength = 6;
+        options.Password.RequiredLength = 8;
         options.Password.RequireDigit = true;
         options.Password.RequireUppercase = true;
         options.Password.RequireLowercase = true;
@@ -143,7 +144,37 @@ builder.Services.AddAuthentication(options =>
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
         };
+        options.Events = new JwtBearerEvents
+        {
+            // A disabled/deleted account must lose API access immediately, not when its access token expires.
+            OnTokenValidated = async context =>
+            {
+                var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+                if (!await ActiveUserValidator.IsActiveAsync(
+                        db, context.Principal, context.HttpContext.RequestAborted))
+                {
+                    context.Fail("Account is disabled or no longer exists.");
+                }
+            }
+        };
     });
+
+// Brute-force / spam protection for credential endpoints. Partitioned per client IP.
+// NB: behind a reverse proxy RemoteIpAddress is the proxy's address unless ForwardedHeaders is configured,
+// in which case every client would share one bucket.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(AuthRateLimit.PolicyName, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = AuthRateLimit.PermitLimit,
+                Window = AuthRateLimit.Window,
+                QueueLimit = 0
+            }));
+});
 
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
@@ -161,7 +192,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(o =>
 builder.Services.AddScoped<IJobPostingRepository, JobPostingRepository>();
 builder.Services.AddScoped<IApplicantRepository, ApplicantRepository>();
 builder.Services.AddScoped<ICompanyRepository, CompanyRepository>();
-builder.Services.AddScoped<hotjob.Services.Company.ICompanyService, hotjob.Services.Company.CompanyService>();
+builder.Services.AddScoped<hotjob.Services.Company.ICompanyDirectoryService, hotjob.Services.Company.CompanyDirectoryService>();
 builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IApplicantService, ApplicantService>();
 builder.Services.AddScoped<IInterviewService, InterviewService>();
@@ -173,7 +204,7 @@ builder.Services.AddScoped<AuthSession>();
 builder.Services.AddScoped<HotJobAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(services =>
     services.GetRequiredService<HotJobAuthStateProvider>());
-builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
+builder.Services.AddScoped<hotjob.Services.Employer.IEmployerCompanyService, hotjob.Services.Employer.EmployerCompanyService>();
 builder.Services.AddScoped<hotjob.Services.Employer.IReviewService, hotjob.Services.Employer.ReviewService>();
 builder.Services.AddScoped<hotjob.Services.Admin.IEmployerAdminService, hotjob.Services.Admin.EmployerAdminService>();
 builder.Services.AddScoped<hotjob.Services.Admin.ICompanyAdminService, hotjob.Services.Admin.CompanyAdminService>();
@@ -228,6 +259,7 @@ app.UseHttpsRedirection();
 app.UseExceptionHandler();
 
 app.UseCors("Frontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();

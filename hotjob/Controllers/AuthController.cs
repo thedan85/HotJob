@@ -4,6 +4,7 @@ using hotjob.Services.Authentication;
 using hotjob.Services.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace hotjob.Controllers;
 
@@ -21,6 +22,8 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     /// <response code="401">Bad credentials, locked out, or disabled account.</response>
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status401Unauthorized)]

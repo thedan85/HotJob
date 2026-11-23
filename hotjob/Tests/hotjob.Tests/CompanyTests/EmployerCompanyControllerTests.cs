@@ -83,7 +83,7 @@ public sealed class EmployerCompanyControllerTests
             }
         };
 
-    private sealed class StubCompanyService : ICompanyService
+    private sealed class StubCompanyService : IEmployerCompanyService
     {
         public ServiceResult<CompanyPageResponse> PageResult { get; init; } =
             ServiceResult<CompanyPageResponse>.Fail(ServiceErrorType.NotFound);
@@ -107,5 +107,30 @@ public sealed class EmployerCompanyControllerTests
         public Task<ServiceResult<CompanyMemberDto>> RejectMemberAsync(
             string? userId, int memberId, CancellationToken cancellationToken = default) =>
             Task.FromResult(MemberResult);
+
+        public Task<ServiceResult<CompanyMemberDto>> RemoveMemberAsync(
+            string? userId, int memberId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(MemberResult);
+
+        public Task<ServiceResult<CompanyMemberDto>> RestoreMemberAsync(
+            string? userId, int memberId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(MemberResult);
+
+        public ServiceResult<global::hotjob.DTOs.Job.PagedResponse<CompanyPendingJobDto>> PendingJobsResult { get; init; } =
+            ServiceResult<global::hotjob.DTOs.Job.PagedResponse<CompanyPendingJobDto>>.Fail(ServiceErrorType.Unauthorized);
+        public ServiceResult<CompanyPendingJobDto> JobResult { get; init; } =
+            ServiceResult<CompanyPendingJobDto>.Fail(ServiceErrorType.NotFound);
+
+        public Task<ServiceResult<global::hotjob.DTOs.Job.PagedResponse<CompanyPendingJobDto>>> ListPendingJobsAsync(
+            string? userId, int page, int pageSize, CancellationToken cancellationToken = default) =>
+            Task.FromResult(PendingJobsResult);
+
+        public Task<ServiceResult<CompanyPendingJobDto>> ApproveJobAsync(
+            string? userId, int jobId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(JobResult);
+
+        public Task<ServiceResult<CompanyPendingJobDto>> RejectJobAsync(
+            string? userId, int jobId, RejectCompanyJobRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(JobResult);
     }
 }

@@ -69,6 +69,10 @@ public class CompanyProfile
     [MaxLength(255)]
     public string? DeactivatedByAdminId { get; set; }
 
+    /// <summary>Reason the admin gave when deactivating this company.</summary>
+    [MaxLength(500)]
+    public string? DeactivationReason { get; set; }
+
     /// <summary>Employer members of the company.</summary>
     public ICollection<Employer> Employers { get; set; } = new List<Employer>();
 

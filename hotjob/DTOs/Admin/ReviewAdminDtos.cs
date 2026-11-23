@@ -14,7 +14,8 @@ public record ReviewListItemDto(
     DateTime CreatedAt,
     bool IsDeleted,
     DateTime? DeletedAt,
-    string? DeletedByAdminId);
+    string? DeletedByAdminId,
+    string? DeletionReason);
 
 /// <summary>Detailed view of a review including full candidate info.</summary>
 public record ReviewDetailDto(
@@ -32,6 +33,6 @@ public record ReviewDetailDto(
     string? DeletedByAdminId,
     string? DeletionReason);
 
+/// <summary>Optional body for hiding a review. The admin is taken from the token.</summary>
 public record DeleteReviewRequest(
-    [Required] string AdminUserId,
     [MaxLength(500)] string? Reason = null);

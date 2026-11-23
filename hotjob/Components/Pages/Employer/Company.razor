@@ -6,7 +6,8 @@
 @using hotjob.DTOs.Employer
 @using hotjob.Models.Users
 @using hotjob.Services.Employer
-@inject ICompanyService CompanyService
+@inject IEmployerCompanyService CompanyService
+@inject IReviewService ReviewService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Company Profile &amp; Team | HotJob</PageTitle>
@@ -41,6 +42,17 @@
 
             <nav class="ec-tabs" aria-label="Company sections">
                 <button class="ec-tab @(activeTab == "team" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => activeTab = "team"'>⛉ Team Members &amp; Permissions</button>
+                @if (companyPage?.IsOwner == true)
+                {
+                    <button class="ec-tab @(activeTab == "jobs" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => SwitchTabAsync("jobs")'>
+                        ✓ Job Approvals
+                        @if (companyPage.PendingJobCount > 0)
+                        {
+                            <span class="ec-tab-count">@companyPage.PendingJobCount</span>
+                        }
+                    </button>
+                }
+                <button class="ec-tab @(activeTab == "reviews" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => SwitchTabAsync("reviews")'>★ Company Reviews</button>
                 <button class="ec-tab @(activeTab == "profile" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => activeTab = "profile"'>▤ Company Profile &amp; Branding</button>
                 <button class="ec-tab @(activeTab == "compliance" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => activeTab = "compliance"'>☑ Verification &amp; Compliance</button>
                 <button class="ec-tab @(activeTab == "audit" ? "ec-tab-active" : string.Empty)" type="button" @onclick='() => activeTab = "audit"'>◷ Activity &amp; Audit Log</button>
@@ -63,7 +75,9 @@
                         <p class="ec-sub">Users joining an existing company stay Pending and cannot access ATS data or post jobs until the owner approves them.</p>
                         @{
                             var pending = companyPage.Members.Where(m => m.MembershipStatus == MembershipStatus.Pending).ToList();
-                            var active = companyPage.Members.Where(m => m.MembershipStatus != MembershipStatus.Pending).ToList();
+                            var active = companyPage.Members.Where(m => m.MembershipStatus == MembershipStatus.Active).ToList();
+                            var removed = companyPage.Members.Where(m => m.MembershipStatus == MembershipStatus.Removed).ToList();
+                            var rejected = companyPage.Members.Where(m => m.MembershipStatus == MembershipStatus.Rejected).ToList();
                         }
                         <h3>@pending.Count pending join request@(pending.Count == 1 ? string.Empty : "s")@(companyPage.IsOwner ? " awaiting owner approval" : string.Empty)</h3>
                         <div class="ec-grid-2" style="margin-bottom:16px">
@@ -86,17 +100,190 @@
                                 <p class="ec-sub">No pending requests.</p>
                             }
                         </div>
-                        <h3>Active members</h3>
+                        <h3>Active members (@active.Count)</h3>
                         @foreach (var m in active)
                         {
                             <div class="ec-member-row">
-                                <div><strong>@m.FullName</strong><br /><small>@(m.Position ?? "Member") · @(m.Email ?? "no email")</small></div>
-                                <span class="ec-badge @(m.IsOwner ? "ec-owner" : "ec-active")">@(m.IsOwner ? "Owner" : m.MembershipStatus.ToString())</span>
+                                <div><strong>@m.FullName</strong><br /><small>@(m.Position ?? "Member") · @(m.Email ?? "no email") · joined @m.JoinedAt.ToString("dd MMM yyyy")</small></div>
+                                <div class="ec-btn-row" style="margin-top:0;align-items:center">
+                                    <span class="ec-badge @(m.IsOwner ? "ec-owner" : "ec-active")">@(m.IsOwner ? "Owner" : "Active")</span>
+                                    @if (companyPage.IsOwner && !m.IsOwner)
+                                    {
+                                        <button class="ec-btn ec-btn-danger ec-btn-small" type="button" disabled="@isActing" @onclick="() => RemoveAsync(m.Id, m.FullName)">@(pendingRemoveId == m.Id ? "Confirm remove?" : "Remove")</button>
+                                        @if (pendingRemoveId == m.Id)
+                                        {
+                                            <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" @onclick="() => pendingRemoveId = null">Cancel</button>
+                                        }
+                                    }
+                                </div>
                             </div>
+                        }
+                        @if (companyPage.IsOwner)
+                        {
+                            <p class="ec-sub" style="margin-top:8px">Removing a recruiter revokes their access immediately. Their job postings stay with the company. You can restore the member later.</p>
+                        }
+                        @if (removed.Count > 0)
+                        {
+                            <h3>Removed members (@removed.Count)</h3>
+                            @foreach (var m in removed)
+                            {
+                                <div class="ec-member-row">
+                                    <div><strong>@m.FullName</strong><br /><small>@(m.Position ?? "Member") · @(m.Email ?? "no email")@(m.RemovedAt.HasValue ? " · removed " + m.RemovedAt.Value.ToString("dd MMM yyyy") : string.Empty)</small></div>
+                                    <div class="ec-btn-row" style="margin-top:0;align-items:center">
+                                        <span class="ec-badge ec-removed">Removed</span>
+                                        @if (companyPage.IsOwner)
+                                        {
+                                            <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" disabled="@isActing" @onclick="() => RestoreAsync(m.Id, m.FullName)">Restore</button>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                        @if (rejected.Count > 0)
+                        {
+                            <h3>Rejected requests (@rejected.Count)</h3>
+                            @foreach (var m in rejected)
+                            {
+                                <div class="ec-member-row">
+                                    <div><strong>@m.FullName</strong><br /><small>@(m.Position ?? "Member") · @(m.Email ?? "no email")</small></div>
+                                    <span class="ec-badge ec-rejected">Rejected</span>
+                                </div>
+                            }
                         }
                         @if (!string.IsNullOrWhiteSpace(notice))
                         {
                             <p class="ec-notice" role="status" style="margin-top:12px">@notice</p>
+                        }
+                    </section>
+                }
+                else if (activeTab == "jobs" && companyPage.IsOwner)
+                {
+                    <section class="ec-card">
+                        <h2>Job Posting Approvals</h2>
+                        <p class="ec-sub">Postings submitted by recruiters wait here first. Approving forwards them to HotJob admin review; rejecting sends them back to the recruiter with your reason.</p>
+                        @if (jobsLoading)
+                        {
+                            <p role="status">Loading pending postings...</p>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(jobsError))
+                        {
+                            <div class="ec-alert" role="alert">@jobsError</div>
+                        }
+                        else if (pendingJobs is null || pendingJobs.Items.Count == 0)
+                        {
+                            <p class="ec-sub">No postings are waiting for your approval.</p>
+                        }
+                        else
+                        {
+                            <h3>@pendingJobs.TotalCount posting@(pendingJobs.TotalCount == 1 ? string.Empty : "s") awaiting approval</h3>
+                            <div class="ec-grid-2">
+                                @foreach (var j in pendingJobs.Items)
+                                {
+                                    <div class="ec-pending-card">
+                                        <strong>@j.Title</strong>
+                                        <span style="font-size:12px;color:var(--hj-muted)">by @(j.CreatedByName ?? "former member") · @j.JobType · @SalaryText(j.SalaryMin, j.SalaryMax)</span>
+                                        <span style="font-size:12px;color:var(--hj-muted)">Submitted @((j.SubmittedAt ?? j.CreatedAt).ToString("dd MMM yyyy HH:mm"))@(j.ExpiryDate.HasValue ? " · expires " + j.ExpiryDate.Value.ToString("dd MMM yyyy") : string.Empty)</span>
+                                        @if (rejectingJobId == j.Id)
+                                        {
+                                            <textarea class="ec-input" rows="2" maxlength="1000" placeholder="Reason shown to the recruiter (required)" @bind="rejectReason" @bind:event="oninput"></textarea>
+                                            <div class="ec-btn-row" style="margin-top:0">
+                                                <button class="ec-btn ec-btn-danger ec-btn-small" type="button" disabled="@(isActing || string.IsNullOrWhiteSpace(rejectReason))" @onclick="() => RejectJobAsync(j.Id, j.Title)">Confirm reject</button>
+                                                <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" @onclick="CancelRejectJob">Cancel</button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="ec-btn-row" style="margin-top:0">
+                                                <button class="ec-btn ec-btn-primary ec-btn-small" type="button" disabled="@isActing" @onclick="() => ApproveJobAsync(j.Id, j.Title)">Approve &amp; send to admin</button>
+                                                <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" disabled="@isActing" @onclick="() => StartRejectJob(j.Id)">Reject</button>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (pendingJobs.TotalPages > 1)
+                            {
+                                <div class="ec-toolbar" style="margin-top:12px">
+                                    <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" disabled="@(jobsPage <= 1)" @onclick="() => LoadPendingJobsAsync(jobsPage - 1)">‹ Prev</button>
+                                    <span>Page @pendingJobs.Page / @pendingJobs.TotalPages</span>
+                                    <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" disabled="@(jobsPage >= pendingJobs.TotalPages)" @onclick="() => LoadPendingJobsAsync(jobsPage + 1)">Next ›</button>
+                                </div>
+                            }
+                        }
+                        @if (!string.IsNullOrWhiteSpace(jobsNotice))
+                        {
+                            <p class="ec-notice" role="status" style="margin-top:12px">@jobsNotice</p>
+                        }
+                    </section>
+                }
+                else if (activeTab == "reviews")
+                {
+                    <section class="ec-card">
+                        <h2>Company Reviews</h2>
+                        <p class="ec-sub">What candidates say about your company. Reviews removed by HotJob moderation are not shown or counted.</p>
+                        @if (reviewsLoading && reviewStats is null)
+                        {
+                            <p role="status">Loading reviews...</p>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(reviewsError))
+                        {
+                            <div class="ec-alert" role="alert">@reviewsError</div>
+                        }
+                        else if (reviewStats is not null)
+                        {
+                            <div class="ec-rating-grid">
+                                <div>
+                                    <div class="ec-rating-big">@reviewStats.AverageRating.ToString("0.0")</div>
+                                    <div class="ec-stars" aria-hidden="true">@Stars((int)Math.Round(reviewStats.AverageRating))</div>
+                                    <small>@reviewStats.TotalReviews review@(reviewStats.TotalReviews == 1 ? string.Empty : "s")</small>
+                                </div>
+                                <div>
+                                    @foreach (var (star, count) in StarCounts(reviewStats))
+                                    {
+                                        <div class="ec-bar-row">
+                                            <span>@star ★</span>
+                                            <div class="ec-bar"><span style="width:@(reviewStats.TotalReviews == 0 ? 0 : count * 100 / reviewStats.TotalReviews)%"></span></div>
+                                            <span>@count</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <div class="ec-toolbar">
+                                <span>Filter:</span>
+                                <button class="ec-btn ec-btn-small @(ratingFilter is null ? "ec-btn-primary" : "ec-btn-secondary")" type="button" @onclick="() => FilterReviewsAsync(null)">All</button>
+                                @for (var s = 5; s >= 1; s--)
+                                {
+                                    var star = s;
+                                    <button class="ec-btn ec-btn-small @(ratingFilter == star ? "ec-btn-primary" : "ec-btn-secondary")" type="button" @onclick="() => FilterReviewsAsync(star)">@star ★</button>
+                                }
+                            </div>
+                            @if (reviews is null || reviews.Items.Count == 0)
+                            {
+                                <p class="ec-sub">No reviews@(ratingFilter is null ? string.Empty : $" with {ratingFilter} stars") yet.</p>
+                            }
+                            else
+                            {
+                                @foreach (var r in reviews.Items)
+                                {
+                                    <div class="ec-review">
+                                        <strong>@(r.CandidateName ?? "Candidate")</strong>
+                                        <span class="ec-stars" style="margin-left:8px" aria-label="@r.RatingScore of 5 stars">@Stars(r.RatingScore)</span>
+                                        <small style="color:var(--hj-muted);margin-left:8px">@r.CreatedAt.ToString("dd MMM yyyy")</small>
+                                        @if (!string.IsNullOrWhiteSpace(r.ReviewText))
+                                        {
+                                            <p>@r.ReviewText</p>
+                                        }
+                                    </div>
+                                }
+                                @if (reviews.TotalPages > 1)
+                                {
+                                    <div class="ec-toolbar" style="margin-top:12px">
+                                        <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" disabled="@(reviewsPage <= 1 || reviewsLoading)" @onclick="() => LoadReviewsAsync(reviewsPage - 1)">‹ Prev</button>
+                                        <span>Page @reviews.Page / @reviews.TotalPages</span>
+                                        <button class="ec-btn ec-btn-secondary ec-btn-small" type="button" disabled="@(reviewsPage >= reviews.TotalPages || reviewsLoading)" @onclick="() => LoadReviewsAsync(reviewsPage + 1)">Next ›</button>
+                                    </div>
+                                }
+                            }
                         }
                     </section>
                 }
@@ -185,6 +372,25 @@
     private string companyName = string.Empty;
     private CompanyPageResponse? companyPage;
     private readonly UpdateCompanyRequest companyForm = new();
+    private int? pendingRemoveId;
+
+    private const int JobsPageSize = 10;
+    private const int ReviewsPageSize = 10;
+
+    private hotjob.DTOs.Job.PagedResponse<CompanyPendingJobDto>? pendingJobs;
+    private int jobsPage = 1;
+    private bool jobsLoading;
+    private string? jobsError;
+    private string? jobsNotice;
+    private int? rejectingJobId;
+    private string? rejectReason;
+
+    private CompanyRatingStatsDto? reviewStats;
+    private hotjob.DTOs.Job.PagedResponse<ReviewListItemDto>? reviews;
+    private int reviewsPage = 1;
+    private int? ratingFilter;
+    private bool reviewsLoading;
+    private string? reviewsError;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -268,6 +474,194 @@
             isActing = false;
         }
     }
+
+    private async Task SwitchTabAsync(string tab)
+    {
+        activeTab = tab;
+        if (tab == "jobs" && pendingJobs is null)
+            await LoadPendingJobsAsync(1);
+        else if (tab == "reviews" && reviewStats is null)
+            await LoadReviewsAsync(1, includeStats: true);
+    }
+
+    private async Task RemoveAsync(int memberId, string fullName)
+    {
+        // Two-click confirmation: first click arms, second click removes.
+        if (pendingRemoveId != memberId)
+        {
+            pendingRemoveId = memberId;
+            return;
+        }
+
+        pendingRemoveId = null;
+        notice = null;
+        isActing = true;
+        try
+        {
+            var result = await CompanyService.RemoveMemberAsync(await GetUserIdAsync(), memberId);
+            notice = result.Success ? $"Removed {fullName} from the company." : result.Errors.FirstOrDefault() ?? "Could not remove this member.";
+            if (result.Success) await LoadAsync();
+        }
+        finally
+        {
+            isActing = false;
+        }
+    }
+
+    private async Task RestoreAsync(int memberId, string fullName)
+    {
+        notice = null;
+        isActing = true;
+        try
+        {
+            var result = await CompanyService.RestoreMemberAsync(await GetUserIdAsync(), memberId);
+            notice = result.Success ? $"Restored {fullName}." : result.Errors.FirstOrDefault() ?? "Could not restore this member.";
+            if (result.Success) await LoadAsync();
+        }
+        finally
+        {
+            isActing = false;
+        }
+    }
+
+    private async Task LoadPendingJobsAsync(int page)
+    {
+        jobsLoading = true;
+        jobsError = null;
+        try
+        {
+            var result = await CompanyService.ListPendingJobsAsync(await GetUserIdAsync(), page, JobsPageSize);
+            // Acting on the only item of the last page leaves that page empty: step back one page.
+            if (result.Success && result.Data is not null && result.Data.Items.Count == 0 && result.Data.TotalCount > 0 && page > 1)
+            {
+                result = await CompanyService.ListPendingJobsAsync(await GetUserIdAsync(), page - 1, JobsPageSize);
+            }
+
+            if (result.Success && result.Data is not null)
+            {
+                pendingJobs = result.Data;
+                jobsPage = result.Data.Page;
+                if (companyPage is not null) companyPage.PendingJobCount = result.Data.TotalCount;
+            }
+            else
+            {
+                jobsError = result.Errors.FirstOrDefault() ?? "Could not load pending postings.";
+            }
+        }
+        finally
+        {
+            jobsLoading = false;
+        }
+    }
+
+    private void StartRejectJob(int jobId)
+    {
+        rejectingJobId = jobId;
+        rejectReason = null;
+    }
+
+    private void CancelRejectJob()
+    {
+        rejectingJobId = null;
+        rejectReason = null;
+    }
+
+    private async Task ApproveJobAsync(int jobId, string title)
+    {
+        jobsNotice = null;
+        isActing = true;
+        try
+        {
+            var result = await CompanyService.ApproveJobAsync(await GetUserIdAsync(), jobId);
+            jobsNotice = result.Success ? $"\"{title}\" approved and sent to HotJob admin review." : result.Errors.FirstOrDefault() ?? "Could not approve this posting.";
+            if (result.Success) await LoadPendingJobsAsync(jobsPage);
+        }
+        finally
+        {
+            isActing = false;
+        }
+    }
+
+    private async Task RejectJobAsync(int jobId, string title)
+    {
+        jobsNotice = null;
+        isActing = true;
+        try
+        {
+            var result = await CompanyService.RejectJobAsync(await GetUserIdAsync(), jobId, new RejectCompanyJobRequest { Reason = rejectReason ?? string.Empty });
+            jobsNotice = result.Success ? $"\"{title}\" rejected and returned to the recruiter." : result.Errors.FirstOrDefault() ?? "Could not reject this posting.";
+            if (result.Success)
+            {
+                CancelRejectJob();
+                await LoadPendingJobsAsync(jobsPage);
+            }
+        }
+        finally
+        {
+            isActing = false;
+        }
+    }
+
+    private async Task FilterReviewsAsync(int? rating)
+    {
+        ratingFilter = rating;
+        await LoadReviewsAsync(1);
+    }
+
+    private async Task LoadReviewsAsync(int page, bool includeStats = false)
+    {
+        reviewsLoading = true;
+        reviewsError = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            if (includeStats)
+            {
+                var stats = await ReviewService.GetCompanyRatingStatsAsync(userId);
+                if (!stats.Success || stats.Data is null)
+                {
+                    reviewsError = stats.Errors.FirstOrDefault() ?? "Could not load review statistics.";
+                    return;
+                }
+                reviewStats = stats.Data;
+            }
+
+            var result = await ReviewService.GetCompanyReviewsAsync(userId, page, ReviewsPageSize, ratingFilter);
+            if (result.Success && result.Data is not null)
+            {
+                reviews = result.Data;
+                reviewsPage = result.Data.Page;
+            }
+            else
+            {
+                reviewsError = result.Errors.FirstOrDefault() ?? "Could not load reviews.";
+            }
+        }
+        finally
+        {
+            reviewsLoading = false;
+        }
+    }
+
+    private static string Stars(int score) =>
+        new string('★', Math.Clamp(score, 0, 5)) + new string('☆', 5 - Math.Clamp(score, 0, 5));
+
+    private static IEnumerable<(int Star, int Count)> StarCounts(CompanyRatingStatsDto stats) =>
+    [
+        (5, stats.FiveStarCount),
+        (4, stats.FourStarCount),
+        (3, stats.ThreeStarCount),
+        (2, stats.TwoStarCount),
+        (1, stats.OneStarCount)
+    ];
+
+    private static string SalaryText(decimal? min, decimal? max) => (min, max) switch
+    {
+        (null, null) => "Negotiable",
+        (not null, null) => $"from {min:N0}",
+        (null, not null) => $"up to {max:N0}",
+        _ => $"{min:N0} – {max:N0}"
+    };
 
     private async Task RejectAsync(int memberId, string fullName)
     {

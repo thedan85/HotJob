@@ -6,6 +6,7 @@ using hotjob.Models.Job;
 using hotjob.Models.Users;
 using hotjob.Repositories.Job;
 using hotjob.Services.Common;
+using hotjob.Services.Employer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -49,8 +50,9 @@ public sealed class JobService(
 
         var requestedStatus = request.Status ?? JobStatus.Draft;
 
-        // Automatically convert Published to PendingApproval when creating
-        var actualStatus = requestedStatus == JobStatus.Published ? JobStatus.PendingApproval : requestedStatus;
+        // "Published" on create means "submit": owner jobs go straight to admin review,
+        // member jobs first wait for the company owner (two-step approval).
+        var actualStatus = requestedStatus == JobStatus.Published ? SubmissionStatusFor(employer) : requestedStatus;
 
         var job = new JobPosting
         {
@@ -64,7 +66,7 @@ public sealed class JobService(
             JobType = request.JobType,
             ExpiryDate = request.ExpiryDate,
             Status = actualStatus,
-            SubmittedForApprovalAt = actualStatus == JobStatus.PendingApproval ? DateTime.UtcNow : null,
+            SubmittedForApprovalAt = actualStatus is JobStatus.PendingApproval or JobStatus.PendingCompanyApproval ? DateTime.UtcNow : null,
             JobSkills = request.Skills
                 .Select(skill => new JobSkill { SkillId = skill.SkillId, ImportanceWeight = skill.ImportanceWeight })
                 .ToList(),
@@ -110,11 +112,10 @@ public sealed class JobService(
             return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.NotFound, "Job not found.");
         }
 
-        // Validate status transition
-        var requestedStatus = request.Status ?? job.Status;
-        if (requestedStatus == JobStatus.Published && job.Status != JobStatus.Approved)
+        var transition = ResolveStatusTransition(job.Status, request.Status ?? job.Status, employer);
+        if (transition.Error is not null)
         {
-            return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.Validation, "Job must be approved before it can be published.");
+            return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.Validation, transition.Error);
         }
 
         job.Title = request.Title.Trim();
@@ -124,7 +125,10 @@ public sealed class JobService(
         job.ExperienceRequired = request.ExperienceRequired;
         job.JobType = request.JobType;
         job.ExpiryDate = request.ExpiryDate;
-        job.Status = requestedStatus;
+        if (transition.Status != job.Status)
+        {
+            ApplyStatusChange(job, transition.Status);
+        }
 
         ReplaceSkills(job, request.Skills);
         ReplaceCategories(job, request.CategoryIds);
@@ -345,14 +349,85 @@ public sealed class JobService(
         return ServiceResult<JobDetailResponse>.Ok(ToDetail(job, count));
     }
 
-    private Task<global::hotjob.Models.Users.Employer?> GetAuthorizedEmployerAsync(string userId, CancellationToken cancellationToken) =>
-        dbContext.Employers
-            .Include(employer => employer.Company)
-            .FirstOrDefaultAsync(
-                employer => employer.UserId == userId
-                    && employer.MembershipStatus == MembershipStatus.Active
-                    && employer.Company.Status == CompanyStatus.Approved,
-                cancellationToken);
+    private async Task<global::hotjob.Models.Users.Employer?> GetAuthorizedEmployerAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return null;
+        }
+
+        var employer = await dbContext.Employers
+            .Include(candidate => candidate.Company)
+            .FirstOrDefaultAsync(candidate => candidate.UserId == userId, cancellationToken);
+
+        // Shared rules: active employer row, Active membership (not Pending/Rejected/Removed), active + Approved company.
+        return EmployerGuard.Evaluate(employer, requireApprovedCompany: true).Success ? employer : null;
+    }
+
+    /// <summary>Where a submitted job goes first: owner jobs go to admin, member jobs wait for the owner.</summary>
+    private static JobStatus SubmissionStatusFor(global::hotjob.Models.Users.Employer employer) =>
+        employer.IsOwner ? JobStatus.PendingApproval : JobStatus.PendingCompanyApproval;
+
+    /// <summary>
+    /// Employer-side status rules. The request may only carry Draft or Published (validated earlier):
+    /// Draft = keep/withdraw to draft (not once live), Published = submit for approval, or go live once admin-approved.
+    /// Approval states themselves can never be set by the employer.
+    /// </summary>
+    private static (JobStatus Status, string? Error) ResolveStatusTransition(
+        JobStatus current,
+        JobStatus requested,
+        global::hotjob.Models.Users.Employer employer)
+    {
+        // A recruiter editing a job the owner already signed off on sends it back to the owner,
+        // so admin never reviews content the owner has not seen.
+        if (!employer.IsOwner
+            && current is JobStatus.PendingApproval or JobStatus.Approved
+            && requested != JobStatus.Draft)
+        {
+            return (JobStatus.PendingCompanyApproval, null);
+        }
+
+        if (requested == current)
+        {
+            return (current, null);
+        }
+
+        return requested switch
+        {
+            JobStatus.Draft when current is JobStatus.Published or JobStatus.Closed or JobStatus.Expired =>
+                (current, "A live, closed or expired job cannot be moved back to Draft."),
+            JobStatus.Draft => (JobStatus.Draft, null),
+
+            JobStatus.Published when current == JobStatus.Approved => (JobStatus.Published, null),
+            JobStatus.Published when current is JobStatus.Draft or JobStatus.Rejected => (SubmissionStatusFor(employer), null),
+            JobStatus.Published when current is JobStatus.PendingApproval or JobStatus.PendingCompanyApproval =>
+                (current, null), // already submitted; editing keeps it in its queue
+            JobStatus.Published =>
+                (current, "Job must be approved before it can be published."),
+
+            _ => (current, "Status may only be Draft or Published.")
+        };
+    }
+
+    private static void ApplyStatusChange(JobPosting job, JobStatus target)
+    {
+        if (target is JobStatus.PendingApproval or JobStatus.PendingCompanyApproval)
+        {
+            // Fresh submission: clear the previous review round.
+            job.SubmittedForApprovalAt = DateTime.UtcNow;
+            job.RejectionReason = null;
+            job.ReviewedAt = null;
+            job.ReviewedByAdminId = null;
+            job.CompanyReviewedAt = null;
+            job.CompanyReviewedByEmployerId = null;
+        }
+        else if (target == JobStatus.Draft)
+        {
+            job.SubmittedForApprovalAt = null;
+        }
+
+        job.Status = target;
+    }
 
     private static void Normalize(CreateJobRequest request)
     {

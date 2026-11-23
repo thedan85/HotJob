@@ -321,6 +321,12 @@ namespace hotjob.Migrations
                     b.Property<int>("CompanyProfileId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("CompanyReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("CompanyReviewedByEmployerId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -875,6 +881,10 @@ namespace hotjob.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
+                    b.Property<string>("DeactivationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
@@ -967,6 +977,12 @@ namespace hotjob.Migrations
                     b.Property<string>("Position")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("RemovedByEmployerId")
+                        .HasColumnType("int");
 
                     b.Property<string>("UserId")
                         .IsRequired()

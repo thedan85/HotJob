@@ -76,6 +76,28 @@ public sealed class EmployerGuardTests
         Assert.True(result.Success, string.Join("; ", result.Errors));
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Detail_DeactivatedEmployerOrCompany_Blocked(bool deactivateEmployer, bool deactivateCompany)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, companyId) = await SeedEmployerAsync(fx, "hr@example.com", CompanyStatus.Approved);
+        var appId = await SeedApplicationAsync(fx, companyId);
+        if (deactivateEmployer)
+            fx.Db.Employers.Single(e => e.UserId == userId).IsActive = false;
+        if (deactivateCompany)
+            fx.Db.CompanyProfiles.Single(c => c.Id == companyId).IsActive = false;
+        await fx.Db.SaveChangesAsync();
+        var svc = new ApplicantService(new ApplicantRepository(fx.Db), NullLogger<ApplicantService>.Instance);
+
+        foreach (var e in fx.Db.ChangeTracker.Entries().ToArray()) e.State = EntityState.Detached;
+        var result = await svc.GetDetailAsync(userId, appId);
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Unauthorized, result.ErrorType);
+    }
+
     [Fact]
     public async Task List_RejectedCompany_Blocked()
     {

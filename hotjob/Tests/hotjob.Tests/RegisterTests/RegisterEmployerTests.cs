@@ -132,6 +132,97 @@ public sealed class RegisterEmployerTests
     }
 
     [Fact]
+    public async Task RegisterEmployer_JoinDeactivatedCompany_ReturnsConflict_AndNoUserCreated()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        fx.Db.CompanyProfiles.Add(new CompanyProfile
+        {
+            CompanyName = "Closed Co",
+            Status = CompanyStatus.Approved,
+            IsActive = false
+        });
+        await fx.Db.SaveChangesAsync();
+        var closed = await fx.Db.CompanyProfiles.SingleAsync(c => c.CompanyName == "Closed Co");
+
+        var result = await fx.Service.RegisterAsync(new RegisterAccountRequest
+        {
+            Email = "closed@example.com",
+            Password = "Str0ng!Pass",
+            FullName = "Closed Person",
+            AccountType = AccountType.Employer,
+            CompanyProfileId = closed.Id
+        });
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+        Assert.Null(await fx.UserManager.FindByEmailAsync("closed@example.com"));
+        Assert.Equal(0, await fx.Db.Employers.CountAsync());
+    }
+
+    private static RegisterAccountRequest JoinRequest(string email, int companyId) => new()
+    {
+        Email = email,
+        Password = "Str0ng!Pass",
+        FullName = "Joiner Person",
+        AccountType = AccountType.Employer,
+        CompanyProfileId = companyId
+    };
+
+    [Fact]
+    public async Task RegisterEmployer_PendingQueueFull_ReturnsConflict_AndNoUserCreated()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var owner = await fx.Service.RegisterAsync(NewCompanyEmployer("owner@example.com", "Busy Co"));
+        var companyId = owner.Data!.CompanyProfileId!.Value;
+        var limit = hotjob.Services.Account.AccountService.MaxPendingJoinRequestsPerCompany;
+        for (var i = 0; i < limit; i++)
+            Assert.True((await fx.Service.RegisterAsync(JoinRequest($"j{i}@example.com", companyId))).Success);
+
+        var result = await fx.Service.RegisterAsync(JoinRequest("overflow@example.com", companyId));
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+        Assert.Null(await fx.UserManager.FindByEmailAsync("overflow@example.com"));
+        Assert.Equal(limit, await fx.Db.Employers.CountAsync(
+            e => e.CompanyProfileId == companyId && e.MembershipStatus == MembershipStatus.Pending));
+    }
+
+    [Fact]
+    public async Task RegisterEmployer_PendingQueue_OnlyPendingCountsTowardCap()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var owner = await fx.Service.RegisterAsync(NewCompanyEmployer("owner@example.com", "Busy Co"));
+        var companyId = owner.Data!.CompanyProfileId!.Value;
+        var limit = hotjob.Services.Account.AccountService.MaxPendingJoinRequestsPerCompany;
+        for (var i = 0; i < limit; i++)
+            Assert.True((await fx.Service.RegisterAsync(JoinRequest($"j{i}@example.com", companyId))).Success);
+
+        // Owner resolves one request: the slot is freed.
+        var resolved = await fx.Db.Employers.FirstAsync(e => !e.IsOwner && e.CompanyProfileId == companyId);
+        resolved.MembershipStatus = MembershipStatus.Rejected;
+        await fx.Db.SaveChangesAsync();
+
+        var result = await fx.Service.RegisterAsync(JoinRequest("next@example.com", companyId));
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+    }
+
+    [Fact]
+    public async Task RegisterEmployer_PendingQueueFull_DoesNotBlockOtherCompanies()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var busy = await fx.Service.RegisterAsync(NewCompanyEmployer("owner@example.com", "Busy Co"));
+        var other = await fx.Service.RegisterAsync(NewCompanyEmployer("owner2@example.com", "Quiet Co"));
+        var limit = hotjob.Services.Account.AccountService.MaxPendingJoinRequestsPerCompany;
+        for (var i = 0; i < limit; i++)
+            Assert.True((await fx.Service.RegisterAsync(JoinRequest($"j{i}@example.com", busy.Data!.CompanyProfileId!.Value))).Success);
+
+        var result = await fx.Service.RegisterAsync(JoinRequest("elsewhere@example.com", other.Data!.CompanyProfileId!.Value));
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+    }
+
+    [Fact]
     public async Task RegisterEmployer_DuplicateCompanyName_ReturnsConflict_AndNoUserCreated()
     {
         await using var fx = await TestFixture.CreateAsync();

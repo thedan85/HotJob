@@ -6,6 +6,7 @@ using hotjob.Services.Authentication;
 using hotjob.Services.Common;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace hotjob.Services.Account;
@@ -17,6 +18,9 @@ public sealed class AccountService(
     IAuthService authService,
     ILogger<AccountService> logger) : IAccountService
 {
+    /// <summary>Maximum employers waiting for owner approval in one company before new join requests are refused.</summary>
+    public const int MaxPendingJoinRequestsPerCompany = 20;
+
     public async Task<ServiceResult<RegisteredAccountResponse>> RegisterAsync(
         RegisterAccountRequest request,
         CancellationToken cancellationToken = default)
@@ -95,17 +99,22 @@ public sealed class AccountService(
         }
         catch (DbUpdateException exception)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            // Never pass the request token to a rollback: a cancelled request would skip it.
+            await transaction.RollbackAsync(CancellationToken.None);
             logger.LogWarning(exception, "Registration database conflict for {Email}.", request.Email);
+
+            // Concurrent registrations can pass the pre-checks above and still hit the unique indexes
+            // (email, company name); that race must surface as a 409, not a 500.
+            var isUniqueViolation = DbExceptionClassifier.IsUniqueViolation(exception);
             return ServiceResult<RegisteredAccountResponse>.Fail(
-                IsUniqueConstraintViolation(exception) ? ServiceErrorType.Conflict : ServiceErrorType.Validation,
-                IsUniqueConstraintViolation(exception)
+                isUniqueViolation ? ServiceErrorType.Conflict : ServiceErrorType.Validation,
+                isUniqueViolation
                     ? "An account or company with the supplied details already exists."
                     : "The account could not be created.");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            await transaction.RollbackAsync(CancellationToken.None);
             logger.LogError(exception, "Registration failed for {Email}.", request.Email);
             throw;
         }
@@ -162,18 +171,21 @@ public sealed class AccountService(
             {
                 var existingUser = await userManager.FindByEmailAsync(email);
                 if (existingUser is not null && existingUser.Id != user.Id)
-                    return ServiceResult<ProfileResponse>.Fail(ServiceErrorType.Conflict, "An account with this email already exists.");
+                    return await AbortProfileUpdateAsync(transaction, ServiceResult<ProfileResponse>.Fail(
+                        ServiceErrorType.Conflict, "An account with this email already exists."));
 
+                // Each Identity call below persists on its own, so a later failure leaves earlier steps
+                // written inside this transaction: every failure path must roll back explicitly.
                 var emailResult = await userManager.SetEmailAsync(user, email);
                 if (!emailResult.Succeeded)
-                    return ProfileIdentityFailure(emailResult);
+                    return await AbortProfileUpdateAsync(transaction, ProfileIdentityFailure(emailResult));
                 var usernameResult = await userManager.SetUserNameAsync(user, email);
                 if (!usernameResult.Succeeded)
-                    return ProfileIdentityFailure(usernameResult);
+                    return await AbortProfileUpdateAsync(transaction, ProfileIdentityFailure(usernameResult));
                 user.EmailConfirmed = false;
                 var updateResult = await userManager.UpdateAsync(user);
                 if (!updateResult.Succeeded)
-                    return ProfileIdentityFailure(updateResult);
+                    return await AbortProfileUpdateAsync(transaction, ProfileIdentityFailure(updateResult));
             }
 
             if (candidate is not null)
@@ -205,7 +217,7 @@ public sealed class AccountService(
             await transaction.RollbackAsync(CancellationToken.None);
             logger.LogWarning(exception, "Profile update database conflict for {UserId}.", userId);
             return ServiceResult<ProfileResponse>.Fail(
-                IsUniqueConstraintViolation(exception) ? ServiceErrorType.Conflict : ServiceErrorType.Validation,
+                DbExceptionClassifier.IsUniqueViolation(exception) ? ServiceErrorType.Conflict : ServiceErrorType.Validation,
                 "The profile could not be updated.");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -243,6 +255,19 @@ public sealed class AccountService(
 
         await authService.LogoutAsync(null, userId, cancellationToken);
         return ServiceResult.Ok();
+    }
+
+    /// <summary>
+    /// Rolls the profile-update transaction back and drops the context's tracked state, so the
+    /// partly-modified user entity cannot be read back as if the change had been saved.
+    /// </summary>
+    private async Task<ServiceResult<ProfileResponse>> AbortProfileUpdateAsync(
+        IDbContextTransaction transaction,
+        ServiceResult<ProfileResponse> failure)
+    {
+        await transaction.RollbackAsync(CancellationToken.None);
+        dbContext.ChangeTracker.Clear();
+        return failure;
     }
 
     private static IReadOnlyList<string> ValidateProfileRequest(UpdateProfileRequest? request)
@@ -349,11 +374,31 @@ public sealed class AccountService(
                 return ServiceResult<int>.Fail(ServiceErrorType.NotFound, "Company not found.");
             }
 
+            if (!company.IsActive)
+            {
+                return ServiceResult<int>.Fail(
+                    ServiceErrorType.Conflict,
+                    "This company is not accepting new members.");
+            }
+
             if (company.Status == CompanyStatus.Rejected)
             {
                 return ServiceResult<int>.Fail(
                     ServiceErrorType.Conflict,
                     "You cannot join a rejected company.");
+            }
+
+            // Anonymous registration must not be able to flood an owner's approval queue.
+            // Soft cap: the count and the insert are not atomic, so concurrent requests can overshoot slightly.
+            var pendingRequests = await dbContext.Employers.CountAsync(
+                employer => employer.CompanyProfileId == company.Id
+                    && employer.MembershipStatus == MembershipStatus.Pending,
+                cancellationToken);
+            if (pendingRequests >= MaxPendingJoinRequestsPerCompany)
+            {
+                return ServiceResult<int>.Fail(
+                    ServiceErrorType.Conflict,
+                    "This company has too many pending join requests. Try again later.");
             }
         }
         else if (!string.IsNullOrWhiteSpace(request.CompanyName))
@@ -458,10 +503,6 @@ public sealed class AccountService(
             errorType,
             errors.Select(error => error.Description));
     }
-
-    private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
-        exception.InnerException?.Message.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) == true ||
-        exception.InnerException?.Message.Contains("unique", StringComparison.OrdinalIgnoreCase) == true;
 
     private static RegisteredAccountResponse ToResponse(
         ApplicationUser user,

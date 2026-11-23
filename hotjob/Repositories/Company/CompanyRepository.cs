@@ -23,7 +23,7 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
 
         var query = dbContext.CompanyProfiles
             .AsNoTracking()
-            .Where(company => company.Status == CompanyStatus.Approved);
+            .Where(company => company.Status == CompanyStatus.Approved && company.IsActive);
 
         if (term is not null)
             query = query.Where(company => company.CompanyName.ToLower().Contains(term));
@@ -48,16 +48,20 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
     public async Task<(IReadOnlyList<string> Industries, IReadOnlyList<string> Locations)> ListFilterOptionsAsync(
         CancellationToken cancellationToken = default)
     {
+        // Distinct in the database so only unique raw values cross the wire, not one row per company.
+        // Dedupe() still normalises whitespace/case afterwards (the DB cannot trim for us here).
         var industries = await dbContext.CompanyProfiles
             .AsNoTracking()
-            .Where(company => company.Status == CompanyStatus.Approved && company.Industry != null)
+            .Where(company => company.Status == CompanyStatus.Approved && company.IsActive && company.Industry != null)
             .Select(company => company.Industry!)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
         var locations = await dbContext.CompanyProfiles
             .AsNoTracking()
-            .Where(company => company.Status == CompanyStatus.Approved && company.Location != null)
+            .Where(company => company.Status == CompanyStatus.Approved && company.IsActive && company.Location != null)
             .Select(company => company.Location!)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
         return (Dedupe(industries), Dedupe(locations));

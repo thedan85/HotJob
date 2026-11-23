@@ -4,7 +4,7 @@ using hotjob.Services.Common;
 
 namespace hotjob.Services.Company;
 
-public interface ICompanyService
+public interface ICompanyDirectoryService
 {
     Task<ServiceResult<PagedResponse<CompanyListItemDto>>> ListAsync(
         CompanyListQuery query,

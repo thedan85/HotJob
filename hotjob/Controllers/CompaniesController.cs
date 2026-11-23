@@ -11,7 +11,7 @@ namespace hotjob.Controllers;
 [ApiController]
 [Route("api/companies")]
 [AllowAnonymous]
-public sealed class CompaniesController(ICompanyService companyService) : ApiControllerBase
+public sealed class CompaniesController(ICompanyDirectoryService companyService) : ApiControllerBase
 {
     /// <summary>List approved companies (name search, multi-select industry/location filters; fixed 20 per page).</summary>
     /// <response code="200">Paged company list.</response>

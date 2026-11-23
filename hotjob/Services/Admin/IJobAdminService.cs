@@ -15,9 +15,11 @@ public interface IJobAdminService
     Task<ServiceResult<JobDetailDto>> GetDetailAsync(
         int jobId, CancellationToken cancellationToken = default);
 
+    /// <summary>PendingApproval → Approved. Any other status (incl. PendingCompanyApproval) → Conflict.</summary>
     Task<ServiceResult> ApproveAsync(
         int jobId, string adminUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>PendingApproval → Rejected. Reason required, ≤500. Any other status → Conflict.</summary>
     Task<ServiceResult> RejectAsync(
-        int jobId, string adminUserId, string reason, CancellationToken cancellationToken = default);
+        int jobId, string adminUserId, string? reason, CancellationToken cancellationToken = default);
 }

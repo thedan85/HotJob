@@ -11,7 +11,9 @@ public enum JobStatus
     Rejected,
     Published,
     Closed,
-    Expired
+    Expired,
+    /// <summary>Submitted by a non-owner member; waits for the company owner before reaching admin review.</summary>
+    PendingCompanyApproval
 }
 
 /// <summary>Employment type of a job posting.</summary>
@@ -59,6 +61,12 @@ public class JobPosting
 
     /// <summary>When this job was submitted for approval.</summary>
     public DateTime? SubmittedForApprovalAt { get; set; }
+
+    /// <summary>When the company owner approved/rejected this job (two-step approval for member-created jobs).</summary>
+    public DateTime? CompanyReviewedAt { get; set; }
+
+    /// <summary>Owner employer id who reviewed this job inside the company. Plain id (no FK) to keep the employer cascade path single.</summary>
+    public int? CompanyReviewedByEmployerId { get; set; }
 
     /// <summary>When this job was approved/rejected by admin.</summary>
     public DateTime? ReviewedAt { get; set; }

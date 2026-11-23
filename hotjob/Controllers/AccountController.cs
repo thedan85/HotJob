@@ -4,6 +4,8 @@ using hotjob.Services.Account;
 using hotjob.Services.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using hotjob.Services.Authentication;
 
 namespace hotjob.Controllers;
 
@@ -69,6 +71,8 @@ public sealed class AccountController(IAccountService accountService) : Controll
     /// <response code="409">Email or company name already exists.</response>
     [HttpPost("register")]
     [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimit.PolicyName)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(RegisteredAccountResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status409Conflict)]

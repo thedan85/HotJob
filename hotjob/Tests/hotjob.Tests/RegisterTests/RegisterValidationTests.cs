@@ -62,6 +62,8 @@ public sealed class RegisterValidationTests
     [InlineData("Abcdef12")]
     // too short
     [InlineData("A1!a")]
+    // all character classes present, but only 7 characters
+    [InlineData("Abc12!x")]
     public async Task WeakPassword_ReturnsValidation(string password)
     {
         await using var fx = await TestFixture.CreateAsync();
@@ -70,6 +72,16 @@ public sealed class RegisterValidationTests
         var result = await fx.Service.RegisterAsync(req);
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.Validation, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task EightCharacterCompliantPassword_IsAccepted()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var req = ValidCandidate();
+        req.Password = "Abc123!x";
+        var result = await fx.Service.RegisterAsync(req);
+        Assert.True(result.Success, string.Join("; ", result.Errors));
     }
 
     [Fact]

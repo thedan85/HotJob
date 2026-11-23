@@ -8,7 +8,7 @@ public sealed class RegisterAccountRequest
     [Required, EmailAddress, MaxLength(256)]
     public string Email { get; set; } = string.Empty;
 
-    [Required, MinLength(6), MaxLength(100)]
+    [Required, MinLength(8), MaxLength(100)]
     [RegularExpression(
         @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).+$",
         ErrorMessage = "Password must contain an uppercase letter, lowercase letter, number, and special character.")]
@@ -121,7 +121,7 @@ public sealed class ChangePasswordRequest
     [Required]
     public string CurrentPassword { get; set; } = string.Empty;
 
-    [Required, MinLength(6), MaxLength(100)]
+    [Required, MinLength(8), MaxLength(100)]
     [RegularExpression(
         @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).+$",
         ErrorMessage = "Password must contain an uppercase letter, lowercase letter, number, and special character.")]

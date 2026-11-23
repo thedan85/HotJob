@@ -5,6 +5,7 @@ using hotjob.Services.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -85,7 +86,8 @@ public sealed class TestFixture : IAsyncDisposable
         _scope = scope;
     }
 
-    public static async Task<TestFixture> CreateAsync()
+    /// <param name="interceptor">Optional EF interceptor, e.g. to simulate a database failure at a chosen save.</param>
+    public static async Task<TestFixture> CreateAsync(SaveChangesInterceptor? interceptor = null)
     {
         var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
@@ -93,13 +95,18 @@ public sealed class TestFixture : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDataProtection();
-        services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite(connection));
+        services.AddDbContext<ApplicationDbContext>(options =>
+        {
+            options.UseSqlite(connection);
+            if (interceptor is not null)
+                options.AddInterceptors(interceptor);
+        });
 
         // Mirror Program.cs Identity options so password/email rules match production.
         services.AddIdentityCore<ApplicationUser>(options =>
             {
                 options.User.RequireUniqueEmail = true;
-                options.Password.RequiredLength = 6;
+                options.Password.RequiredLength = 8;
                 options.Password.RequireDigit = true;
                 options.Password.RequireUppercase = true;
                 options.Password.RequireLowercase = true;

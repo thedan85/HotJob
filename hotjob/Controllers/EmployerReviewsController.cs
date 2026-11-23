@@ -18,6 +18,7 @@ public sealed class EmployerReviewsController(IReviewService reviewService) : Ap
     /// <summary>Get paginated reviews for the employer's company.</summary>
     /// <param name="page">Page number (default: 1).</param>
     /// <param name="pageSize">Items per page (default: 10, max: 100).</param>
+    /// <param name="rating">Optional exact star filter (1-5).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <response code="200">Paginated list of reviews.</response>
     /// <response code="400">Invalid pagination parameters.</response>
@@ -29,10 +30,11 @@ public sealed class EmployerReviewsController(IReviewService reviewService) : Ap
     public async Task<IActionResult> GetCompanyReviews(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
+        [FromQuery] int? rating = null,
         CancellationToken cancellationToken = default)
     {
         var result = await reviewService.GetCompanyReviewsAsync(
-            CurrentUserId(), page, pageSize, cancellationToken);
+            CurrentUserId(), page, pageSize, rating, cancellationToken);
         return FromResult(result);
     }
 

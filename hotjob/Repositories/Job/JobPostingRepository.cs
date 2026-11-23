@@ -1,3 +1,4 @@
+using hotjob.Models.Users;
 using hotjob.Data;
 using hotjob.Models.Job;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +31,10 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         return DetailsQuery()
             .Where(job => job.Id == id
                 && job.Status == JobStatus.Published
-                && (job.ExpiryDate == null || job.ExpiryDate > now))
+                && (job.ExpiryDate == null || job.ExpiryDate > now)
+                // Jobs of a company the admin deactivated or rejected disappear from public pages.
+                && job.Company.IsActive
+                && job.Company.Status == CompanyStatus.Approved)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -87,7 +91,9 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         var now = DateTime.UtcNow;
         var query = DetailsQuery()
             .Where(job => job.Status == JobStatus.Published
-                && (job.ExpiryDate == null || job.ExpiryDate > now));
+                && (job.ExpiryDate == null || job.ExpiryDate > now)
+                && job.Company.IsActive
+                && job.Company.Status == CompanyStatus.Approved);
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {

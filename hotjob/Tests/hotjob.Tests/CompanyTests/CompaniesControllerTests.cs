@@ -12,7 +12,7 @@ namespace hotjob.Tests;
 
 public sealed class CompaniesControllerTests
 {
-    private sealed class StubCompanyService : ICompanyService
+    private sealed class StubCompanyService : ICompanyDirectoryService
     {
         public CompanyListQuery? SeenQuery;
         public bool FiltersCalled;

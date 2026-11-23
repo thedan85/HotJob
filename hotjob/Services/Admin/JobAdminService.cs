@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace hotjob.Services.Admin;
 
+/// <summary>Admin review of job postings that the company has submitted for approval.</summary>
 public sealed class JobAdminService(
     ApplicationDbContext dbContext,
     ILogger<JobAdminService> logger) : IJobAdminService
@@ -125,8 +126,11 @@ public sealed class JobAdminService(
             job.CreatedAt,
             job.ExpiryDate,
             job.SubmittedForApprovalAt,
-            job.ReviewedAt,
-            job.ReviewedAt));
+            IsApprovedOrLater(job.Status) ? job.ReviewedAt : null,
+            job.Status == JobStatus.Rejected ? job.ReviewedAt : null,
+            job.ReviewedByAdminId,
+            job.RejectionReason,
+            job.CompanyReviewedAt));
     }
 
     public async Task<ServiceResult> ApproveAsync(
@@ -139,6 +143,9 @@ public sealed class JobAdminService(
 
         if (job is null)
             return ServiceResult.Fail(ServiceErrorType.NotFound, "Job posting not found.");
+
+        if (EnsureAwaitingAdminReview(job) is { } conflict)
+            return conflict;
 
         job.Status = JobStatus.Approved;
         job.ReviewedAt = DateTime.UtcNow;
@@ -154,23 +161,45 @@ public sealed class JobAdminService(
     public async Task<ServiceResult> RejectAsync(
         int jobId,
         string adminUserId,
-        string reason,
+        string? reason,
         CancellationToken cancellationToken = default)
     {
+        var normalized = ModerationReason.Normalize(reason);
+        if (ModerationReason.ValidateRequired(normalized) is { } invalid)
+            return invalid;
+
         var job = await dbContext.JobPostings
             .FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken);
 
         if (job is null)
             return ServiceResult.Fail(ServiceErrorType.NotFound, "Job posting not found.");
 
+        if (EnsureAwaitingAdminReview(job) is { } conflict)
+            return conflict;
+
         job.Status = JobStatus.Rejected;
         job.ReviewedAt = DateTime.UtcNow;
         job.ReviewedByAdminId = adminUserId;
-        job.RejectionReason = reason;
+        job.RejectionReason = normalized;
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Admin {AdminId} rejected job posting {JobId}. Reason: {Reason}", adminUserId, jobId, reason);
+        logger.LogInformation("Admin {AdminId} rejected job posting {JobId}. Reason: {Reason}", adminUserId, jobId, normalized);
         return ServiceResult.Ok();
     }
+
+    /// <summary>Admin may only act on jobs in <see cref="JobStatus.PendingApproval"/>; returns a Conflict otherwise.</summary>
+    private static ServiceResult? EnsureAwaitingAdminReview(JobPosting job) => job.Status switch
+    {
+        JobStatus.PendingApproval => null,
+        JobStatus.PendingCompanyApproval => ServiceResult.Fail(
+            ServiceErrorType.Conflict,
+            "Job posting is awaiting approval by the company owner and cannot be reviewed by an admin yet."),
+        _ => ServiceResult.Fail(
+            ServiceErrorType.Conflict,
+            $"Only job postings pending approval can be reviewed (current status: {job.Status}).")
+    };
+
+    private static bool IsApprovedOrLater(JobStatus status) =>
+        status is JobStatus.Approved or JobStatus.Published or JobStatus.Closed or JobStatus.Expired;
 }

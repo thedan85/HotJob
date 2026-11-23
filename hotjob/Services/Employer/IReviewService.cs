@@ -11,11 +11,13 @@ public interface IReviewService
     /// <param name="userId">Caller user id; must be an active employer member.</param>
     /// <param name="page">Page number (1-indexed).</param>
     /// <param name="pageSize">Items per page (1-100).</param>
+    /// <param name="rating">Optional exact star filter (1-5).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<ServiceResult<PagedResponse<ReviewListItemDto>>> GetCompanyReviewsAsync(
         string? userId,
         int page,
         int pageSize,
+        int? rating = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Get aggregated rating statistics for the employer's company.</summary>
