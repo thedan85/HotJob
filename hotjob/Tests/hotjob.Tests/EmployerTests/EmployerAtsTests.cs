@@ -485,6 +485,51 @@ public sealed class EmployerAtsTests
     }
 
     [Fact]
+    public async Task UpdateInterview_LongLocation_NotificationContentWithinLimit()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, _, _) = await SeedApplicationAsync(fx, companyId);
+        Detach(fx);
+
+        var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(2),
+            InterviewType = InterviewType.Online
+        });
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        fx.Db.Notifications.RemoveRange(fx.Db.Notifications);
+        await fx.Db.SaveChangesAsync();
+
+        var updated = await Interviews(fx).UpdateAsync(owner, created.Data!.Id, new UpdateInterviewRequest
+        {
+            LocationOrLink = new string('x', 2048)
+        });
+
+        Assert.True(updated.Success, string.Join("; ", updated.Errors));
+        Assert.True(Assert.Single(fx.Db.Notifications).Content!.Length <= 2000);
+    }
+
+    [Fact]
+    public async Task CreateInterview_LongLocation_NotificationContentWithinLimit()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "hr@example.com");
+        var (appId, _, _) = await SeedApplicationAsync(fx, companyId);
+        Detach(fx);
+
+        var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(2),
+            InterviewType = InterviewType.Online,
+            LocationOrLink = new string('x', 2048)
+        });
+
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        Assert.True(Assert.Single(fx.Db.Notifications).Content!.Length <= 2000);
+    }
+
+    [Fact]
     public async Task UpdateInterview_NoFields_DoesNotNotify()
     {
         await using var fx = await TestFixture.CreateAsync();

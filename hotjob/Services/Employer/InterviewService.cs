@@ -69,8 +69,8 @@ public sealed class InterviewService(
             {
                 UserId = app.Candidate.UserId,
                 Title = "Interview scheduled",
-                Content = $"An interview for \"{app.JobPosting.Title}\" is scheduled at {interview.InterviewDate:u}."
-                    + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}."),
+                Content = Cap($"An interview for \"{app.JobPosting.Title}\" is scheduled at {interview.InterviewDate:u}."
+                    + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}.")),
                 IsRead = false,
                 CreatedAt = now
             });
@@ -148,8 +148,8 @@ public sealed class InterviewService(
             {
                 UserId = interview.Application.Candidate.UserId,
                 Title = "Interview updated",
-                Content = $"The interview for \"{interview.Application.JobPosting.Title}\" was updated to {interview.InterviewDate:u}."
-                    + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}."),
+                Content = Cap($"The interview for \"{interview.Application.JobPosting.Title}\" was updated to {interview.InterviewDate:u}."
+                    + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}.")),
                 IsRead = false,
                 CreatedAt = now
             });
@@ -186,4 +186,6 @@ public sealed class InterviewService(
         await repo.SaveChangesAsync(cancellationToken);
         return ServiceResult<InterviewResponse>.Ok(ApplicantMapping.ToInterviewResponse(interview));
     }
+
+    private static string Cap(string content) => content.Length <= 2000 ? content : content[..2000];
 }
