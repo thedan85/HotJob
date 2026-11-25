@@ -142,7 +142,8 @@ public sealed class JobService(
 
         var wasPublished = job.Status == JobStatus.Published;
         var requestedStatus = request.Status ?? job.Status;
-        var reopening = job.Status is JobStatus.Closed or JobStatus.Expired
+        // Closed/Expired/Rejected jobs hold no quota slot; moving one back into the pipeline takes one.
+        var reopening = job.Status is JobStatus.Closed or JobStatus.Expired or JobStatus.Rejected
             && requestedStatus is JobStatus.Draft or JobStatus.Published;
         if (reopening)
         {
@@ -161,10 +162,18 @@ public sealed class JobService(
             }
         }
 
-        // Validate status transition: a job can only become Published after admin approval
-        if (requestedStatus == JobStatus.Published && job.Status is not (JobStatus.Approved or JobStatus.Published))
+        // Only an admin-approved (or already live) job can go Published. Asking to publish anything
+        // else - a Draft, a Rejected job, or reopening a Closed/Expired one - submits it for (re)review,
+        // mirroring CreateAsync.
+        var submittingForApproval = requestedStatus == JobStatus.Published
+            && job.Status is not (JobStatus.Approved or JobStatus.Published);
+        if (submittingForApproval)
         {
-            return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.Validation, "Job must be approved before it can be published.");
+            requestedStatus = JobStatus.PendingApproval;
+            job.SubmittedForApprovalAt = DateTime.UtcNow;
+            job.ReviewedAt = null;
+            job.ReviewedByAdminId = null;
+            job.RejectionReason = null;
         }
 
         job.Title = request.Title.Trim();

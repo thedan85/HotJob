@@ -35,7 +35,12 @@ public sealed class ReviewAdminController(IReviewAdminService reviewAdminService
         [FromBody] DeleteReviewRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await reviewAdminService.DeleteAsync(id, request.AdminUserId, request.Reason, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await reviewAdminService.DeleteAsync(id, adminId, request.Reason, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 }

@@ -11,8 +11,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace hotjob.Tests.JobAlertTests;
 
 /// <summary>
-/// The publish hook fires exactly on a Draft/Closed/Expired → Published transition and
-/// never blocks the publish when alert generation fails (contract D11).
+/// The publish hook fires exactly when a job actually becomes Published - which, with the
+/// two-step approval flow, only happens after an admin approved it - and never blocks the
+/// publish when alert generation fails (contract D11).
 /// </summary>
 public sealed class JobAlertPublishTests
 {
@@ -84,19 +85,41 @@ public sealed class JobAlertPublishTests
         Assert.Empty(alerts.PublishedJobIds);
     }
 
+    /// <summary>Creates a job, has an admin approve it, then publishes it (the full two-step flow).</summary>
+    private static async Task<JobDetailResponse> CreateApprovedAndPublishedAsync(
+        TestFixture fx, JobService service, string userId, CreateJobRequest create)
+    {
+        var created = await service.CreateAsync(userId, create);
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        await fx.ApproveJobAsync(created.Data!.Id);
+
+        var published = await service.UpdateAsync(userId, created.Data.Id, UpdateRequest(create, JobStatus.Published));
+        Assert.True(published.Success, string.Join("; ", published.Errors));
+        Assert.Equal(JobStatus.Published, published.Data!.Status);
+        return published.Data;
+    }
+
     [Fact]
-    public async Task PublishedCreate_NotifiesOnce()
+    public async Task PublishedCreate_GoesToReview_AndDoesNotNotifyUntilPublished()
     {
         await using var fx = await TestFixture.CreateAsync();
         var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
         var alerts = new StubJobAlertService();
+        var service = CreateService(fx, alerts);
+        var create = NewRequest(skillId, categoryId, JobStatus.Published);
 
-        var result = await CreateService(fx, alerts).CreateAsync(
-            userId, NewRequest(skillId, categoryId, JobStatus.Published));
+        var created = await service.CreateAsync(userId, create);
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        Assert.Equal(JobStatus.PendingApproval, created.Data!.Status);
+        Assert.Empty(alerts.PublishedJobIds);
 
-        Assert.True(result.Success, string.Join("; ", result.Errors));
-        Assert.Equal(JobStatus.Published, result.Data!.Status);
-        Assert.Equal(new[] { result.Data.Id }, alerts.PublishedJobIds);
+        await fx.ApproveJobAsync(created.Data.Id);
+        Assert.Empty(alerts.PublishedJobIds);
+
+        var published = await service.UpdateAsync(userId, created.Data.Id, UpdateRequest(create, JobStatus.Published));
+        Assert.True(published.Success, string.Join("; ", published.Errors));
+        Assert.Equal(JobStatus.Published, published.Data!.Status);
+        Assert.Equal(new[] { created.Data.Id }, alerts.PublishedJobIds);
     }
 
     [Fact]
@@ -107,20 +130,18 @@ public sealed class JobAlertPublishTests
         var alerts = new StubJobAlertService();
         var service = CreateService(fx, alerts);
         var create = NewRequest(skillId, categoryId, JobStatus.Published);
-        var created = await service.CreateAsync(userId, create);
-        Assert.True(created.Success, string.Join("; ", created.Errors));
+        var job = await CreateApprovedAndPublishedAsync(fx, service, userId, create);
 
         var updated = await service.UpdateAsync(
-            userId, created.Data!.Id, UpdateRequest(create, JobStatus.Published, "Lead .NET Developer"));
+            userId, job.Id, UpdateRequest(create, JobStatus.Published, "Lead .NET Developer"));
 
         Assert.True(updated.Success, string.Join("; ", updated.Errors));
         Assert.Equal(JobStatus.Published, updated.Data!.Status);
-        Assert.Single(alerts.PublishedJobIds);
-        Assert.Equal(created.Data.Id, alerts.PublishedJobIds[0]);
+        Assert.Equal(new[] { job.Id }, alerts.PublishedJobIds);
     }
 
     [Fact]
-    public async Task DraftToPublished_Notifies()
+    public async Task DraftToPublished_SubmitsForReview_AndNotifiesOnceApprovedAndPublished()
     {
         await using var fx = await TestFixture.CreateAsync();
         var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
@@ -129,10 +150,15 @@ public sealed class JobAlertPublishTests
         var create = NewRequest(skillId, categoryId, JobStatus.Draft);
         var created = await service.CreateAsync(userId, create);
         Assert.True(created.Success, string.Join("; ", created.Errors));
+
+        var submitted = await service.UpdateAsync(userId, created.Data!.Id, UpdateRequest(create, JobStatus.Published));
+        Assert.True(submitted.Success, string.Join("; ", submitted.Errors));
+        Assert.Equal(JobStatus.PendingApproval, submitted.Data!.Status);
+        Assert.NotNull(submitted.Data.SubmittedForApprovalAt);
         Assert.Empty(alerts.PublishedJobIds);
 
-        var published = await service.UpdateAsync(
-            userId, created.Data!.Id, UpdateRequest(create, JobStatus.Published));
+        await fx.ApproveJobAsync(created.Data.Id);
+        var published = await service.UpdateAsync(userId, created.Data.Id, UpdateRequest(create, JobStatus.Published));
 
         Assert.True(published.Success, string.Join("; ", published.Errors));
         Assert.Equal(JobStatus.Published, published.Data!.Status);
@@ -140,7 +166,34 @@ public sealed class JobAlertPublishTests
     }
 
     [Fact]
-    public async Task ReopeningAClosedJob_NotifiesAgain()
+    public async Task ReopeningAClosedJob_GoesBackToReview_AndNotifiesAgainWhenRepublished()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
+        var alerts = new StubJobAlertService();
+        var service = CreateService(fx, alerts);
+        var create = NewRequest(skillId, categoryId, JobStatus.Published);
+        var job = await CreateApprovedAndPublishedAsync(fx, service, userId, create);
+
+        var closed = await service.DeleteOrCloseAsync(userId, job.Id);
+        Assert.True(closed.Success, string.Join("; ", closed.Errors));
+
+        var reopened = await service.UpdateAsync(userId, job.Id, UpdateRequest(create, JobStatus.Published));
+        Assert.True(reopened.Success, string.Join("; ", reopened.Errors));
+        Assert.Equal(JobStatus.PendingApproval, reopened.Data!.Status);
+        Assert.Null(reopened.Data.ReviewedAt);
+        Assert.Single(alerts.PublishedJobIds);
+
+        await fx.ApproveJobAsync(job.Id);
+        var republished = await service.UpdateAsync(userId, job.Id, UpdateRequest(create, JobStatus.Published));
+
+        Assert.True(republished.Success, string.Join("; ", republished.Errors));
+        Assert.Equal(JobStatus.Published, republished.Data!.Status);
+        Assert.Equal(new[] { job.Id, job.Id }, alerts.PublishedJobIds);
+    }
+
+    [Fact]
+    public async Task RejectedJob_CanBeResubmittedForReview()
     {
         await using var fx = await TestFixture.CreateAsync();
         var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
@@ -148,18 +201,14 @@ public sealed class JobAlertPublishTests
         var service = CreateService(fx, alerts);
         var create = NewRequest(skillId, categoryId, JobStatus.Published);
         var created = await service.CreateAsync(userId, create);
-        Assert.True(created.Success, string.Join("; ", created.Errors));
+        await fx.RejectJobAsync(created.Data!.Id, "Salary missing");
 
-        var closed = await service.DeleteOrCloseAsync(userId, created.Data!.Id);
-        Assert.True(closed.Success, string.Join("; ", closed.Errors));
-        Assert.Single(alerts.PublishedJobIds);
+        var resubmitted = await service.UpdateAsync(userId, created.Data.Id, UpdateRequest(create, JobStatus.Published));
 
-        var reopened = await service.UpdateAsync(
-            userId, created.Data.Id, UpdateRequest(create, JobStatus.Published));
-
-        Assert.True(reopened.Success, string.Join("; ", reopened.Errors));
-        Assert.Equal(JobStatus.Published, reopened.Data!.Status);
-        Assert.Equal(new[] { created.Data.Id, created.Data.Id }, alerts.PublishedJobIds);
+        Assert.True(resubmitted.Success, string.Join("; ", resubmitted.Errors));
+        Assert.Equal(JobStatus.PendingApproval, resubmitted.Data!.Status);
+        Assert.Null(resubmitted.Data.RejectionReason);
+        Assert.Empty(alerts.PublishedJobIds);
     }
 
     [Fact]
@@ -170,23 +219,22 @@ public sealed class JobAlertPublishTests
         var failure = new InvalidOperationException("alert backend unavailable");
         var alerts = new StubJobAlertService { PublishFailure = failure };
         var logger = new CapturingLogger<JobService>();
+        var service = CreateService(fx, alerts, logger);
 
-        var result = await CreateService(fx, alerts, logger).CreateAsync(
-            userId, NewRequest(skillId, categoryId, JobStatus.Published));
+        var job = await CreateApprovedAndPublishedAsync(
+            fx, service, userId, NewRequest(skillId, categoryId, JobStatus.Published));
 
-        Assert.True(result.Success, string.Join("; ", result.Errors));
-        Assert.Equal(JobStatus.Published, result.Data!.Status);
         Assert.Equal(
             JobStatus.Published,
             await fx.Db.JobPostings
-                .Where(job => job.Id == result.Data.Id)
-                .Select(job => job.Status)
+                .Where(posting => posting.Id == job.Id)
+                .Select(posting => posting.Status)
                 .SingleAsync());
 
         var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Same(failure, error.Exception);
         Assert.Contains("published job", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(result.Data.Id.ToString(), error.Message);
+        Assert.Contains(job.Id.ToString(), error.Message);
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

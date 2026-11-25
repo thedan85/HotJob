@@ -41,10 +41,14 @@ public sealed class CompanyAdminController(ICompanyAdminService companyAdminServ
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Approve(
         int id,
-        [FromBody] ApproveCompanyRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await companyAdminService.ApproveAsync(id, request.AdminUserId, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await companyAdminService.ApproveAsync(id, adminId, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 
@@ -56,7 +60,12 @@ public sealed class CompanyAdminController(ICompanyAdminService companyAdminServ
         [FromBody] RejectCompanyRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await companyAdminService.RejectAsync(id, request.AdminUserId, request.Reason, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await companyAdminService.RejectAsync(id, adminId, request.Reason, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 
@@ -68,7 +77,12 @@ public sealed class CompanyAdminController(ICompanyAdminService companyAdminServ
         [FromBody] RejectCompanyRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await companyAdminService.DeactivateAsync(id, request.AdminUserId, request.Reason, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await companyAdminService.DeactivateAsync(id, adminId, request.Reason, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 
@@ -77,10 +91,14 @@ public sealed class CompanyAdminController(ICompanyAdminService companyAdminServ
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Reactivate(
         int id,
-        [FromBody] ApproveCompanyRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await companyAdminService.ReactivateAsync(id, request.AdminUserId, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await companyAdminService.ReactivateAsync(id, adminId, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 }

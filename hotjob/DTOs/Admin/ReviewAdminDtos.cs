@@ -33,5 +33,4 @@ public record ReviewDetailDto(
     string? DeletionReason);
 
 public record DeleteReviewRequest(
-    [Required] string AdminUserId,
     [MaxLength(500)] string? Reason = null);

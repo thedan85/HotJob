@@ -41,10 +41,14 @@ public sealed class JobAdminController(IJobAdminService jobAdminService) : Admin
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Approve(
         int id,
-        [FromBody] ApproveJobRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await jobAdminService.ApproveAsync(id, request.AdminUserId, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await jobAdminService.ApproveAsync(id, adminId, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 
@@ -56,7 +60,12 @@ public sealed class JobAdminController(IJobAdminService jobAdminService) : Admin
         [FromBody] RejectJobRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await jobAdminService.RejectAsync(id, request.AdminUserId, request.Reason, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await jobAdminService.RejectAsync(id, adminId, request.Reason, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 }

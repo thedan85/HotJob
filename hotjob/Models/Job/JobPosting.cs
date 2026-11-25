@@ -3,15 +3,20 @@ using System.ComponentModel.DataAnnotations;
 namespace hotjob.Models.Job;
 
 /// <summary>Lifecycle state of a job posting.</summary>
+/// <remarks>
+/// Persisted as <c>int</c>. Values are pinned explicitly: Draft..Expired keep the numbers they had
+/// before the admin-approval states were added, so existing rows keep their meaning.
+/// Never reorder or renumber these.
+/// </remarks>
 public enum JobStatus
 {
-    Draft,
-    PendingApproval,
-    Approved,
-    Rejected,
-    Published,
-    Closed,
-    Expired
+    Draft = 0,
+    Published = 1,
+    Closed = 2,
+    Expired = 3,
+    PendingApproval = 4,
+    Approved = 5,
+    Rejected = 6
 }
 
 /// <summary>Employment type of a job posting.</summary>

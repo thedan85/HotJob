@@ -66,7 +66,8 @@ public sealed class TestFixture : IAsyncDisposable
         new(new ClaimsIdentity(
             [
                 new Claim(ClaimTypes.NameIdentifier, userId),
-                new Claim(ClaimTypes.Email, email)
+                new Claim(ClaimTypes.Email, email),
+                new Claim(ClaimTypes.Role, AppRoles.Admin)
             ],
             "TestJwt"));
 

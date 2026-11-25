@@ -29,9 +29,5 @@ public record EmployerDetailDto(
     int CompanyId,
     string? CompanyName);
 
-public record ApproveEmployerRequest(
-    [Required] string AdminUserId);
-
 public record RejectEmployerRequest(
-    [Required] string AdminUserId,
     [Required, MinLength(1), MaxLength(500)] string Reason);

@@ -25,7 +25,7 @@ public sealed class AdminAuditService(
     {
         var admin = await ResolveAdminAsync().ConfigureAwait(false);
         if (admin is null)
-            throw new InvalidOperationException("An authenticated administrator ID and email are required for auditing.");
+            throw new InvalidOperationException("An authenticated administrator (Admin role, ID and email) is required for auditing.");
 
         dbContext.AdminAuditLogs.Add(new AdminAuditLog
         {
@@ -129,6 +129,11 @@ public sealed class AdminAuditService(
         }
 
         if (principal?.Identity?.IsAuthenticated != true)
+            return null;
+
+        // Defense in depth: admin writes are only ever attributed to (and allowed for) the Admin role,
+        // even if a caller bypassed the UI-level <AuthorizeView Roles="Admin"> gate.
+        if (!principal.IsInRole(AppRoles.Admin))
             return null;
 
         var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)

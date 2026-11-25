@@ -31,9 +31,5 @@ public record CompanyDetailDto(
     DateTime? DeactivatedAt,
     string? DeactivationReason);
 
-public record ApproveCompanyRequest(
-    [Required] string AdminUserId);
-
 public record RejectCompanyRequest(
-    [Required] string AdminUserId,
     [Required, MinLength(1), MaxLength(500)] string Reason);

@@ -26,9 +26,5 @@ public record JobDetailDto(
     DateTime? ApprovedAt,
     DateTime? RejectedAt);
 
-public record ApproveJobRequest(
-    [Required] string AdminUserId);
-
 public record RejectJobRequest(
-    [Required] string AdminUserId,
     [Required, MinLength(1), MaxLength(500)] string Reason);

@@ -32,10 +32,14 @@ public sealed class EmployerAdminController(IEmployerAdminService employerAdminS
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Approve(
         int id,
-        [FromBody] ApproveEmployerRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await employerAdminService.ApproveAsync(id, request.AdminUserId, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await employerAdminService.ApproveAsync(id, adminId, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 
@@ -47,7 +51,12 @@ public sealed class EmployerAdminController(IEmployerAdminService employerAdminS
         [FromBody] RejectEmployerRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await employerAdminService.RejectAsync(id, request.AdminUserId, request.Reason, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await employerAdminService.RejectAsync(id, adminId, request.Reason, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 
@@ -59,7 +68,12 @@ public sealed class EmployerAdminController(IEmployerAdminService employerAdminS
         [FromBody] RejectEmployerRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await employerAdminService.DeactivateAsync(id, request.AdminUserId, request.Reason, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await employerAdminService.DeactivateAsync(id, adminId, request.Reason, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 
@@ -68,10 +82,14 @@ public sealed class EmployerAdminController(IEmployerAdminService employerAdminS
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Reactivate(
         int id,
-        [FromBody] ApproveEmployerRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await employerAdminService.ReactivateAsync(id, request.AdminUserId, cancellationToken);
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        var result = await employerAdminService.ReactivateAsync(id, adminId, cancellationToken);
         return result.Success ? NoContent() : NotFound(result.Errors);
     }
 }
