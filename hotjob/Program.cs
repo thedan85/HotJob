@@ -101,6 +101,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddAuthorization();
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<SeedOptions>(
     builder.Configuration.GetSection(SeedOptions.SectionName));
 builder.Services.AddOptions<JwtOptions>()
@@ -225,6 +226,7 @@ builder.Services.AddScoped<AuthenticationStateProvider>(services =>
 builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
 builder.Services.AddScoped<hotjob.Services.Employer.ICandidateSearchService, hotjob.Services.Employer.CandidateSearchService>();
 builder.Services.AddScoped<hotjob.Services.Admin.IAdminService, hotjob.Services.Admin.AdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IAdminAuditService, hotjob.Services.Admin.AdminAuditService>();
 builder.Services.AddScoped<IVnPayService, VnPayService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<IEntitlementService, EntitlementService>();

@@ -1,4 +1,5 @@
 using hotjob.Models;
+using hotjob.Models.Admin;
 using hotjob.Models.Billing;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
@@ -37,6 +38,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
 
     /// <summary>Configures relationships, delete behaviors, indexes and column precision.</summary>
     /// <param name="modelBuilder">Fluent API builder.</param>
@@ -128,6 +130,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(x => x.User).WithMany(x => x.RefreshTokens).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<RefreshToken>().HasIndex(x => x.TokenHash).IsUnique();
         modelBuilder.Entity<RefreshToken>().HasIndex(x => new { x.UserId, x.RevokedAtUtc });
+
+        modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.CreatedAt).IsDescending(true);
+        modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.AdminUserId);
+        modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.Action);
 
         ConfigureBilling(modelBuilder);
     }

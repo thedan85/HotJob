@@ -1,0 +1,215 @@
+@page "/admin/audit-logs"
+@rendermode InteractiveServer
+@using hotjob.DTOs.Admin
+@using hotjob.DTOs.Job
+@using hotjob.Models.Admin
+@using hotjob.Services.Admin
+@inject IAdminAuditService AuditService
+
+<PageTitle>Admin audit log | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Audit log</h1>
+                    <p class="workspace-lede">Every company review, account lock, job deletion, and skill change performed by an administrator.</p>
+                </div>
+            </section>
+
+            <section class="workspace-toolbar" aria-label="Filter audit log">
+                <label class="workspace-field">
+                    <span>Action</span>
+                    <select @bind="actionFilter">
+                        <option value="">All actions</option>
+                        @foreach (var option in AuditActions.All)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                <label class="workspace-field">
+                    <span>Target type</span>
+                    <select @bind="targetTypeFilter">
+                        <option value="">All types</option>
+                        @foreach (var option in AuditTargetTypes.All)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                <label class="workspace-field">
+                    <span>Admin email</span>
+                    <input type="search" @bind="adminEmailFilter" placeholder="admin@example.com" />
+                </label>
+                <label class="workspace-field">
+                    <span>From</span>
+                    <InputDate Type="InputDateType.Date" @bind-Value="fromDate" />
+                </label>
+                <label class="workspace-field">
+                    <span>To</span>
+                    <InputDate Type="InputDateType.Date" @bind-Value="toDate" />
+                </label>
+                <div class="workspace-toolbar-actions">
+                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" @onclick="ApplyFiltersAsync">Apply filters</button>
+                    @if (HasFilters)
+                    {
+                        <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" @onclick="ClearFiltersAsync">Clear</button>
+                    }
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading audit log">
+                    <p class="workspace-sub">Loading audit entries…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else if (paged is not null)
+            {
+                <section class="workspace-card" aria-labelledby="admin-audit-heading">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2 id="admin-audit-heading">Audit entries</h2>
+                            <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
+                        </div>
+                    </div>
+
+                    @if (paged.Items.Count == 0)
+                    {
+                        <p class="workspace-sub">
+                            @(HasFilters ? "No entries match these filters." : "No admin actions recorded yet.")
+                        </p>
+                    }
+                    else
+                    {
+                        <div style="overflow-x:auto">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Admin</th>
+                                        <th>Action</th>
+                                        <th>Target type</th>
+                                        <th>Target ID</th>
+                                        <th>Detail</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var log in paged.Items)
+                                    {
+                                        <tr>
+                                            <td>@log.CreatedAt.ToString("dd MMM yyyy HH:mm")</td>
+                                            <td title="@log.AdminUserId">@log.AdminEmail</td>
+                                            <td>
+                                                <span class="workspace-badge is-muted">@log.Action</span>
+                                            </td>
+                                            <td>@log.TargetType</td>
+                                            <td>@log.TargetId</td>
+                                            <td style="max-width: 420px">@(string.IsNullOrWhiteSpace(log.Detail) ? "—" : log.Detail)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if (paged.TotalPages > 1)
+                        {
+                            <nav class="jobs-pager" aria-label="Audit log pages">
+                                <button type="button" class="page-btn" disabled="@(paged.Page <= 1)"
+                                        @onclick="() => LoadAsync(paged.Page - 1)">← Prev</button>
+                                <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount entries</span>
+                                <button type="button" class="page-btn" disabled="@(paged.Page >= paged.TotalPages)"
+                                        @onclick="() => LoadAsync(paged.Page + 1)">Next →</button>
+                            </nav>
+                        }
+                    }
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private const int PageSize = 20;
+
+    private PagedResponse<AdminAuditLogDto>? paged;
+    private int page = 1;
+    private bool isLoading = true;
+    private string? errorMessage;
+    private string? actionFilter;
+    private string? targetTypeFilter;
+    private string? adminEmailFilter;
+    private DateTime? fromDate;
+    private DateTime? toDate;
+
+    private bool HasFilters =>
+        !string.IsNullOrWhiteSpace(actionFilter) ||
+        !string.IsNullOrWhiteSpace(targetTypeFilter) ||
+        !string.IsNullOrWhiteSpace(adminEmailFilter) ||
+        fromDate is not null ||
+        toDate is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync(int? requestedPage = null)
+    {
+        page = requestedPage ?? page;
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            var result = await AuditService.GetLogsAsync(
+                page,
+                PageSize,
+                actionFilter,
+                targetTypeFilter,
+                adminEmailFilter,
+                fromDate,
+                toDate);
+            if (!result.Success || result.Data is null)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            paged = result.Data;
+            if (paged.TotalCount > 0 && page > paged.TotalPages)
+            {
+                await LoadAsync(paged.TotalPages);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private Task ApplyFiltersAsync() => LoadAsync(1);
+
+    private Task ClearFiltersAsync()
+    {
+        actionFilter = null;
+        targetTypeFilter = null;
+        adminEmailFilter = null;
+        fromDate = null;
+        toDate = null;
+        return LoadAsync(1);
+    }
+}
