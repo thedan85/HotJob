@@ -28,25 +28,6 @@ public sealed record AdminUserListItemDto(
     DateTime CreatedAt,
     string AccountType);
 
-public sealed record AdminCompanyListItemDto(
-    int Id,
-    string CompanyName,
-    CompanyStatus Status,
-    string? Industry,
-    string? Location,
-    DateTime? VerifiedAt,
-    string? VerifiedByAdminEmail,
-    int EmployerCount);
-
-public sealed record AdminJobListItemDto(
-    int Id,
-    string Title,
-    string CompanyName,
-    string? CompanyLocation,
-    JobStatus Status,
-    DateTime CreatedAt,
-    int ApplicationCount);
-
 public sealed record AdminTrainingLogDto(
     int Id,
     int RecordCount,

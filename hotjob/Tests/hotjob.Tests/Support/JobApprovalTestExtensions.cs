@@ -1,7 +1,5 @@
 using hotjob.Data;
-using hotjob.Services.Admin;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace hotjob.Tests.Support;
 
@@ -12,24 +10,26 @@ public static class JobApprovalTestExtensions
 
     public static async Task ApproveJobAsync(this TestFixture fx, int jobId)
     {
-        var result = await new JobAdminService(fx.Db, NullLogger<JobAdminService>.Instance)
-            .ApproveAsync(jobId, await ApproverIdAsync(fx));
+        var result = await fx.CreateJobAdminService().ApproveAsync(jobId, await SignInApproverAsync(fx));
         Assert.True(result.Success, string.Join("; ", result.Errors));
     }
 
     public static async Task RejectJobAsync(this TestFixture fx, int jobId, string reason = "Not acceptable")
     {
-        var result = await new JobAdminService(fx.Db, NullLogger<JobAdminService>.Instance)
-            .RejectAsync(jobId, await ApproverIdAsync(fx), reason);
+        var result = await fx.CreateJobAdminService().RejectAsync(jobId, await SignInApproverAsync(fx), reason);
         Assert.True(result.Success, string.Join("; ", result.Errors));
     }
 
-    private static async Task<string> ApproverIdAsync(TestFixture fx)
+    /// <summary>Ensures an approver admin exists and is the acting (audited) administrator.</summary>
+    private static async Task<string> SignInApproverAsync(TestFixture fx)
     {
         var existing = await fx.Db.Users
             .Where(user => user.Email == ApproverEmail)
             .Select(user => user.Id)
             .FirstOrDefaultAsync();
-        return existing ?? (await fx.SeedUserAsync(ApproverEmail, role: AppRoles.Admin)).Id;
+        var id = existing ?? (await fx.SeedUserAsync(ApproverEmail, role: AppRoles.Admin)).Id;
+        // Circuit path: HttpContextAccessor is AsyncLocal and would not survive returning from this async helper.
+        fx.SignInAdminOnCircuit(id, ApproverEmail);
+        return id;
     }
 }

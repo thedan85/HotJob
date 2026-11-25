@@ -11,7 +11,10 @@ public record EmployerListItemDto(
     bool IsOwner,
     string MembershipStatus,
     bool IsActive,
-    DateTime? DeactivatedAt);
+    DateTime? DeactivatedAt,
+    string? Email,
+    int CompanyId,
+    string? CompanyName);
 
 /// <summary>Detailed view of an employer account.</summary>
 public record EmployerDetailDto(

@@ -96,7 +96,7 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
         var query = dbContext.Reviews
             .AsNoTracking()
             .Include(review => review.Candidate)
-            .Where(review => review.CompanyProfileId == companyId);
+            .Where(review => review.CompanyProfileId == companyId && !review.IsDeleted);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query

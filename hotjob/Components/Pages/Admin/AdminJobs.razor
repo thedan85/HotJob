@@ -1,9 +1,14 @@
 @page "/admin/jobs"
 @rendermode InteractiveServer
+@using System.Security.Claims
 @using hotjob.DTOs.Admin
-@using hotjob.DTOs.Job
+@using hotjob.DTOs.Common
+@using hotjob.Models.Job
 @using hotjob.Services.Admin
+@using hotjob.Services.Common
+@inject IJobAdminService JobAdminService
 @inject IAdminService AdminService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Admin jobs | HotJob</PageTitle>
 
@@ -14,9 +19,31 @@
                 <div class="workspace-header-copy">
                     <p class="workspace-eyebrow">Administration</p>
                     <h1>Job posting management</h1>
-                    <p class="workspace-lede">Review all company job posts and remove inappropriate or outdated listings.</p>
+                    <p class="workspace-lede">Approve or reject postings waiting for review, and remove inappropriate or outdated listings.</p>
                 </div>
             </section>
+
+            <section class="workspace-toolbar" aria-label="Filter job postings">
+                <label class="workspace-field">
+                    <span>Status</span>
+                    <select @bind="statusFilter" @bind:after="ApplyFiltersAsync">
+                        <option value="">All statuses</option>
+                        @foreach (var option in Enum.GetValues<JobStatus>())
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                <label class="workspace-field">
+                    <span>Search</span>
+                    <input type="search" @bind="searchTerm" @bind:after="ApplyFiltersAsync" placeholder="Title or company" />
+                </label>
+            </section>
+
+            @if (actionMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@actionMessage</div>
+            }
 
             @if (isLoading)
             {
@@ -33,7 +60,7 @@
                 <section class="workspace-card" aria-labelledby="admin-jobs-heading">
                     <div class="workspace-section-head">
                         <div>
-                            <h2 id="admin-jobs-heading">All job postings</h2>
+                            <h2 id="admin-jobs-heading">@(statusFilter is null ? "All job postings" : $"{statusFilter} job postings")</h2>
                             <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
                         </div>
                     </div>
@@ -56,16 +83,51 @@
                                     <tr>
                                         <td>@job.Title</td>
                                         <td>@job.CompanyName</td>
-                                        <td>@(string.IsNullOrWhiteSpace(job.CompanyLocation) ? "-" : job.CompanyLocation)</td>
+                                        <td>@(string.IsNullOrWhiteSpace(job.City) ? "-" : job.City)</td>
                                         <td>
-                                            <span class="workspace-badge is-@(job.Status.ToString().ToLowerInvariant())">@job.Status</span>
+                                            <span class="workspace-badge @StatusClass(job.Status)">@job.Status</span>
                                         </td>
                                         <td>@job.CreatedAt.ToString("dd MMM yyyy")</td>
                                         <td>@job.ApplicationCount</td>
                                         <td>
-                                            <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => DeleteJob(job.Id)">Delete</button>
+                                            <div class="workspace-toolbar-actions">
+                                                @if (job.Status == nameof(JobStatus.PendingApproval))
+                                                {
+                                                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" disabled="@busy" @onclick="() => ApproveJobAsync(job.Id)">Approve</button>
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginReject(job.Id)">Reject</button>
+                                                }
+                                                <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => DeleteJobAsync(job.Id)">
+                                                    @(pendingDeleteId == job.Id ? "Confirm delete?" : "Delete")
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
+                                    @if (rejectingId == job.Id)
+                                    {
+                                        <tr>
+                                            <td colspan="7">
+                                                <div class="admin-reject-form">
+                                                    <label class="workspace-field">
+                                                        <span>Rejection reason (required)</span>
+                                                        <textarea @bind="rejectionReason" maxlength="500" rows="2"
+                                                                  placeholder="Tell the employer what to change before resubmitting."></textarea>
+                                                    </label>
+                                                    @if (rejectError is not null)
+                                                    {
+                                                        <div class="workspace-alert" role="alert">@rejectError</div>
+                                                    }
+                                                    <div class="workspace-toolbar-actions">
+                                                        <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button"
+                                                                disabled="@busy" @onclick="() => RejectJobAsync(job.Id)">
+                                                            @(busy ? "Rejecting…" : "Confirm rejection")
+                                                        </button>
+                                                        <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
+                                                                disabled="@busy" @onclick="CancelReject">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
                                 }
                             </tbody>
                         </table>
@@ -92,28 +154,39 @@
 @code {
     private const int PageSize = 20;
 
-    private PagedResponse<AdminJobListItemDto>? paged;
+    private PagedResponse<JobListItemDto>? paged;
     private int page = 1;
+    private JobStatus? statusFilter;
+    private string? searchTerm;
     private bool isLoading = true;
+    private bool busy;
     private string? errorMessage;
+    private string? actionMessage;
+    private int? rejectingId;
+    private string? rejectionReason;
+    private string? rejectError;
+    private int? pendingDeleteId;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
     }
 
+    private Task ApplyFiltersAsync() => LoadAsync(1);
+
     private async Task LoadAsync(int? requestedPage = null)
     {
         page = requestedPage ?? page;
         try
         {
-            var result = await AdminService.GetJobsAsync(page, PageSize);
+            var result = await JobAdminService.ListAsync(page, PageSize, searchTerm, statusFilter);
             if (!result.Success || result.Data is null)
             {
                 errorMessage = string.Join("; ", result.Errors);
                 return;
             }
 
+            errorMessage = null;
             paged = result.Data;
             if (paged.TotalCount > 0 && page > paged.TotalPages)
             {
@@ -130,22 +203,109 @@
         }
     }
 
-    private async Task DeleteJob(int jobId)
+    private async Task ApproveJobAsync(int jobId)
     {
+        var adminId = await GetAdminIdAsync();
+        await RunAsync(
+            () => adminId is null ? Task.FromResult(NotSignedIn()) : JobAdminService.ApproveAsync(jobId, adminId),
+            "Job approved. The employer can now publish it.");
+    }
+
+    private void BeginReject(int jobId)
+    {
+        rejectingId = jobId;
+        rejectionReason = null;
+        rejectError = null;
+    }
+
+    private void CancelReject()
+    {
+        rejectingId = null;
+        rejectionReason = null;
+        rejectError = null;
+    }
+
+    private async Task RejectJobAsync(int jobId)
+    {
+        var reason = rejectionReason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            rejectError = "Enter a rejection reason.";
+            return;
+        }
+
+        var adminId = await GetAdminIdAsync();
+        var failure = await RunAsync(
+            () => adminId is null ? Task.FromResult(NotSignedIn()) : JobAdminService.RejectAsync(jobId, adminId, reason),
+            "Job rejected.");
+        if (failure is null)
+        {
+            CancelReject();
+        }
+        else
+        {
+            rejectError = failure;
+        }
+    }
+
+    /// <summary>Hard delete (kept from the original admin page) — asks for a second click first.</summary>
+    private async Task DeleteJobAsync(int jobId)
+    {
+        if (pendingDeleteId != jobId)
+        {
+            pendingDeleteId = jobId;
+            return;
+        }
+
+        pendingDeleteId = null;
+        await RunAsync(async () => await AdminService.DeleteJobAsync(jobId), "Job deleted.");
+    }
+
+    /// <summary>Runs an admin write, then reloads. Returns the error, if any.</summary>
+    private async Task<string?> RunAsync(Func<Task<ServiceResult>> write, string successMessage)
+    {
+        busy = true;
+        actionMessage = null;
         try
         {
-            var result = await AdminService.DeleteJobAsync(jobId);
+            var result = await write();
             if (!result.Success)
             {
-                errorMessage = string.Join("; ", result.Errors);
-                return;
+                return actionMessage = string.Join("; ", result.Errors);
             }
 
+            actionMessage = successMessage;
             await LoadAsync();
+            return null;
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            return actionMessage = ex.Message;
+        }
+        finally
+        {
+            busy = false;
         }
     }
+
+    private static ServiceResult NotSignedIn() =>
+        ServiceResult.Fail(ServiceErrorType.Unauthorized, "Sign in as an administrator to review job postings.");
+
+    private async Task<string?> GetAdminIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+    }
+
+    private static string StatusClass(string status) => status switch
+    {
+        nameof(JobStatus.Published) => "is-published",
+        nameof(JobStatus.Approved) => "is-approved",
+        nameof(JobStatus.PendingApproval) => "is-pending",
+        nameof(JobStatus.Rejected) => "is-rejected",
+        nameof(JobStatus.Draft) => "is-draft",
+        nameof(JobStatus.Closed) => "is-closed",
+        nameof(JobStatus.Expired) => "is-expired",
+        _ => "is-muted"
+    };
 }

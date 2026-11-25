@@ -23,7 +23,9 @@ public sealed class EntitlementService(ApplicationDbContext dbContext, TimeProvi
             .FirstOrDefaultAsync(
                 member => member.UserId == userId
                     && member.MembershipStatus == MembershipStatus.Active
-                    && member.Company.Status == CompanyStatus.Approved,
+                    && member.IsActive
+                    && member.Company.Status == CompanyStatus.Approved
+                    && member.Company.IsActive,
                 cancellationToken);
 
         return employer is null

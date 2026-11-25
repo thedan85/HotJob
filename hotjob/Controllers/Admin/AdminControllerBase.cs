@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using hotjob.Data;
+using hotjob.Services.Common;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,4 +30,22 @@ public abstract class AdminControllerBase : ControllerBase
     /// <summary>Returned when a token passed role checks but has no usable subject claim.</summary>
     protected IActionResult MissingAdminIdentity() =>
         Unauthorized(new[] { "The access token does not identify an administrator." });
+
+    /// <summary>200 with the payload, or the status code matching the failure.</summary>
+    protected IActionResult OkOrFailure<T>(ServiceResult<T> result) =>
+        result.Success ? Ok(result.Data) : FromFailure(result);
+
+    /// <summary>204 on success, or the status code matching the failure.</summary>
+    protected IActionResult NoContentOrFailure(ServiceResult result) =>
+        result.Success ? NoContent() : FromFailure(result);
+
+    /// <summary>NotFound 404, Conflict 409 (wrong current state), Unauthorized 401, otherwise 400.</summary>
+    protected IActionResult FromFailure(ServiceResult result) =>
+        result.ErrorType switch
+        {
+            ServiceErrorType.NotFound => NotFound(result.Errors),
+            ServiceErrorType.Conflict => Conflict(result.Errors),
+            ServiceErrorType.Unauthorized => Unauthorized(result.Errors),
+            _ => BadRequest(result.Errors)
+        };
 }

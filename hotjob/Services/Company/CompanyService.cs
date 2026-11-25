@@ -77,7 +77,7 @@ public sealed class CompanyService(
         var ownerName = await repository.GetOwnerNameAsync(id, cancellationToken);
         var rating = await dbContext.Reviews
             .AsNoTracking()
-            .Where(review => review.CompanyProfileId == id)
+            .Where(review => review.CompanyProfileId == id && !review.IsDeleted)
             .GroupBy(review => review.CompanyProfileId)
             .Select(group => new
             {
@@ -217,7 +217,7 @@ public sealed class CompanyService(
 
         var rows = await dbContext.Reviews
             .AsNoTracking()
-            .Where(review => companyIds.Contains(review.CompanyProfileId))
+            .Where(review => companyIds.Contains(review.CompanyProfileId) && !review.IsDeleted)
             .GroupBy(review => review.CompanyProfileId)
             .Select(group => new
             {

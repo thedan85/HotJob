@@ -49,6 +49,18 @@ public sealed class TestFixture : IAsyncDisposable
     public AdminService CreateAdminService(ApplicationDbContext db) =>
         new(db, UserManager, RoleManager, CreateAuditService());
 
+    public CompanyAdminService CreateCompanyAdminService() =>
+        new(Db, CreateAuditService(), NullLogger<CompanyAdminService>.Instance);
+
+    public EmployerAdminService CreateEmployerAdminService() =>
+        new(Db, CreateAuditService(), NullLogger<EmployerAdminService>.Instance);
+
+    public JobAdminService CreateJobAdminService() =>
+        new(Db, CreateAuditService(), NullLogger<JobAdminService>.Instance);
+
+    public ReviewAdminService CreateReviewAdminService() =>
+        new(Db, CreateAuditService(), NullLogger<ReviewAdminService>.Instance);
+
     /// <summary>Puts an authenticated admin on the HTTP request (API/JWT path).</summary>
     public void SignInAdmin(string userId, string email)
     {

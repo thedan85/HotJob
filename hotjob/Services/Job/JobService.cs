@@ -643,7 +643,9 @@ public sealed class JobService(
             .FirstOrDefaultAsync(
                 employer => employer.UserId == userId
                     && employer.MembershipStatus == MembershipStatus.Active
-                    && employer.Company.Status == CompanyStatus.Approved,
+                    && employer.IsActive
+                    && employer.Company.Status == CompanyStatus.Approved
+                    && employer.Company.IsActive,
                 cancellationToken);
 
     private static void Normalize(CreateJobRequest request)

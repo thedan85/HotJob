@@ -1,5 +1,6 @@
 using hotjob.DTOs.Admin;
 using hotjob.DTOs.Common;
+using hotjob.Models.Job;
 using hotjob.Services.Admin;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,14 +10,16 @@ namespace hotjob.Controllers.Admin;
 [Route("api/admin/jobs")]
 public sealed class JobAdminController(IJobAdminService jobAdminService) : AdminControllerBase
 {
+    /// <summary>All job postings, optionally filtered by status (e.g. PendingApproval, Published, Rejected).</summary>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResponse<JobListItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
+        [FromQuery] JobStatus? status = null,
         CancellationToken cancellationToken = default) =>
-        Ok(await jobAdminService.ListAsync(page, pageSize, search, cancellationToken));
+        OkOrFailure(await jobAdminService.ListAsync(page, pageSize, search, status, cancellationToken));
 
     [HttpGet("pending")]
     [ProducesResponseType(typeof(PagedResponse<JobListItemDto>), StatusCodes.Status200OK)]
@@ -25,36 +28,33 @@ public sealed class JobAdminController(IJobAdminService jobAdminService) : Admin
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         CancellationToken cancellationToken = default) =>
-        Ok(await jobAdminService.ListPendingAsync(page, pageSize, search, cancellationToken));
+        OkOrFailure(await jobAdminService.ListPendingAsync(page, pageSize, search, cancellationToken));
 
     [HttpGet("{id:int}")]
     [ProducesResponseType(typeof(JobDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetDetail(int id, CancellationToken cancellationToken)
-    {
-        var result = await jobAdminService.GetDetailAsync(id, cancellationToken);
-        return result.Success ? Ok(result.Data) : NotFound(result.Errors);
-    }
+    public async Task<IActionResult> GetDetail(int id, CancellationToken cancellationToken) =>
+        OkOrFailure(await jobAdminService.GetDetailAsync(id, cancellationToken));
 
     [HttpPost("{id:int}/approve")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Approve(
-        int id,
-        CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Approve(int id, CancellationToken cancellationToken)
     {
         if (CurrentAdminUserId is not { } adminId)
         {
             return MissingAdminIdentity();
         }
 
-        var result = await jobAdminService.ApproveAsync(id, adminId, cancellationToken);
-        return result.Success ? NoContent() : NotFound(result.Errors);
+        return NoContentOrFailure(await jobAdminService.ApproveAsync(id, adminId, cancellationToken));
     }
 
     [HttpPost("{id:int}/reject")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Reject(
         int id,
         [FromBody] RejectJobRequest request,
@@ -65,7 +65,6 @@ public sealed class JobAdminController(IJobAdminService jobAdminService) : Admin
             return MissingAdminIdentity();
         }
 
-        var result = await jobAdminService.RejectAsync(id, adminId, request.Reason, cancellationToken);
-        return result.Success ? NoContent() : NotFound(result.Errors);
+        return NoContentOrFailure(await jobAdminService.RejectAsync(id, adminId, request.Reason, cancellationToken));
     }
 }

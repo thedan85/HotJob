@@ -7,6 +7,15 @@ public static class AuditActions
 {
     public const string CompanyApprove = "Company.Approve";
     public const string CompanyReject = "Company.Reject";
+    public const string CompanyDeactivate = "Company.Deactivate";
+    public const string CompanyReactivate = "Company.Reactivate";
+    public const string EmployerApprove = "Employer.Approve";
+    public const string EmployerReject = "Employer.Reject";
+    public const string EmployerDeactivate = "Employer.Deactivate";
+    public const string EmployerReactivate = "Employer.Reactivate";
+    public const string JobApprove = "Job.Approve";
+    public const string JobReject = "Job.Reject";
+    public const string ReviewHide = "Review.Hide";
     public const string UserLock = "User.Lock";
     public const string UserUnlock = "User.Unlock";
     public const string JobDelete = "Job.Delete";
@@ -19,6 +28,15 @@ public static class AuditActions
     [
         CompanyApprove,
         CompanyReject,
+        CompanyDeactivate,
+        CompanyReactivate,
+        EmployerApprove,
+        EmployerReject,
+        EmployerDeactivate,
+        EmployerReactivate,
+        JobApprove,
+        JobReject,
+        ReviewHide,
         UserLock,
         UserUnlock,
         JobDelete,
@@ -35,6 +53,8 @@ public static class AuditTargetTypes
     public const string User = "User";
     public const string Job = "Job";
     public const string Skill = "Skill";
+    public const string Employer = "Employer";
+    public const string Review = "Review";
 
     /// <summary>All known target types, for filter menus.</summary>
     public static IReadOnlyList<string> All { get; } =
@@ -42,7 +62,9 @@ public static class AuditTargetTypes
         Company,
         User,
         Job,
-        Skill
+        Skill,
+        Employer,
+        Review
     ];
 }
 

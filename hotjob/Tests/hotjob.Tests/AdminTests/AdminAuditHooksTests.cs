@@ -15,6 +15,9 @@ public sealed class AdminAuditHooksTests
 {
     [Theory]
     [InlineData("company")]
+    [InlineData("employer")]
+    [InlineData("jobApprove")]
+    [InlineData("review")]
     [InlineData("user")]
     [InlineData("job")]
     [InlineData("create")]
@@ -27,7 +30,10 @@ public sealed class AdminAuditHooksTests
         var service = fx.CreateAdminService();
         Func<Task> invoke = operation switch
         {
-            "company" => () => service.UpdateCompanyStatusAsync(1, CompanyStatus.Approved, null, "admin"),
+            "company" => () => fx.CreateCompanyAdminService().ApproveAsync(1, "admin"),
+            "employer" => () => fx.CreateEmployerAdminService().ApproveAsync(1, "admin"),
+            "jobApprove" => () => fx.CreateJobAdminService().ApproveAsync(1, "admin"),
+            "review" => () => fx.CreateReviewAdminService().DeleteAsync(1, "admin"),
             "user" => () => service.ToggleUserActiveAsync("missing"),
             "job" => () => service.DeleteJobAsync(1),
             "create" => () => service.CreateSkillAsync(new CreateSkillRequest { Name = "Rust" }),
@@ -73,8 +79,8 @@ public sealed class AdminAuditHooksTests
         {
             ServiceResult result = operation switch
             {
-                "approve" => await service.UpdateCompanyStatusAsync(companyId, CompanyStatus.Approved, null, admin.Id),
-                "reject" => await service.UpdateCompanyStatusAsync(companyId, CompanyStatus.Rejected, "Reason", admin.Id),
+                "approve" => await fx.CreateCompanyAdminService().ApproveAsync(companyId, admin.Id),
+                "reject" => await fx.CreateCompanyAdminService().RejectAsync(companyId, admin.Id, "Reason"),
                 "lock" or "unlock" => await service.ToggleUserActiveAsync(userId),
                 "job" => await service.DeleteJobAsync(jobId),
                 "create" => await service.CreateSkillAsync(new CreateSkillRequest { Name = "New skill" }),
@@ -163,7 +169,7 @@ public sealed class AdminAuditHooksTests
     }
 
     [Fact]
-    public async Task UpdateCompanyStatus_WritesApproveAndRejectEntriesWithReason()
+    public async Task CompanyApproveThenReject_WritesEntriesWithReason()
     {
         await using var fx = await TestFixture.CreateAsync();
         var company = new CompanyProfile { CompanyName = "Acme", Status = CompanyStatus.Pending };
@@ -171,12 +177,10 @@ public sealed class AdminAuditHooksTests
         await fx.Db.SaveChangesAsync();
         var admin = await fx.SeedUserAsync("admin@example.com", "Str0ng!Pass", AppRoles.Admin);
         fx.SignInAdmin(admin.Id, "admin@example.com");
-        var service = fx.CreateAdminService();
+        var service = fx.CreateCompanyAdminService();
 
-        var approved = await service.UpdateCompanyStatusAsync(
-            company.Id, CompanyStatus.Approved, null, admin.Id);
-        var rejected = await service.UpdateCompanyStatusAsync(
-            company.Id, CompanyStatus.Rejected, "Missing business licence", admin.Id);
+        var approved = await service.ApproveAsync(company.Id, admin.Id);
+        var rejected = await service.RejectAsync(company.Id, admin.Id, "Missing business licence");
 
         Assert.True(approved.Success);
         Assert.True(rejected.Success);
@@ -257,8 +261,8 @@ public sealed class AdminAuditHooksTests
         fx.SignInAdmin("admin-1", "admin@example.com");
         var service = fx.CreateAdminService();
 
-        var rejectedWithoutReason = await service.UpdateCompanyStatusAsync(
-            company.Id, CompanyStatus.Rejected, null, "admin-1");
+        var rejectedWithoutReason = await fx.CreateCompanyAdminService().RejectAsync(
+            company.Id, "admin-1", "   ");
         var duplicateSkill = await service.CreateSkillAsync(new CreateSkillRequest { Name = "C#" });
         var missingJob = await service.DeleteJobAsync(9999);
 

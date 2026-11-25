@@ -1,12 +1,19 @@
 using hotjob.DTOs.Admin;
 using hotjob.DTOs.Common;
+using hotjob.Models.Users;
 using hotjob.Services.Common;
 
 namespace hotjob.Services.Admin;
 
 public interface IEmployerAdminService
 {
+    /// <param name="status">Optional membership-status filter; null lists every employer.</param>
     Task<ServiceResult<PagedResponse<EmployerListItemDto>>> ListAsync(
+        int page = 1, int pageSize = 20, string? search = null, MembershipStatus? status = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Employers whose membership is still waiting for a decision.</summary>
+    Task<ServiceResult<PagedResponse<EmployerListItemDto>>> ListPendingAsync(
         int page = 1, int pageSize = 20, string? search = null, CancellationToken cancellationToken = default);
 
     Task<ServiceResult<EmployerDetailDto>> GetDetailAsync(

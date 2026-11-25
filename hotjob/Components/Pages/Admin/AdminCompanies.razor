@@ -2,10 +2,11 @@
 @rendermode InteractiveServer
 @using System.Security.Claims
 @using hotjob.DTOs.Admin
-@using hotjob.DTOs.Job
+@using hotjob.DTOs.Common
 @using hotjob.Models.Users
 @using hotjob.Services.Admin
-@inject IAdminService AdminService
+@using hotjob.Services.Common
+@inject ICompanyAdminService CompanyAdminService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>Admin companies | HotJob</PageTitle>
@@ -17,9 +18,31 @@
                 <div class="workspace-header-copy">
                     <p class="workspace-eyebrow">Administration</p>
                     <h1>Company management</h1>
-                    <p class="workspace-lede">Review pending companies, approve them, or reject them with a reason.</p>
+                    <p class="workspace-lede">Review pending companies, approve or reject them with a reason, and suspend companies that break the rules.</p>
                 </div>
             </section>
+
+            <section class="workspace-toolbar" aria-label="Filter companies">
+                <label class="workspace-field">
+                    <span>Status</span>
+                    <select @bind="statusFilter" @bind:after="ApplyFiltersAsync">
+                        <option value="">All statuses</option>
+                        @foreach (var option in Enum.GetValues<CompanyStatus>())
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                <label class="workspace-field">
+                    <span>Search</span>
+                    <input type="search" @bind="searchTerm" @bind:after="ApplyFiltersAsync" placeholder="Name, industry or location" />
+                </label>
+            </section>
+
+            @if (actionMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@actionMessage</div>
+            }
 
             @if (isLoading)
             {
@@ -36,7 +59,7 @@
                 <section class="workspace-card" aria-labelledby="admin-companies-heading">
                     <div class="workspace-section-head">
                         <div>
-                            <h2 id="admin-companies-heading">All companies</h2>
+                            <h2 id="admin-companies-heading">@(statusFilter is null ? "All companies" : $"{statusFilter} companies")</h2>
                             <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
                         </div>
                     </div>
@@ -59,7 +82,11 @@
                                     <tr>
                                         <td>@company.CompanyName</td>
                                         <td>
-                                            <span class="workspace-badge is-@(StatusClass(company.Status))">@company.Status</span>
+                                            <span class="workspace-badge is-@(company.Status.ToLowerInvariant())">@company.Status</span>
+                                            @if (!company.IsActive)
+                                            {
+                                                <span class="workspace-badge is-muted">Deactivated</span>
+                                            }
                                         </td>
                                         <td>@(string.IsNullOrWhiteSpace(company.Industry) ? "-" : company.Industry)</td>
                                         <td>@(string.IsNullOrWhiteSpace(company.Location) ? "-" : company.Location)</td>
@@ -67,13 +94,21 @@
                                         <td>@company.EmployerCount</td>
                                         <td>
                                             <div class="workspace-toolbar-actions">
-                                                @if (company.Status != CompanyStatus.Approved)
+                                                @if (company.Status != nameof(CompanyStatus.Approved))
                                                 {
-                                                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" @onclick="() => ApproveCompany(company.Id)">Approve</button>
+                                                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" disabled="@busy" @onclick="() => ApproveCompanyAsync(company.Id)">Approve</button>
                                                 }
-                                                @if (company.Status != CompanyStatus.Rejected)
+                                                @if (company.Status != nameof(CompanyStatus.Rejected))
                                                 {
-                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => BeginReject(company.Id)">Reject</button>
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginReject(company.Id)">Reject</button>
+                                                }
+                                                @if (company.IsActive)
+                                                {
+                                                    <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => DeactivateCompanyAsync(company.Id)">Deactivate</button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => ReactivateCompanyAsync(company.Id)">Reactivate</button>
                                                 }
                                             </div>
                                         </td>
@@ -85,7 +120,7 @@
                                                 <div class="admin-reject-form">
                                                     <label class="workspace-field">
                                                         <span>Rejection reason (required)</span>
-                                                        <textarea @bind="rejectionReason" maxlength="1000" rows="2"
+                                                        <textarea @bind="rejectionReason" maxlength="500" rows="2"
                                                                   placeholder="Tell the employer what to fix before resubmitting."></textarea>
                                                     </label>
                                                     @if (rejectError is not null)
@@ -94,11 +129,11 @@
                                                     }
                                                     <div class="workspace-toolbar-actions">
                                                         <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button"
-                                                                disabled="@rejectBusy" @onclick="() => RejectCompanyAsync(company.Id)">
-                                                            @(rejectBusy ? "Rejecting…" : "Confirm rejection")
+                                                                disabled="@busy" @onclick="() => RejectCompanyAsync(company.Id)">
+                                                            @(busy ? "Rejecting…" : "Confirm rejection")
                                                         </button>
                                                         <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
-                                                                disabled="@rejectBusy" @onclick="CancelReject">Cancel</button>
+                                                                disabled="@busy" @onclick="CancelReject">Cancel</button>
                                                     </div>
                                                 </div>
                                             </td>
@@ -130,32 +165,38 @@
 @code {
     private const int PageSize = 20;
 
-    private PagedResponse<AdminCompanyListItemDto>? paged;
+    private PagedResponse<CompanyListItemDto>? paged;
     private int page = 1;
+    private CompanyStatus? statusFilter;
+    private string? searchTerm;
     private bool isLoading = true;
+    private bool busy;
     private string? errorMessage;
+    private string? actionMessage;
     private int? rejectingId;
     private string? rejectionReason;
     private string? rejectError;
-    private bool rejectBusy;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
     }
 
+    private Task ApplyFiltersAsync() => LoadAsync(1);
+
     private async Task LoadAsync(int? requestedPage = null)
     {
         page = requestedPage ?? page;
         try
         {
-            var result = await AdminService.GetCompaniesAsync(page, PageSize);
+            var result = await CompanyAdminService.ListAsync(page, PageSize, searchTerm, statusFilter);
             if (!result.Success || result.Data is null)
             {
                 errorMessage = string.Join("; ", result.Errors);
                 return;
             }
 
+            errorMessage = null;
             paged = result.Data;
             if (paged.TotalCount > 0 && page > paged.TotalPages)
             {
@@ -172,25 +213,14 @@
         }
     }
 
-    private async Task ApproveCompany(int companyId)
-    {
-        try
-        {
-            var result = await AdminService.UpdateCompanyStatusAsync(
-                companyId, CompanyStatus.Approved, null, await GetUserIdAsync());
-            if (!result.Success)
-            {
-                errorMessage = string.Join("; ", result.Errors);
-                return;
-            }
+    private Task ApproveCompanyAsync(int companyId) =>
+        RunAsync(adminId => CompanyAdminService.ApproveAsync(companyId, adminId), "Company approved.");
 
-            await LoadAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-        }
-    }
+    private Task DeactivateCompanyAsync(int companyId) =>
+        RunAsync(adminId => CompanyAdminService.DeactivateAsync(companyId, adminId), "Company deactivated. Its employers can no longer manage jobs.");
+
+    private Task ReactivateCompanyAsync(int companyId) =>
+        RunAsync(adminId => CompanyAdminService.ReactivateAsync(companyId, adminId), "Company reactivated.");
 
     private void BeginReject(int companyId)
     {
@@ -215,42 +245,53 @@
             return;
         }
 
-        rejectBusy = true;
-        rejectError = null;
-        try
+        var failure = await RunAsync(adminId => CompanyAdminService.RejectAsync(companyId, adminId, reason), "Company rejected.");
+        if (failure is null)
         {
-            var result = await AdminService.UpdateCompanyStatusAsync(
-                companyId, CompanyStatus.Rejected, reason, await GetUserIdAsync());
-            if (!result.Success)
-            {
-                rejectError = string.Join("; ", result.Errors);
-                return;
-            }
-
             CancelReject();
-            await LoadAsync();
         }
-        catch (Exception ex)
+        else
         {
-            rejectError = ex.Message;
-        }
-        finally
-        {
-            rejectBusy = false;
+            rejectError = failure;
         }
     }
 
-    private async Task<string?> GetUserIdAsync()
+    /// <summary>Runs an admin write as the signed-in admin, then reloads. Returns the error, if any.</summary>
+    private async Task<string?> RunAsync(Func<string, Task<ServiceResult>> write, string successMessage)
+    {
+        busy = true;
+        actionMessage = null;
+        try
+        {
+            var adminId = await GetAdminIdAsync();
+            if (adminId is null)
+            {
+                return actionMessage = "Sign in as an administrator to manage companies.";
+            }
+
+            var result = await write(adminId);
+            if (!result.Success)
+            {
+                return actionMessage = string.Join("; ", result.Errors);
+            }
+
+            actionMessage = successMessage;
+            await LoadAsync();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return actionMessage = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task<string?> GetAdminIdAsync()
     {
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         return state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
     }
-
-    private static string StatusClass(CompanyStatus status) => status switch
-    {
-        CompanyStatus.Pending => "warning",
-        CompanyStatus.Approved => "success",
-        CompanyStatus.Rejected => "danger",
-        _ => "neutral"
-    };
 }

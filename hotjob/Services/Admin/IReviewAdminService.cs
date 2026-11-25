@@ -7,7 +7,8 @@ namespace hotjob.Services.Admin;
 public interface IReviewAdminService
 {
     Task<ServiceResult<PagedResponse<ReviewListItemDto>>> ListAsync(
-        int page = 1, int pageSize = 20, bool? isDeleted = null, CancellationToken cancellationToken = default);
+        int page = 1, int pageSize = 20, bool? isDeleted = null, int? companyId = null,
+        CancellationToken cancellationToken = default);
 
     Task<ServiceResult<ReviewDetailDto>> GetDetailAsync(
         int reviewId, CancellationToken cancellationToken = default);

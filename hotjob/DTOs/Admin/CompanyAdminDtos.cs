@@ -11,7 +11,9 @@ public record CompanyListItemDto(
     string? LogoUrl,
     string Status,
     string? RejectionReason,
-    DateTime? VerifiedAt);
+    DateTime? VerifiedAt,
+    bool IsActive,
+    int EmployerCount);
 
 /// <summary>Detailed view of a company profile.</summary>
 public record CompanyDetailDto(

@@ -9,7 +9,10 @@ public record JobListItemDto(
     string CompanyName,
     string Status,
     string? City,
-    DateTime? ExpiresAt);
+    DateTime? ExpiresAt,
+    DateTime CreatedAt,
+    DateTime? SubmittedForApprovalAt,
+    int ApplicationCount);
 
 /// <summary>Detailed view of a job posting.</summary>
 public record JobDetailDto(
@@ -24,7 +27,9 @@ public record JobDetailDto(
     DateTime? ExpiresAt,
     DateTime? SubmittedForApprovalAt,
     DateTime? ApprovedAt,
-    DateTime? RejectedAt);
+    DateTime? RejectedAt,
+    string? RejectionReason,
+    string? ReviewedByAdminId);
 
 public record RejectJobRequest(
     [Required, MinLength(1), MaxLength(500)] string Reason);
