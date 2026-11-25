@@ -84,7 +84,7 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
             .Select(employer => employer.FullName)
             .FirstOrDefaultAsync(cancellationToken);
 
-    public async Task<(IReadOnlyList<Review> Items, int TotalCount)> ListReviewsAsync(
+    public async Task<(IReadOnlyList<hotjob.Models.Review> Items, int TotalCount)> ListReviewsAsync(
         int companyId,
         int page,
         int pageSize,

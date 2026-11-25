@@ -6,6 +6,9 @@ namespace hotjob.Models.Job;
 public enum JobStatus
 {
     Draft,
+    PendingApproval,
+    Approved,
+    Rejected,
     Published,
     Closed,
     Expired
@@ -56,12 +59,28 @@ public class JobPosting
 
     /// <summary>The posting is "featured" (listed first) while this is in the future.</summary>
     public DateTime? FeaturedUntil { get; set; }
+    /// <summary>When this job was submitted for approval.</summary>
+    public DateTime? SubmittedForApprovalAt { get; set; }
+
+    /// <summary>When this job was approved/rejected by admin.</summary>
+    public DateTime? ReviewedAt { get; set; }
+
+    /// <summary>Admin who reviewed this job.</summary>
+    [MaxLength(255)]
+    public string? ReviewedByAdminId { get; set; }
+
+    /// <summary>Rejection reason if status is Rejected.</summary>
+    [MaxLength(1000)]
+    public string? RejectionReason { get; set; }
 
     /// <summary>Company that owns this posting.</summary>
     public Users.CompanyProfile Company { get; set; } = default!;
 
     /// <summary>Employer who created this posting. Null if the author left.</summary>
     public Users.Employer? CreatedBy { get; set; }
+
+    /// <summary>Admin who reviewed this job posting.</summary>
+    public Users.ApplicationUser? ReviewedBy { get; set; }
 
     /// <summary>Required skills with importance weights.</summary>
     public ICollection<JobSkill> JobSkills { get; set; } = new List<JobSkill>();

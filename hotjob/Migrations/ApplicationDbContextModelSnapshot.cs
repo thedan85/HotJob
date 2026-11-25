@@ -479,6 +479,17 @@ namespace hotjob.Migrations
                     b.Property<int>("JobType")
                         .HasColumnType("int");
 
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ReviewedByAdminId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
                     b.Property<decimal?>("SalaryMax")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -489,6 +500,9 @@ namespace hotjob.Migrations
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("SubmittedForApprovalAt")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -502,6 +516,7 @@ namespace hotjob.Migrations
                     b.HasIndex("CreatedByEmployerId");
 
                     b.HasIndex("FeaturedUntil");
+                    b.HasIndex("ReviewedByAdminId");
 
                     b.ToTable("JobPostings");
                 });
@@ -787,6 +802,20 @@ namespace hotjob.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DeletedByAdminId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("DeletionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<int>("RatingScore")
                         .HasColumnType("int");
 
@@ -797,6 +826,8 @@ namespace hotjob.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CandidateId");
+
+                    b.HasIndex("DeletedByAdminId");
 
                     b.HasIndex("CompanyProfileId", "CandidateId")
                         .IsUnique();
@@ -1015,6 +1046,13 @@ namespace hotjob.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 
+                    b.Property<DateTime?>("DeactivatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DeactivatedByAdminId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("varchar(2000)");
@@ -1022,6 +1060,9 @@ namespace hotjob.Migrations
                     b.Property<string>("Industry")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Location")
                         .HasMaxLength(200)
@@ -1084,10 +1125,24 @@ namespace hotjob.Migrations
                     b.Property<int>("CompanyProfileId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("DeactivatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DeactivatedByAdminId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsOwner")
                         .HasColumnType("tinyint(1)");
@@ -1340,9 +1395,16 @@ namespace hotjob.Migrations
                         .HasForeignKey("CreatedByEmployerId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("hotjob.Models.Users.ApplicationUser", "ReviewedBy")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByAdminId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Company");
 
                     b.Navigation("CreatedBy");
+
+                    b.Navigation("ReviewedBy");
                 });
 
             modelBuilder.Entity("hotjob.Models.Job.JobSkill", b =>
@@ -1477,9 +1539,16 @@ namespace hotjob.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("hotjob.Models.Users.ApplicationUser", "DeletedBy")
+                        .WithMany()
+                        .HasForeignKey("DeletedByAdminId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Candidate");
 
                     b.Navigation("Company");
+
+                    b.Navigation("DeletedBy");
                 });
 
             modelBuilder.Entity("hotjob.Models.SavedJob", b =>

@@ -83,7 +83,10 @@ public sealed record JobDetailResponse(
     int ApplicationsCount,
     DateTime CreatedAt,
     string? CompanyLocation,
-    DateTime? FeaturedUntil);
+    DateTime? FeaturedUntil,
+    DateTime? SubmittedForApprovalAt,
+    DateTime? ReviewedAt,
+    string? RejectionReason);
 
 public sealed record JobListItemResponse(
     int Id,

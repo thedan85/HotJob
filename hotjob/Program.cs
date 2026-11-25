@@ -236,6 +236,11 @@ builder.Services.AddSingleton<IMatchModelStore>(services => new MatchModelStore(
 builder.Services.AddScoped<IMatchScoreService, MatchScoreService>();
 builder.Services.AddScoped<ISyntheticMatchTrainingService, SyntheticMatchTrainingService>();
 builder.Services.AddScoped<IJobAlertService, JobAlertService>();
+builder.Services.AddScoped<hotjob.Services.Employer.IReviewService, hotjob.Services.Employer.ReviewService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IEmployerAdminService, hotjob.Services.Admin.EmployerAdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.ICompanyAdminService, hotjob.Services.Admin.CompanyAdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IJobAdminService, hotjob.Services.Admin.JobAdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IReviewAdminService, hotjob.Services.Admin.ReviewAdminService>();
 
 var app = builder.Build();
 

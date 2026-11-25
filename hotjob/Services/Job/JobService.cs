@@ -66,6 +66,11 @@ public sealed class JobService(
                 ServiceErrorType.Conflict, JobSlotLimitMessage(entitlement));
         }
 
+        var requestedStatus = request.Status ?? JobStatus.Draft;
+
+        // Automatically convert Published to PendingApproval when creating
+        var actualStatus = requestedStatus == JobStatus.Published ? JobStatus.PendingApproval : requestedStatus;
+
         var job = new JobPosting
         {
             CompanyProfileId = employer.CompanyProfileId,
@@ -77,7 +82,8 @@ public sealed class JobService(
             ExperienceRequired = request.ExperienceRequired,
             JobType = request.JobType,
             ExpiryDate = request.ExpiryDate,
-            Status = request.Status ?? JobStatus.Draft,
+            Status = actualStatus,
+            SubmittedForApprovalAt = actualStatus == JobStatus.PendingApproval ? DateTime.UtcNow : null,
             JobSkills = request.Skills
                 .Select(skill => new JobSkill
                 {
@@ -93,7 +99,7 @@ public sealed class JobService(
 
         await jobRepository.AddAsync(job, cancellationToken);
         await jobRepository.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Employer {EmployerId} created job {JobId}.", employer.Id, job.Id);
+        logger.LogInformation("Employer {EmployerId} created job {JobId} with status {Status}.", employer.Id, job.Id, actualStatus);
 
         var detail = await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
         if (job.Status == JobStatus.Published)
@@ -135,9 +141,9 @@ public sealed class JobService(
         }
 
         var wasPublished = job.Status == JobStatus.Published;
-        var targetStatus = request.Status ?? job.Status;
+        var requestedStatus = request.Status ?? job.Status;
         var reopening = job.Status is JobStatus.Closed or JobStatus.Expired
-            && targetStatus is JobStatus.Draft or JobStatus.Published;
+            && requestedStatus is JobStatus.Draft or JobStatus.Published;
         if (reopening)
         {
             var entitlement = await entitlementService.GetForCompanyAsync(
@@ -155,6 +161,12 @@ public sealed class JobService(
             }
         }
 
+        // Validate status transition: a job can only become Published after admin approval
+        if (requestedStatus == JobStatus.Published && job.Status is not (JobStatus.Approved or JobStatus.Published))
+        {
+            return ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.Validation, "Job must be approved before it can be published.");
+        }
+
         job.Title = request.Title.Trim();
         job.Description = request.Description.Trim();
         job.SalaryMin = request.SalaryMin;
@@ -163,7 +175,7 @@ public sealed class JobService(
         job.ExperienceRequired = request.ExperienceRequired;
         job.JobType = request.JobType;
         job.ExpiryDate = request.ExpiryDate;
-        job.Status = request.Status ?? job.Status;
+        job.Status = requestedStatus;
 
         var skillsChanged = ReplaceSkills(job, request.Skills);
         ReplaceCategories(job, request.CategoryIds);
@@ -828,7 +840,10 @@ public sealed class JobService(
             applicationsCount,
             job.CreatedAt,
             job.Company?.Location,
-            job.FeaturedUntil);
+            job.FeaturedUntil,
+            job.SubmittedForApprovalAt,
+            job.ReviewedAt,
+            job.RejectionReason);
 
     private static PublicJobListItemResponse ToPublicListItem(JobPosting job) =>
         new(
