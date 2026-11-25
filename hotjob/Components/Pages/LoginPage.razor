@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Components
 @using hotjob.DTOs.Authentication
 @using hotjob.Services.Authentication
+@using hotjob.Components.Account
 @inject HotJobAuthStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject ILogger<LoginPage> Logger
@@ -18,6 +19,8 @@
             <div class="eyebrow"><span class="spark" aria-hidden="true">✦</span> Welcome back</div>
             <h1 id="login-title">Sign in to HotJob</h1>
             <p class="intro">Pick up where you left off and find your next opportunity.</p>
+
+            <PasswordChangedNotice Flag="@PasswordChanged" />
 
             @if (GoogleEnabled)
             {
@@ -93,6 +96,9 @@
 
     [SupplyParameterFromQuery(Name = "googleError")]
     private string? GoogleError { get; set; }
+
+    [SupplyParameterFromQuery(Name = "passwordChanged")]
+    private string? PasswordChanged { get; set; }
 
     private bool GoogleEnabled =>
         !string.IsNullOrWhiteSpace(Configuration["Google:ClientId"]) &&

@@ -42,4 +42,22 @@ public sealed class HotJobAuthStateProviderTests
         var state = await provider.GetAuthenticationStateAsync();
         Assert.False(state.User.Identity?.IsAuthenticated ?? false);
     }
+
+    [Fact]
+    public async Task SignOut_ClearsTokensAndNotifiesAnonymousState()
+    {
+        var session = new AuthSession();
+        var provider = new HotJobAuthStateProvider(session);
+        provider.SignIn(Tokens("Candidate"));
+        Task<Microsoft.AspNetCore.Components.Authorization.AuthenticationState>? notification = null;
+        provider.AuthenticationStateChanged += state => notification = state;
+
+        provider.SignOut();
+
+        Assert.Null(session.Tokens);
+        Assert.False(session.IsAuthenticated);
+        Assert.False((await provider.GetAuthenticationStateAsync()).User.Identity?.IsAuthenticated);
+        Assert.NotNull(notification);
+        Assert.False((await notification).User.Identity?.IsAuthenticated);
+    }
 }

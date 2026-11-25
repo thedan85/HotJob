@@ -2,6 +2,7 @@
 @implements IDisposable
 @rendermode InteractiveServer
 @using System.Security.Claims
+@using hotjob.Components.Account
 @using hotjob.DTOs.Authentication
 @using hotjob.DTOs.Candidate
 @using hotjob.Models.Users
@@ -59,15 +60,16 @@ else
                             @Initials
                         }
                     </div>
-                    <a class="profile-avatar-edit" href="#avatar-url" title="Set avatar URL" aria-label="Set avatar URL">+</a>
+                    <a class="profile-avatar-edit" href="/profile#avatar-url" title="Set avatar URL" aria-label="Set avatar URL">+</a>
                     <h2>@DisplayName</h2>
                     <p>@(string.IsNullOrWhiteSpace(profileForm.Position) ? "Candidate" : profileForm.Position)</p>
                     <span class="profile-status @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "profile-status-empty" : string.Empty)"><span></span> @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "Add your job seeking status" : profileForm.JobSeekingStatus)</span>
                 </div>
                 <nav class="profile-nav" aria-label="Profile sections">
-                    <a class="active" href="#personal-info">Personal details</a>
-                    <a href="#cv-management">Manage CVs <span>(@resumes.Count)</span></a>
-                    <a href="#preferences">Career preferences</a>
+                    <a class="active" href="/profile#personal-info">Personal details</a>
+                    <a href="/profile#cv-management">Manage CVs <span>(@resumes.Count)</span></a>
+                    <a href="/profile#preferences">Career preferences</a>
+                    <a href="/profile#change-password">Change password</a>
                 </nav>
             </div>
         </aside>
@@ -406,6 +408,7 @@ else
                     </label>
                 </EditForm>
             </section>
+            <ChangePasswordSection />
         </main>
     </div>
 }

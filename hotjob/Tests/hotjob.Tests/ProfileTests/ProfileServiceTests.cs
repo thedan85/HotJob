@@ -144,6 +144,83 @@ public sealed class ProfileServiceTests
     }
 
     [Fact]
+    public async Task ChangePassword_WeakNewPassword_ReturnsPolicyErrorsAndKeepsSession()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var user = await fx.SeedUserAsync();
+        var login = await fx.AuthService.LoginAsync(new LoginRequest
+        {
+            Email = "user@example.com",
+            Password = "Str0ng!Pass"
+        });
+        Assert.True(login.Success);
+
+        var result = await fx.Service.ChangePasswordAsync(user.Id, new ChangePasswordRequest
+        {
+            CurrentPassword = "Str0ng!Pass",
+            NewPassword = "weak"
+        });
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Validation, result.ErrorType);
+        Assert.Contains(
+            "Password must contain an uppercase letter, lowercase letter, number, and special character.",
+            result.Errors);
+        Assert.True(await fx.UserManager.CheckPasswordAsync(user, "Str0ng!Pass"));
+        Assert.True((await fx.AuthService.GetSessionAsync(login.Data!.RefreshToken)).Success);
+    }
+
+    [Fact]
+    public async Task ChangePassword_Ok_OldRefreshTokensCannotRefreshOrRestoreSession()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var user = await fx.SeedUserAsync();
+        var first = await fx.AuthService.LoginAsync(new LoginRequest
+        {
+            Email = "user@example.com",
+            Password = "Str0ng!Pass"
+        });
+        var second = await fx.AuthService.LoginAsync(new LoginRequest
+        {
+            Email = "user@example.com",
+            Password = "Str0ng!Pass"
+        });
+        Assert.True(first.Success);
+        Assert.True(second.Success);
+
+        var result = await fx.Service.ChangePasswordAsync(user.Id, new ChangePasswordRequest
+        {
+            CurrentPassword = "Str0ng!Pass",
+            NewPassword = "New123!Pass"
+        });
+
+        Assert.True(result.Success);
+        foreach (var token in new[] { first.Data!.RefreshToken, second.Data!.RefreshToken })
+        {
+            var restored = await fx.AuthService.GetSessionAsync(token);
+            Assert.False(restored.Success);
+            Assert.Equal(ServiceErrorType.Unauthorized, restored.ErrorType);
+
+            var refreshed = await fx.AuthService.RefreshAsync(token);
+            Assert.False(refreshed.Success);
+            Assert.Equal(ServiceErrorType.Unauthorized, refreshed.ErrorType);
+        }
+
+        var oldPasswordLogin = await fx.AuthService.LoginAsync(new LoginRequest
+        {
+            Email = "user@example.com",
+            Password = "Str0ng!Pass"
+        });
+        var newPasswordLogin = await fx.AuthService.LoginAsync(new LoginRequest
+        {
+            Email = "user@example.com",
+            Password = "New123!Pass"
+        });
+        Assert.False(oldPasswordLogin.Success);
+        Assert.True(newPasswordLogin.Success);
+    }
+
+    [Fact]
     public async Task Update_Candidate_PositionSummaryPrefs_RoundTrips()
     {
         await using var fx = await TestFixture.CreateAsync();
