@@ -28,9 +28,8 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
     {
         var now = DateTime.UtcNow;
         return DetailsQuery()
-            .Where(job => job.Id == id
-                && job.Status == JobStatus.Published
-                && (job.ExpiryDate == null || job.ExpiryDate > now))
+            .Where(JobVisibility.OpenToCandidates(now))
+            .Where(job => job.Id == id)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -89,8 +88,7 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
 
         var now = DateTime.UtcNow;
         var query = DetailsQuery()
-            .Where(job => job.Status == JobStatus.Published
-                && (job.ExpiryDate == null || job.ExpiryDate > now));
+            .Where(JobVisibility.OpenToCandidates(now));
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {

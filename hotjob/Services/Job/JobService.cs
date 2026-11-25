@@ -515,12 +515,8 @@ public sealed class JobService(
         var now = DateTime.UtcNow;
         var isOpen = await dbContext.JobPostings
             .AsNoTracking()
-            .AnyAsync(
-                job => job.Id == jobId
-                    && job.Status == JobStatus.Published
-                    && (job.ExpiryDate == null || job.ExpiryDate > now)
-                    && job.Company.Status == CompanyStatus.Approved,
-                cancellationToken)
+            .Where(JobVisibility.OpenToCandidates(now))
+            .AnyAsync(job => job.Id == jobId, cancellationToken)
             .ConfigureAwait(false);
 
         if (!isOpen)
@@ -931,10 +927,8 @@ public sealed class JobService(
 
         var query = dbContext.JobPostings
             .AsNoTracking()
-            .Where(job => job.Status == JobStatus.Published
-                && (job.ExpiryDate == null || job.ExpiryDate > now)
-                && job.Company.Status == CompanyStatus.Approved
-                && job.JobSkills.Any(jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)));
+            .Where(JobVisibility.OpenToCandidates(now))
+            .Where(job => job.JobSkills.Any(jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)));
 
         if (!string.IsNullOrWhiteSpace(city))
         {
