@@ -18,8 +18,8 @@ Các khoảng trống lớn:
 - Admin back-office còn thiếu nhiều chức năng quản trị.
 - Upload CV chưa bóc tách Education/Skills/Experience.
 - Thông báo chưa realtime.
-- CV snapshot lúc apply chưa freeze toàn bộ nội dung CV.
-- Sửa/hủy lịch phỏng vấn chưa gửi thông báo cho candidate.
+
+Các khoảng trống employer từng ghi nhận ở bản này (CV snapshot và thông báo sửa/hủy lịch) đã hoàn thiện ngày 2026-11-25; xem mục III.
 
 Đã chạy:
 
@@ -27,7 +27,7 @@ Các khoảng trống lớn:
 dotnet test ..\hotjob.slnx --nologo -v q
 ```
 
-Kết quả: **443/443 test pass**.
+Kết quả ban đầu: **443/443 test pass**. Sau khi bổ sung chức năng employer: **451/451 test pass** (2026-11-25).
 
 Lưu ý: chưa chạy kiểm thử E2E trên trình duyệt. Kết luận dựa trên đọc code, cấu trúc dữ liệu và test hiện có.
 
@@ -125,6 +125,8 @@ Lưu ý: chưa chạy kiểm thử E2E trên trình duyệt. Kết luận dựa 
 
 ## III. Chức năng Employer
 
+Cập nhật 2026-11-25: toàn bộ chức năng employer đã hoàn thiện. Ba mục từng ở mức MỘT PHẦN trong bản kiểm toán 2026-11-23 đã được bổ sung: freeze CV đầy đủ lúc apply, hiển thị actor trong lịch sử trạng thái, và gửi thông báo khi sửa/hủy lịch phỏng vấn.
+
 | Trạng thái | Chức năng | Ghi chú |
 |---|---|---|
 | CÓ | Tạo công ty mới (Owner) | Company Pending; owner Active. |
@@ -142,16 +144,16 @@ Lưu ý: chưa chạy kiểm thử E2E trên trình duyệt. Kết luận dựa 
 | CÓ | Kiểm tra dữ liệu | Chặn lương sai, hạn nộp quá khứ, skill/category không tồn tại. |
 | CÓ | Phân quyền | Chỉ Employer Active thuộc company Approved; chỉ thấy dữ liệu công ty mình. |
 | CÓ | Hàng đợi ứng viên | Filter job/status, search tên/email; có thêm match filter/sort. |
-| MỘT PHẦN | Xem chi tiết đơn | Có cover letter, CV hiện tại, lịch sử trạng thái. Snapshot chỉ lưu file URL + summary; không freeze toàn bộ Education/Experience/Skills. |
+| CÓ | Xem chi tiết đơn | Cover letter, lịch sử trạng thái và CV đóng băng tại thời điểm apply. `Application.SnapshotJson` lưu đầy đủ Education, Work Experience, Skills, summary và file URL. Đơn cũ không có snapshot thì dùng CV hiện tại và ghi nhãn "current CV". |
 | CÓ | Chuyển trạng thái tuần tự | Pending → Viewed → Shortlisted → Interviewing → Offered; Reject từ trạng thái mở. |
-| CÓ | Ghi lịch sử | Lưu actor, thời gian, ghi chú. UI chỉ hiện trạng thái/thời gian/ghi chú, không hiện tên actor. |
+| CÓ | Ghi lịch sử | Lưu actor, thời gian, ghi chú. UI hiện trạng thái, thời gian, ghi chú và email người thay đổi (hoặc "System"). |
 | CÓ | Nhắn tin ứng viên | Notification trực tiếp. |
 | CÓ | Đặt lịch phỏng vấn nhiều vòng | Cho phép tạo nhiều interview record; không có trường số vòng riêng. |
 | CÓ | Tự nâng trạng thái | Shortlisted + tạo lịch → Interviewing. |
-| CÓ | Sửa/Hủy lịch | Có cập nhật và cancel interview. |
-| MỘT PHẦN | Thông báo lịch phỏng vấn | Chỉ gửi khi tạo lịch. Sửa/hủy lịch không gửi notification. |
+| CÓ | Sửa/Hủy lịch | Có cập nhật và cancel interview; nội dung thông báo được giới hạn 2000 ký tự. |
+| CÓ | Thông báo lịch phỏng vấn | Gửi Notification cho candidate khi tạo, sửa (reschedule) và hủy lịch. |
 | CÓ | Job hết hạn tự động | Background service chuyển Published quá hạn sang Expired. Applications vẫn giữ cho HR xử lý. |
-| CÓ | Thông báo sự kiện | Đổi trạng thái, tạo lịch, nhắn tin đều tạo Notification cho candidate. |
+| CÓ | Thông báo sự kiện | Đổi trạng thái, tạo/sửa/hủy lịch, nhắn tin đều tạo Notification cho candidate. |
 
 ### Bằng chứng chính
 
@@ -160,6 +162,9 @@ Lưu ý: chưa chạy kiểm thử E2E trên trình duyệt. Kết luận dựa 
 - `hotjob/Services/Employer/ApplicantService.cs`
 - `hotjob/Services/Employer/InterviewService.cs`
 - `hotjob/Services/Employer/NotificationService.cs`
+- `hotjob/Services/Employer/ApplicantMapping.cs`
+- `hotjob/Services/Candidate/ApplicationService.cs`
+- `hotjob/Models/Application/ResumeSnapshot.cs`
 - `hotjob/Services/Job/JobService.cs`
 - `hotjob/Services/Job/JobExpiryService.cs`
 - `hotjob/Components/Pages/Employer/Jobs.razor`
@@ -186,17 +191,16 @@ Lưu ý: chưa chạy kiểm thử E2E trên trình duyệt. Kết luận dựa 
    - SignalR hoặc polling.
    - Cập nhật badge và danh sách ngay khi employer đổi trạng thái/gửi tin.
 
-4. **CV snapshot đầy đủ**
-   - Freeze cả Education, Experience, Skills lúc apply.
-   - Không chỉ lưu file URL + summary.
+4. **CV snapshot đầy đủ — ĐÃ XONG (2026-11-25)**
+   - Freeze Education, Experience, Skills, summary và file URL trong `Application.SnapshotJson`.
 
-5. **Thông báo khi sửa/hủy lịch phỏng vấn**
+5. **Thông báo khi sửa/hủy lịch phỏng vấn — ĐÃ XONG (2026-11-25)**
    - Gửi notification cho candidate khi reschedule hoặc cancel.
 
 ---
 
 ## V. Ghi chú kiểm chứng
 
-- Đã chạy test tự động: 443 test pass.
+- Đã chạy test tự động: 443 test pass lúc kiểm toán; 451 test pass sau khi hoàn thiện employer (2026-11-25).
 - Chưa chạy E2E trình duyệt.
 - Chưa kiểm tra hành vi thanh toán với VNPay sandbox trong lần audit này.
