@@ -206,6 +206,47 @@ public sealed class CompanyService(
             review.CreatedAt));
     }
 
+    public async Task<ServiceResult<IReadOnlyList<MyReviewDto>>> GetMyReviewsAsync(
+        string? userId,
+        int? companyId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return ServiceResult<IReadOnlyList<MyReviewDto>>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
+
+        var candidateId = await dbContext.Candidates
+            .AsNoTracking()
+            .Where(row => row.UserId == userId)
+            .Select(row => (int?)row.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (candidateId is null)
+            return ServiceResult<IReadOnlyList<MyReviewDto>>.Fail(ServiceErrorType.NotFound, "Candidate profile not found.");
+
+        // Scoped to the caller's CandidateId: nobody can list another candidate's reviews.
+        var query = dbContext.Reviews
+            .AsNoTracking()
+            .Where(review => review.CandidateId == candidateId.Value);
+        if (companyId.HasValue)
+            query = query.Where(review => review.CompanyProfileId == companyId.Value);
+
+        var reviews = await query
+            .OrderByDescending(review => review.CreatedAt)
+            .ThenByDescending(review => review.Id)
+            .Select(review => new MyReviewDto(
+                review.Id,
+                review.CompanyProfileId,
+                review.Company.CompanyName,
+                review.RatingScore,
+                review.ReviewText,
+                review.CreatedAt,
+                review.IsDeleted))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<IReadOnlyList<MyReviewDto>>.Ok(reviews);
+    }
+
     private async Task<Dictionary<int, (double Average, int Count)>> LoadRatingsAsync(
         IReadOnlyCollection<int> companyIds,
         CancellationToken cancellationToken)

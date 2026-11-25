@@ -41,6 +41,16 @@ public sealed record CompanyReviewDto(
     string ReviewerName,
     DateTime CreatedAt);
 
+/// <summary>A review as its author sees it, including whether a moderator hid it.</summary>
+public sealed record MyReviewDto(
+    int Id,
+    int CompanyId,
+    string CompanyName,
+    int RatingScore,
+    string? ReviewText,
+    DateTime CreatedAt,
+    bool IsHidden);
+
 public sealed record CompanyFilterOptionsDto(
     IReadOnlyList<string> Industries,
     IReadOnlyList<string> Locations);

@@ -27,4 +27,13 @@ public interface ICompanyService
         int companyId,
         CreateReviewRequest request,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The signed-in candidate's own reviews, newest first, optionally for one company.
+    /// Includes reviews a moderator hid, flagged, so the author knows why it is not public.
+    /// </summary>
+    Task<ServiceResult<IReadOnlyList<MyReviewDto>>> GetMyReviewsAsync(
+        string? userId,
+        int? companyId = null,
+        CancellationToken cancellationToken = default);
 }

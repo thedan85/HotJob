@@ -33,6 +33,25 @@
                     <p class="workspace-sub" role="status">Loading company…</p>
                 </section>
             }
+            else if (existingReview is not null)
+            {
+                <section class="workspace-card" aria-label="Your existing review">
+                    <h2>You already reviewed this company</h2>
+                    <p class="workspace-sub">
+                        Each candidate can review a company once. You rated it @existingReview.RatingScore / 5
+                        on @existingReview.CreatedAt.ToString("dd MMM yyyy").
+                        @if (existingReview.IsHidden)
+                        {
+                            <span> A moderator has hidden this review, so it is not public.</span>
+                        }
+                    </p>
+                    @if (!string.IsNullOrWhiteSpace(existingReview.ReviewText))
+                    {
+                        <p class="review-text">@existingReview.ReviewText</p>
+                    }
+                    <a class="workspace-btn workspace-btn-secondary" href="/my-reviews">See all my reviews</a>
+                </section>
+            }
             else
             {
                 <section class="workspace-card">
@@ -77,6 +96,7 @@
     public int Id { get; set; }
 
     private CompanyDetailDto? company;
+    private MyReviewDto? existingReview;
     private CreateReviewRequest form = new();
     private bool isLoading = true;
     private bool isSubmitting;
@@ -96,6 +116,14 @@
         if (result.Success && result.Data is not null)
         {
             company = result.Data;
+
+            // Show the existing review up front instead of failing only after submit.
+            var userId = await GetUserIdAsync();
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                var mine = await CompanyService.GetMyReviewsAsync(userId, Id);
+                existingReview = mine.Success ? mine.Data?.FirstOrDefault() : null;
+            }
         }
         else
         {
