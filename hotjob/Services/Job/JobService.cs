@@ -9,6 +9,7 @@ using hotjob.Repositories.Job;
 using hotjob.Services.Billing;
 using hotjob.Services.Common;
 using hotjob.Services.JobAlerts;
+using hotjob.Services.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -20,7 +21,8 @@ public sealed class JobService(
     IEntitlementService entitlementService,
     IJobAlertService jobAlertService,
     ILogger<JobService> logger,
-    TimeProvider? timeProvider = null) : IJobService
+    TimeProvider? timeProvider = null,
+    INotificationBroadcaster? broadcaster = null) : IJobService
 {
     private static readonly ApplicationStatus[] OpenStatuses =
     [
@@ -236,6 +238,7 @@ public sealed class JobService(
 
         job.Status = JobStatus.Closed;
         var changedAt = timeProvider?.GetUtcNow().UtcDateTime ?? DateTime.UtcNow;
+        var notifiedUserIds = new List<string>();
         foreach (var application in job.Applications.Where(application => OpenStatuses.Contains(application.CurrentStatus)))
         {
             application.CurrentStatus = ApplicationStatus.Rejected;
@@ -255,9 +258,16 @@ public sealed class JobService(
                 IsRead = false,
                 CreatedAt = changedAt
             });
+            notifiedUserIds.Add(application.Candidate.UserId);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (broadcaster is not null)
+        {
+            foreach (var userIdToNotify in notifiedUserIds)
+                await broadcaster.NotifyAsync(userIdToNotify, "Application Rejected", cancellationToken);
+        }
+
         logger.LogInformation("Employer {EmployerId} closed job {JobId}.", employer.Id, job.Id);
         return ServiceResult<JobDeleteResponse>.Ok(new JobDeleteResponse(id, Closed: true, JobStatus.Closed));
     }

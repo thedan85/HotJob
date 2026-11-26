@@ -6,6 +6,7 @@ using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Models.Users;
 using hotjob.Services.Common;
+using hotjob.Services.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +20,8 @@ namespace hotjob.Services.Candidate;
 public sealed class ApplicationService(
     ApplicationDbContext dbContext,
     TimeProvider timeProvider,
-    ILogger<ApplicationService> logger) : IApplicationService
+    ILogger<ApplicationService> logger,
+    INotificationBroadcaster? broadcaster = null) : IApplicationService
 {
     public async Task<ServiceResult<ApplyContextDto>> GetApplyContextAsync(
         string? userId,
@@ -192,6 +194,11 @@ public sealed class ApplicationService(
 
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            if (broadcaster is not null)
+            {
+                foreach (var employerUserId in employerUserIds)
+                    await broadcaster.NotifyAsync(employerUserId, $"New application for {job.Title}", cancellationToken);
+            }
         }
         catch (DbUpdateException exception)
         {

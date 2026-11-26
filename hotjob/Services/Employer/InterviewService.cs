@@ -3,6 +3,7 @@ using hotjob.Models;
 using hotjob.Models.Application;
 using hotjob.Repositories.Employer;
 using hotjob.Services.Common;
+using hotjob.Services.Notifications;
 using Microsoft.Extensions.Logging;
 
 namespace hotjob.Services.Employer;
@@ -10,7 +11,8 @@ namespace hotjob.Services.Employer;
 public sealed class InterviewService(
     IApplicantRepository repo,
     TimeProvider timeProvider,
-    ILogger<InterviewService> logger) : IInterviewService
+    ILogger<InterviewService> logger,
+    INotificationBroadcaster? broadcaster = null) : IInterviewService
 {
     public async Task<ServiceResult<InterviewResponse>> CreateAsync(
         string? userId,
@@ -42,6 +44,7 @@ public sealed class InterviewService(
                 return ServiceResult<InterviewResponse>.Fail(
                     ServiceErrorType.Conflict, $"Cannot schedule an interview for an application with status {app.CurrentStatus}.");
 
+            var candidateUserId = app.Candidate.UserId;
             interview = new Interview
             {
                 ApplicationId = app.Id,
@@ -70,7 +73,7 @@ public sealed class InterviewService(
 
             repo.AddNotification(new Notification
             {
-                UserId = app.Candidate.UserId,
+                UserId = candidateUserId,
                 Title = "Interview scheduled",
                 Content = Cap($"An interview for \"{app.JobPosting.Title}\" is scheduled at {interview.InterviewDate:u}."
                     + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}.")),
@@ -80,6 +83,8 @@ public sealed class InterviewService(
 
             await repo.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
+            if (broadcaster is not null)
+                await broadcaster.NotifyAsync(candidateUserId, "Interview scheduled", cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -163,6 +168,8 @@ public sealed class InterviewService(
         }
 
         await repo.SaveChangesAsync(cancellationToken);
+        if (hasChanges && broadcaster is not null)
+            await broadcaster.NotifyAsync(interview.Application.Candidate.UserId, "Interview updated", cancellationToken);
         return ServiceResult<InterviewResponse>.Ok(ApplicantMapping.ToInterviewResponse(interview));
     }
 
@@ -191,6 +198,8 @@ public sealed class InterviewService(
         });
 
         await repo.SaveChangesAsync(cancellationToken);
+        if (broadcaster is not null)
+            await broadcaster.NotifyAsync(interview.Application.Candidate.UserId, "Interview cancelled", cancellationToken);
         return ServiceResult<InterviewResponse>.Ok(ApplicantMapping.ToInterviewResponse(interview));
     }
 

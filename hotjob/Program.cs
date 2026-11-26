@@ -14,6 +14,7 @@ using hotjob.Services.Authentication;
 using hotjob.Services.Billing;
 using hotjob.Services.JobAlerts;
 using hotjob.Services.ML;
+using hotjob.Services.Notifications;
 using hotjob.Swagger;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
@@ -125,6 +126,8 @@ builder.Services.AddOptions<JobAlertsOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<INotificationRealtime, NotificationRealtime>();
+builder.Services.AddSingleton<INotificationBroadcaster, NotificationBroadcaster>();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
 

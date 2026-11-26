@@ -2,10 +2,13 @@ using hotjob.DTOs.Employer;
 using hotjob.Models;
 using hotjob.Repositories.Employer;
 using hotjob.Services.Common;
+using hotjob.Services.Notifications;
 
 namespace hotjob.Services.Employer;
 
-public sealed class NotificationService(IApplicantRepository repo) : INotificationService
+public sealed class NotificationService(
+    IApplicantRepository repo,
+    INotificationBroadcaster? broadcaster = null) : INotificationService
 {
     public async Task<ServiceResult<NotificationResponse>> NotifyAsync(
         string? userId,
@@ -38,6 +41,8 @@ public sealed class NotificationService(IApplicantRepository repo) : INotificati
         };
         repo.AddNotification(notification);
         await repo.SaveChangesAsync(cancellationToken);
+        if (broadcaster is not null)
+            await broadcaster.NotifyAsync(notification.UserId, title, cancellationToken);
 
         return ServiceResult<NotificationResponse>.Ok(ApplicantMapping.ToNotificationResponse(notification));
     }
