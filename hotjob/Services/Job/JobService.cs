@@ -135,6 +135,18 @@ public sealed class JobService(
 
         var wasPublished = job.Status == JobStatus.Published;
         var requestedStatus = request.Status ?? job.Status;
+
+        // Draft is the one status DeleteOrCloseAsync hard-deletes, so a job candidates have applied to
+        // must never return to it: the Application FK cascades and would erase every applicant.
+        if (requestedStatus == JobStatus.Draft
+            && job.Status != JobStatus.Draft
+            && await dbContext.Applications.AnyAsync(application => application.JobPostingId == job.Id, cancellationToken))
+        {
+            return ServiceResult<JobDetailResponse>.Fail(
+                ServiceErrorType.Conflict,
+                "This job already has applications, so it cannot go back to Draft. Publish or close it instead.");
+        }
+
         // Closed/Expired/Rejected jobs hold no quota slot; moving one back into the pipeline takes one.
         var reopening = job.Status is JobStatus.Closed or JobStatus.Expired or JobStatus.Rejected
             && requestedStatus is JobStatus.Draft or JobStatus.Published;
@@ -226,7 +238,10 @@ public sealed class JobService(
             return ServiceResult<JobDeleteResponse>.Fail(ServiceErrorType.NotFound, "Job not found.");
         }
 
-        if (job.Status == JobStatus.Draft)
+        // Only a draft nobody applied to is deleted. Applications cascade with the job, so a draft that
+        // still has applicants (e.g. from before drafts with applications were blocked) is closed instead,
+        // keeping their applications, history and interviews.
+        if (job.Status == JobStatus.Draft && job.Applications.Count == 0)
         {
             dbContext.JobPostings.Remove(job);
             await dbContext.SaveChangesAsync(cancellationToken);

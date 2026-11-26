@@ -322,8 +322,10 @@
                                                 }
                                                 @if (job.Status is JobStatus.Draft or JobStatus.Published or JobStatus.PendingApproval or JobStatus.Approved)
                                                 {
+                                                    // Mirrors JobService.DeleteOrCloseAsync: only a draft without applicants is deleted.
+                                                    var deletes = job.Status == JobStatus.Draft && job.ApplicationsCount == 0;
                                                     <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => DeleteOrCloseAsync(job.Id, job.Title, job.Status)">
-                                                        @(pendingDeleteId == job.Id ? "Confirm " + (job.Status == JobStatus.Draft ? "delete?" : "close?") : job.Status == JobStatus.Draft ? "Delete" : "Close")
+                                                        @(pendingDeleteId == job.Id ? "Confirm " + (deletes ? "delete?" : "close?") : deletes ? "Delete" : "Close")
                                                     </button>
                                                 }
                                             </div>

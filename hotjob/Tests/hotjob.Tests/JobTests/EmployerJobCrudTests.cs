@@ -1,6 +1,7 @@
 using hotjob.Data;
 using hotjob.DTOs.Job;
 using hotjob.Models;
+using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Models.Users;
 using hotjob.Repositories.Job;
@@ -8,6 +9,7 @@ using hotjob.Services.Common;
 using hotjob.Services.Billing;
 using hotjob.Services.Job;
 using hotjob.Tests.Support;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace hotjob.Tests.JobTests;
@@ -130,6 +132,113 @@ public sealed class EmployerJobCrudTests
         Assert.True(stillThere.Success);
         Assert.Equal(JobStatus.Closed, stillThere.Data!.Status);
     }
+
+    [Fact]
+    public async Task Update_PublishedJobWithApplications_CannotGoBackToDraft()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
+        var svc = CreateService(fx);
+        var jobId = await CreatePublishedJobAsync(fx, svc, userId, skillId, categoryId);
+        var applicationId = await AddApplicantAsync(fx, jobId);
+
+        var result = await svc.UpdateAsync(userId, jobId, UpdateRequest(skillId, categoryId, JobStatus.Draft));
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+        Assert.Equal(JobStatus.Published, await StoredStatusAsync(fx, jobId));
+        Assert.True(await fx.Db.Applications.AsNoTracking().AnyAsync(a => a.Id == applicationId));
+    }
+
+    [Fact]
+    public async Task Update_PublishedJobWithoutApplications_CanGoBackToDraft()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
+        var svc = CreateService(fx);
+        var jobId = await CreatePublishedJobAsync(fx, svc, userId, skillId, categoryId);
+
+        var result = await svc.UpdateAsync(userId, jobId, UpdateRequest(skillId, categoryId, JobStatus.Draft));
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(JobStatus.Draft, result.Data!.Status);
+    }
+
+    [Fact]
+    public async Task Update_ClosedJobWithApplications_CannotReopenAsDraft()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
+        var svc = CreateService(fx);
+        var jobId = await CreatePublishedJobAsync(fx, svc, userId, skillId, categoryId);
+        await AddApplicantAsync(fx, jobId);
+        Assert.True((await svc.DeleteOrCloseAsync(userId, jobId)).Data!.Closed);
+
+        var result = await svc.UpdateAsync(userId, jobId, UpdateRequest(skillId, categoryId, JobStatus.Draft));
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
+        Assert.Equal(JobStatus.Closed, await StoredStatusAsync(fx, jobId));
+    }
+
+    [Fact]
+    public async Task Delete_DraftWithApplications_ClosesAndKeepsApplications()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
+        var svc = CreateService(fx);
+        var created = await svc.CreateAsync(userId, NewRequest(skillId, categoryId));
+        // A draft that already has an applicant: data from before such moves were blocked.
+        var applicationId = await AddApplicantAsync(fx, created.Data!.Id);
+
+        var result = await svc.DeleteOrCloseAsync(userId, created.Data.Id);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.True(result.Data!.Closed);
+        Assert.Equal(JobStatus.Closed, result.Data.Status);
+        Assert.Equal(JobStatus.Closed, await StoredStatusAsync(fx, created.Data.Id));
+        var application = await fx.Db.Applications.AsNoTracking().SingleAsync(a => a.Id == applicationId);
+        Assert.Equal(ApplicationStatus.Rejected, application.CurrentStatus);
+        Assert.True(await fx.Db.ApplicationStatusHistories.AsNoTracking()
+            .AnyAsync(h => h.ApplicationId == applicationId && h.Status == ApplicationStatus.Rejected));
+    }
+
+    private static UpdateJobRequest UpdateRequest(int skillId, int categoryId, JobStatus status) => new()
+    {
+        Title = "Senior .NET Developer",
+        Description = "Build things.",
+        SalaryMin = 1000,
+        SalaryMax = 2000,
+        ExperienceRequired = 3,
+        JobType = JobType.FullTime,
+        Status = status,
+        Skills = new List<JobSkillInput> { new() { SkillId = skillId, ImportanceWeight = 7 } },
+        CategoryIds = new List<int> { categoryId }
+    };
+
+    /// <summary>Create → admin approval → publish, the only way a job goes live.</summary>
+    private static async Task<int> CreatePublishedJobAsync(
+        TestFixture fx, JobService svc, string userId, int skillId, int categoryId)
+    {
+        var created = await svc.CreateAsync(userId, NewRequest(skillId, categoryId, JobStatus.Published));
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        await fx.ApproveJobAsync(created.Data!.Id);
+        var published = await svc.UpdateAsync(userId, created.Data.Id, UpdateRequest(skillId, categoryId, JobStatus.Published));
+        Assert.True(published.Success, string.Join("; ", published.Errors));
+        Assert.Equal(JobStatus.Published, published.Data!.Status);
+        return created.Data.Id;
+    }
+
+    private static async Task<int> AddApplicantAsync(TestFixture fx, int jobId)
+    {
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, $"cand-{Guid.NewGuid():N}@example.com");
+        var job = await fx.Db.JobPostings.SingleAsync(j => j.Id == jobId);
+        var application = await MatchTestData.CreateApplicationAsync(fx, job, resume, candidate, ApplicationStatus.Pending);
+        return application.Id;
+    }
+
+    private static Task<JobStatus> StoredStatusAsync(TestFixture fx, int jobId) =>
+        fx.Db.JobPostings.AsNoTracking().Where(j => j.Id == jobId).Select(j => j.Status).SingleAsync();
 
     [Fact]
     public async Task Create_Unauthorized_WhenNoActiveEmployer()

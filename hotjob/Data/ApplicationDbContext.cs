@@ -63,6 +63,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<CompanyProfile>()
             .HasIndex(x => x.CompanyName).IsUnique();
 
+        // IsActive means "not suspended by an admin", so a row nobody touched must be active. The column
+        // was first added with DEFAULT 0 (20261018151155), which hid every job; the database default now
+        // matches the CLR default. Sentinel true: EF omits only a true value on insert, so an explicit
+        // false is still written instead of being replaced by the database default.
+        modelBuilder.Entity<CompanyProfile>().Property(x => x.IsActive).HasDefaultValue(true).HasSentinel(true);
+        modelBuilder.Entity<Employer>().Property(x => x.IsActive).HasDefaultValue(true).HasSentinel(true);
+
         modelBuilder.Entity<Resume>().HasOne(x => x.Candidate).WithMany(x => x.Resumes).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Education>().HasOne(x => x.Resume).WithMany(x => x.Educations).HasForeignKey(x => x.ResumeId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<WorkExperience>().HasOne(x => x.Resume).WithMany(x => x.WorkExperiences).HasForeignKey(x => x.ResumeId).OnDelete(DeleteBehavior.Cascade);
