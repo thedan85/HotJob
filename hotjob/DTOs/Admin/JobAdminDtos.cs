@@ -14,7 +14,30 @@ public record JobListItemDto(
     DateTime? SubmittedForApprovalAt,
     int ApplicationCount,
     DateTime? ModeratedAt = null,
-    string? ModerationReason = null);
+    string? ModerationReason = null,
+    int CompanyProfileId = 0,
+    DateTime? FeaturedUntil = null);
+
+/// <summary>Filters for the admin job list. Every field is optional.</summary>
+public sealed class AdminJobQuery
+{
+    /// <summary>Matches the title or the company name.</summary>
+    public string? Search { get; init; }
+
+    public hotjob.Models.Job.JobStatus? Status { get; init; }
+
+    public int? CompanyId { get; init; }
+
+    /// <summary>True: featured right now; false: not featured.</summary>
+    public bool? IsFeatured { get; init; }
+
+    /// <summary>True: removed by an admin; false: never removed.</summary>
+    public bool? IsModerated { get; init; }
+
+    public int Page { get; init; } = 1;
+
+    public int PageSize { get; init; } = 20;
+}
 
 /// <summary>Detailed view of a job posting.</summary>
 public record JobDetailDto(

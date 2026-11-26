@@ -12,6 +12,10 @@ public interface IJobAdminService
         int page = 1, int pageSize = 20, string? search = null, JobStatus? status = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Jobs filtered by search, status, company, featured and removed flags.</summary>
+    Task<ServiceResult<PagedResponse<JobListItemDto>>> ListAsync(
+        AdminJobQuery query, CancellationToken cancellationToken = default);
+
     Task<ServiceResult<PagedResponse<JobListItemDto>>> ListPendingAsync(
         int page = 1, int pageSize = 20, string? search = null, CancellationToken cancellationToken = default);
 

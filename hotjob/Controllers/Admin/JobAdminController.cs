@@ -18,8 +18,20 @@ public sealed class JobAdminController(IJobAdminService jobAdminService) : Admin
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         [FromQuery] JobStatus? status = null,
+        [FromQuery] int? companyId = null,
+        [FromQuery] bool? isFeatured = null,
+        [FromQuery] bool? isModerated = null,
         CancellationToken cancellationToken = default) =>
-        OkOrFailure(await jobAdminService.ListAsync(page, pageSize, search, status, cancellationToken));
+        OkOrFailure(await jobAdminService.ListAsync(new AdminJobQuery
+        {
+            Page = page,
+            PageSize = pageSize,
+            Search = search,
+            Status = status,
+            CompanyId = companyId,
+            IsFeatured = isFeatured,
+            IsModerated = isModerated
+        }, cancellationToken));
 
     [HttpGet("pending")]
     [ProducesResponseType(typeof(PagedResponse<JobListItemDto>), StatusCodes.Status200OK)]

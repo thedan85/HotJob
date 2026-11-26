@@ -22,17 +22,45 @@ public sealed class JobAdminService(
 
     private const int MaxReasonLength = 500;
 
-    public async Task<ServiceResult<PagedResponse<JobListItemDto>>> ListAsync(
+    public Task<ServiceResult<PagedResponse<JobListItemDto>>> ListAsync(
         int page = 1,
         int pageSize = 20,
         string? search = null,
         JobStatus? status = null,
+        CancellationToken cancellationToken = default) =>
+        ListAsync(new AdminJobQuery { Page = page, PageSize = pageSize, Search = search, Status = status }, cancellationToken);
+
+    public async Task<ServiceResult<PagedResponse<JobListItemDto>>> ListAsync(
+        AdminJobQuery filter,
         CancellationToken cancellationToken = default)
     {
-        page = Math.Max(page, 1);
-        pageSize = Math.Clamp(pageSize, 1, 100);
+        ArgumentNullException.ThrowIfNull(filter);
+        var page = Math.Max(filter.Page, 1);
+        var pageSize = Math.Clamp(filter.PageSize, 1, 100);
+        var search = filter.Search;
+        var status = filter.Status;
 
         var query = dbContext.JobPostings.AsNoTracking();
+
+        if (filter.CompanyId is { } companyId)
+        {
+            query = query.Where(j => j.CompanyProfileId == companyId);
+        }
+
+        if (filter.IsFeatured is { } featured)
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+            query = featured
+                ? query.Where(j => j.FeaturedUntil != null && j.FeaturedUntil > now)
+                : query.Where(j => j.FeaturedUntil == null || j.FeaturedUntil <= now);
+        }
+
+        if (filter.IsModerated is { } moderated)
+        {
+            query = moderated
+                ? query.Where(j => j.ModeratedAt != null)
+                : query.Where(j => j.ModeratedAt == null);
+        }
 
         if (status.HasValue)
         {
@@ -67,7 +95,9 @@ public sealed class JobAdminService(
                 j.SubmittedForApprovalAt,
                 j.Applications.Count,
                 j.ModeratedAt,
-                j.ModerationReason))
+                j.ModerationReason,
+                j.CompanyProfileId,
+                j.FeaturedUntil))
             .ToListAsync(cancellationToken);
 
         return ServiceResult<PagedResponse<JobListItemDto>>.Ok(new PagedResponse<JobListItemDto>

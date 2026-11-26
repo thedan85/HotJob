@@ -273,6 +273,9 @@ public sealed class AdminAuthorizationTests
         public Task<ServiceResult<PagedResponse<JobListItemDto>>> ListAsync(int page = 1, int pageSize = 20, string? search = null, hotjob.Models.Job.JobStatus? status = null, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<ServiceResult<PagedResponse<JobListItemDto>>> ListAsync(AdminJobQuery query, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ServiceResult<PagedResponse<JobListItemDto>>> ListPendingAsync(int page = 1, int pageSize = 20, string? search = null, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

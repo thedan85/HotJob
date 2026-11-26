@@ -35,10 +35,30 @@
                     </select>
                 </label>
                 <label class="workspace-field">
+                    <span>Featured</span>
+                    <select @bind="featuredFilter" @bind:after="ApplyFiltersAsync">
+                        <option value="">Any</option>
+                        <option value="yes">Featured now</option>
+                        <option value="no">Not featured</option>
+                    </select>
+                </label>
+                <label class="workspace-field">
+                    <span>Removed by admin</span>
+                    <select @bind="removedFilter" @bind:after="ApplyFiltersAsync">
+                        <option value="">Any</option>
+                        <option value="yes">Removed</option>
+                        <option value="no">Not removed</option>
+                    </select>
+                </label>
+                <label class="workspace-field">
                     <span>Search</span>
                     <input type="search" @bind="searchTerm" @bind:after="ApplyFiltersAsync" placeholder="Title or company" />
                 </label>
             </section>
+            @if (CompanyId is not null)
+            {
+                <p class="workspace-sub">Showing one company's postings only. <a href="/admin/jobs">Show all companies</a></p>
+            }
 
             @if (actionMessage is not null)
             {
@@ -81,8 +101,21 @@
                                 @foreach (var job in paged.Items)
                                 {
                                     <tr>
-                                        <td>@job.Title</td>
-                                        <td>@job.CompanyName</td>
+                                        <td>
+                                            @if (job.Status == nameof(JobStatus.Published) && job.ModeratedAt is null)
+                                            {
+                                                <a href="/jobs/@job.Id" target="_blank" rel="noopener">@job.Title</a>
+                                            }
+                                            else
+                                            {
+                                                @job.Title
+                                            }
+                                            @if (job.FeaturedUntil is { } featuredUntil && featuredUntil > DateTime.UtcNow)
+                                            {
+                                                <span class="workspace-badge is-published">Featured</span>
+                                            }
+                                        </td>
+                                        <td><a href="/admin/companies/@job.CompanyProfileId">@job.CompanyName</a></td>
                                         <td>@(string.IsNullOrWhiteSpace(job.City) ? "-" : job.City)</td>
                                         <td>
                                             @if (job.ModeratedAt is not null)
@@ -209,6 +242,12 @@
     private int page = 1;
     private JobStatus? statusFilter;
     private string? searchTerm;
+    private string featuredFilter = string.Empty;
+    private string removedFilter = string.Empty;
+
+    /// <summary>Optional company filter, e.g. /admin/jobs?companyId=3 from the company page.</summary>
+    [SupplyParameterFromQuery(Name = "companyId")]
+    public int? CompanyId { get; set; }
     private bool isLoading = true;
     private bool busy;
     private string? errorMessage;
@@ -234,7 +273,16 @@
         page = requestedPage ?? page;
         try
         {
-            var result = await JobAdminService.ListAsync(page, PageSize, searchTerm, statusFilter);
+            var result = await JobAdminService.ListAsync(new AdminJobQuery
+            {
+                Page = page,
+                PageSize = PageSize,
+                Search = searchTerm,
+                Status = statusFilter,
+                CompanyId = CompanyId,
+                IsFeatured = ToFlag(featuredFilter),
+                IsModerated = ToFlag(removedFilter)
+            });
             if (!result.Success || result.Data is null)
             {
                 errorMessage = string.Join("; ", result.Errors);
@@ -401,6 +449,13 @@
             busy = false;
         }
     }
+
+    private static bool? ToFlag(string value) => value switch
+    {
+        "yes" => true,
+        "no" => false,
+        _ => null
+    };
 
     private static ServiceResult NotSignedIn() =>
         ServiceResult.Fail(ServiceErrorType.Unauthorized, "Sign in as an administrator to review job postings.");
