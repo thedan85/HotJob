@@ -31,6 +31,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ApplicationStatusHistory> ApplicationStatusHistories => Set<ApplicationStatusHistory>();
     public DbSet<Interview> Interviews => Set<Interview>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<ReviewReport> ReviewReports => Set<ReviewReport>();
     public DbSet<SavedJob> SavedJobs => Set<SavedJob>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<MatchScore> MatchScores => Set<MatchScore>();
@@ -102,6 +103,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<Review>().HasOne(x => x.Candidate).WithMany(x => x.Reviews).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Review>().HasOne(x => x.DeletedBy).WithMany().HasForeignKey(x => x.DeletedByAdminId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<Review>().HasIndex(x => new { x.CompanyProfileId, x.CandidateId }).IsUnique();
+
+        modelBuilder.Entity<ReviewReport>().HasOne(x => x.Review).WithMany(x => x.Reports).HasForeignKey(x => x.ReviewId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReviewReport>().HasOne(x => x.Reporter).WithMany().HasForeignKey(x => x.ReporterUserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReviewReport>().HasOne(x => x.ResolvedBy).WithMany().HasForeignKey(x => x.ResolvedByAdminId).OnDelete(DeleteBehavior.SetNull);
+        // One report per user per review; the queue is read by status, oldest first.
+        modelBuilder.Entity<ReviewReport>().HasIndex(x => new { x.ReviewId, x.ReporterUserId }).IsUnique();
+        modelBuilder.Entity<ReviewReport>().HasIndex(x => new { x.Status, x.CreatedAt });
 
         modelBuilder.Entity<SavedJob>().HasKey(x => new { x.CandidateId, x.JobPostingId });
         modelBuilder.Entity<SavedJob>().HasOne(x => x.Candidate).WithMany(x => x.SavedJobs).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);

@@ -33,6 +33,16 @@ public interface ICompanyService
     /// Includes reviews a moderator hid, flagged, so the author knows why it is not public.
     /// </summary>
     /// <summary>
+    /// Reports a visible review for moderation. Any signed-in user may report, except its author,
+    /// once per review.
+    /// </summary>
+    Task<ServiceResult> ReportReviewAsync(
+        string? userId,
+        int reviewId,
+        ReportReviewRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Whether the caller may review the company: candidate profile, public company, has applied
     /// to one of its jobs, and has not reviewed it yet. Same rules <see cref="CreateReviewAsync"/> enforces.
     /// </summary>

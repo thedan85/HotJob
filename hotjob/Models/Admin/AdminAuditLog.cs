@@ -16,6 +16,7 @@ public static class AuditActions
     public const string JobApprove = "Job.Approve";
     public const string JobReject = "Job.Reject";
     public const string ReviewHide = "Review.Hide";
+    public const string ReviewReportsDismiss = "Review.ReportsDismiss";
     public const string UserLock = "User.Lock";
     public const string UserUnlock = "User.Unlock";
     public const string JobDelete = "Job.Delete";
@@ -37,6 +38,7 @@ public static class AuditActions
         JobApprove,
         JobReject,
         ReviewHide,
+        ReviewReportsDismiss,
         UserLock,
         UserUnlock,
         JobDelete,

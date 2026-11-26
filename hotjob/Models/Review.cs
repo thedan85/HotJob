@@ -41,4 +41,7 @@ public class Review
 
     /// <summary>Admin who deleted this review.</summary>
     public Users.ApplicationUser? DeletedBy { get; set; }
+
+    /// <summary>User reports filed against this review.</summary>
+    public ICollection<ReviewReport> Reports { get; set; } = new List<ReviewReport>();
 }

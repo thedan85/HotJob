@@ -568,6 +568,7 @@ namespace hotjob.Migrations
                     b.HasIndex("CreatedByEmployerId");
 
                     b.HasIndex("FeaturedUntil");
+
                     b.HasIndex("ReviewedByAdminId");
 
                     b.ToTable("JobPostings");
@@ -885,6 +886,60 @@ namespace hotjob.Migrations
                         .IsUnique();
 
                     b.ToTable("Reviews");
+                });
+
+            modelBuilder.Entity("hotjob.Models.ReviewReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReporterUserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ResolvedByAdminId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("ReviewId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReporterUserId");
+
+                    b.HasIndex("ResolvedByAdminId");
+
+                    b.HasIndex("ReviewId", "ReporterUserId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.ToTable("ReviewReports");
                 });
 
             modelBuilder.Entity("hotjob.Models.SavedJob", b =>
@@ -1603,6 +1658,32 @@ namespace hotjob.Migrations
                     b.Navigation("DeletedBy");
                 });
 
+            modelBuilder.Entity("hotjob.Models.ReviewReport", b =>
+                {
+                    b.HasOne("hotjob.Models.Users.ApplicationUser", "Reporter")
+                        .WithMany()
+                        .HasForeignKey("ReporterUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("hotjob.Models.Users.ApplicationUser", "ResolvedBy")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByAdminId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("hotjob.Models.Review", "Review")
+                        .WithMany("Reports")
+                        .HasForeignKey("ReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Reporter");
+
+                    b.Navigation("ResolvedBy");
+
+                    b.Navigation("Review");
+                });
+
             modelBuilder.Entity("hotjob.Models.SavedJob", b =>
                 {
                     b.HasOne("hotjob.Models.Users.Candidate", "Candidate")
@@ -1723,6 +1804,11 @@ namespace hotjob.Migrations
                     b.Navigation("ResumeSkills");
 
                     b.Navigation("WorkExperiences");
+                });
+
+            modelBuilder.Entity("hotjob.Models.Review", b =>
+                {
+                    b.Navigation("Reports");
                 });
 
             modelBuilder.Entity("hotjob.Models.Skill", b =>

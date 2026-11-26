@@ -208,6 +208,69 @@ public sealed class CompanyService(
             review.CreatedAt));
     }
 
+    public async Task<ServiceResult> ReportReviewAsync(
+        string? userId,
+        int reviewId,
+        ReportReviewRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return ServiceResult.Fail(ServiceErrorType.Unauthorized, "Sign in to report a review.");
+        if (request is null || !Enum.IsDefined(request.Reason))
+            return ServiceResult.Fail(ServiceErrorType.Validation, "Choose a reason for the report.");
+
+        var details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim();
+        if (details is { Length: > 500 })
+            return ServiceResult.Fail(ServiceErrorType.Validation, "Details must be 500 characters or fewer.");
+        if (request.Reason == ReviewReportReason.Other && details is null)
+            return ServiceResult.Fail(ServiceErrorType.Validation, "Describe the problem when choosing \"Other\".");
+
+        // Only reviews the public can currently see can be reported.
+        var review = await dbContext.Reviews
+            .AsNoTracking()
+            .Where(row => row.Id == reviewId
+                && !row.IsDeleted
+                && row.Company.Status == CompanyStatus.Approved
+                && row.Company.IsActive)
+            .Select(row => new { row.Id, AuthorUserId = row.Candidate.UserId })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (review is null)
+            return ServiceResult.Fail(ServiceErrorType.NotFound, "Review not found.");
+        if (review.AuthorUserId == userId)
+            return ServiceResult.Fail(ServiceErrorType.Validation, "You cannot report your own review.");
+
+        var alreadyReported = await dbContext.ReviewReports
+            .AsNoTracking()
+            .AnyAsync(report => report.ReviewId == reviewId && report.ReporterUserId == userId, cancellationToken)
+            .ConfigureAwait(false);
+        if (alreadyReported)
+            return ServiceResult.Fail(ServiceErrorType.Conflict, "You already reported this review.");
+
+        var report = new ReviewReport
+        {
+            ReviewId = reviewId,
+            ReporterUserId = userId,
+            Reason = request.Reason,
+            Details = details,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime
+        };
+        dbContext.ReviewReports.Add(report);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // Unique (review, reporter) index: a concurrent submit already stored one.
+            dbContext.Entry(report).State = EntityState.Detached;
+            return ServiceResult.Fail(ServiceErrorType.Conflict, "You already reported this review.");
+        }
+
+        logger.LogInformation("User {UserId} reported review {ReviewId} ({Reason}).", userId, reviewId, request.Reason);
+        return ServiceResult.Ok();
+    }
+
     private const string NeverAppliedMessage =
         "You can review a company only after applying to one of its jobs.";
 

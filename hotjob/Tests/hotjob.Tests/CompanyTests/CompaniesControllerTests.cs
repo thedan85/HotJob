@@ -64,6 +64,10 @@ public sealed class CompaniesControllerTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<ServiceResult> ReportReviewAsync(
+            string? userId, int reviewId, ReportReviewRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ServiceResult<ReviewEligibilityDto>> GetReviewEligibilityAsync(
             string? userId, int companyId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
