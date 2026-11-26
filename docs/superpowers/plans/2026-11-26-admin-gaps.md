@@ -80,7 +80,15 @@
 
 ---
 
-## Giai đoạn 1 — Đáp ứng đầy đủ 5 mục Admin trong `sang.md`
+## Giai đoạn 1 — Đáp ứng đầy đủ 5 mục Admin trong `sang.md` — ✅ Xong 2026-11-26 trên nhánh `phuong-admin`
+
+> - **A1.1** `GetUsersAsync(AdminUserQuery)` + tab vai trò/tìm kiếm/lọc trạng thái trên `/admin/accounts`, filter giữ trên URL.
+> - **A1.2–A1.3** `IAdminUserService` (service mới, không làm phình `AdminService`): `/admin/accounts/{id}` và reset mật khẩu tạm (16 ký tự, hiện một lần, thu hồi session, audit `User.ResetPassword`). Không reset chính mình/admin khác, cùng quy tắc với khóa tài khoản.
+> - **A1.4** Lọc công ty đã có sẵn trên nhánh; thêm `GetOverviewAsync` + `GET /api/admin/companies/{id}/overview` + `/admin/companies/{id}`; dashboard link tới công ty Pending.
+> - **A1.5** `ListAsync(AdminJobQuery)`: thêm lọc công ty, nổi bật, đã gỡ; link sang trang job public và trang công ty admin.
+> - **A1.6** `IAdminReportService` + `/admin/reports` (biểu đồ cột SVG một chuỗi, màu `#2E8B62` đã qua validator, bảng theo tháng, top công ty/tin); dashboard thêm số đơn và doanh thu. Đếm group-by Year/Month trên DB, doanh thu cộng trong bộ nhớ vì SQLite không aggregate `decimal`.
+> - Test mới: `AdminUserManagementTests`, `AdminCompanyOverviewTests`, `AdminJobFilterTests`, `AdminReportTests`, `AdminColumnChartTests`. Toàn bộ 627 test pass.
+> - Chưa kiểm tra trên trình duyệt với dữ liệu thật (chỉ render biểu đồ bằng test và xem preview).
 
 ### A1.1 Tìm kiếm/lọc tài khoản theo vai trò (S)
 - `GetUsersAsync(AdminUserQuery query)`: `Search` (email/họ tên), `Role` (Candidate/Employer/Admin), `IsActive`, `Page`, `PageSize`. Giữ overload cũ.

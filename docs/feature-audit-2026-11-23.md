@@ -37,21 +37,21 @@ Lưu ý: chưa chạy kiểm thử E2E trên trình duyệt. Kết luận dựa 
 
 | Trạng thái | Chức năng | Ghi chú |
 |---|---|---|
-| MỘT PHẦN | Liệt kê công ty theo filter Pending/Approved/Rejected | Có danh sách và paging; không có filter trạng thái. `AdminService.GetCompaniesAsync` không nhận tham số status. |
-| KHÔNG | Xem chi tiết công ty | Trang admin chỉ có bảng vài cột; không có trang chi tiết. |
+| CÓ | Liệt kê công ty theo filter Pending/Approved/Rejected | `CompanyAdminService.ListAsync` lọc status + tìm tên/ngành/địa điểm, Pending lên trước; `/admin/companies?status=Pending` mở từ dashboard. |
+| CÓ | Xem chi tiết công ty | `/admin/companies/{id}` (`GetOverviewAsync`): hồ sơ, plan/quota, thành viên, job theo trạng thái, review + điểm TB, lịch sử duyệt; duyệt/từ chối/tạm ngưng ngay trên trang. |
 | CÓ | Duyệt công ty | `AdminCompanies.razor`, `CompanyAdminService.ApproveAsync/RejectAsync`; ghi audit log và gửi notification `CompanyReview` cho employer Active (Reject kèm lý do). Employer có inbox `/notifications` + badge NavMenu (2026-11-26). |
 | CÓ | Từ chối công ty + lý do | Lý do bắt buộc khi chọn Rejected. |
 | CÓ | Thu hồi/tạm ngưng công ty đã duyệt | Reject hoặc Deactivate; `JobVisibility.OpenToCandidates` ẩn job của công ty không Approved hoặc bị deactivate khỏi browse/detail/save/apply. Deactivate/Reactivate cũng báo cho employer Active ("Company suspended" kèm lý do / "Company reactivated"). |
 | CÓ | Đăng nhập admin | Role Admin được seed; tài khoản admin lấy từ cấu hình. |
-| MỘT PHẦN | Danh sách người dùng, tìm theo tên/email/vai trò | Có danh sách và paging; không có ô tìm kiếm hoặc filter vai trò. |
-| KHÔNG | Xem chi tiết người dùng (Profile, CV, applications) | Không có trang hoặc service admin cho user detail. |
+| CÓ | Danh sách người dùng, tìm theo tên/email/vai trò | `/admin/accounts`: tab vai trò, tìm email/họ tên, lọc trạng thái, giữ filter trên URL (`GetUsersAsync(AdminUserQuery)`). |
+| CÓ | Xem chi tiết người dùng (Profile, CV, applications) | `/admin/accounts/{id}`: tài khoản, roles, hồ sơ candidate (CV, Premium, 20 đơn gần nhất), membership employer, lịch sử thao tác admin. |
 | CÓ | Khóa/Mở khóa tài khoản | `AdminService.ToggleUserActiveAsync`: thu hồi refresh token, chặn tự khóa và khóa tài khoản Admin, có audit log. |
-| KHÔNG | Reset password | Không có chức năng admin reset mật khẩu. `ChangePassword` chỉ dành cho chính user. |
+| CÓ | Reset password | `AdminUserService.ResetPasswordAsync`: mật khẩu tạm ngẫu nhiên hiển thị một lần, thu hồi refresh token, audit không chứa mật khẩu; không áp dụng cho chính mình và admin khác. |
 | CÓ | Liệt kê tất cả tin tuyển dụng | Có paging. |
-| KHÔNG | Filter tin theo công ty/trạng thái | Không có tham số filter trong `GetJobsAsync` và UI. |
+| CÓ | Filter tin theo công ty/trạng thái | `/admin/jobs`: trạng thái, tìm kiếm, `?companyId=`, nổi bật, đã gỡ (`ListAsync(AdminJobQuery)`; API nhận cùng tham số). |
 | CÓ | Hủy bỏ tin vi phạm | `JobAdminService.RemoveAsync` (2026-11-26): Closed + lý do/người gỡ/thời gian, giữ application/history, reject application đang mở và thông báo candidate + employer; employer không mở lại được. Hard delete chỉ cho tin chưa có application. |
 | KHÔNG | Cấp/gia hạn/thu hồi tin nổi bật | Admin không có chức năng. Employer có thể tự mua featured qua VNPay. |
-| MỘT PHẦN | Thống kê ứng tuyển theo tin, công ty, tháng | Chỉ có `ApplicationCount` theo từng job; không có thống kê theo công ty hoặc theo tháng. |
+| CÓ | Thống kê ứng tuyển theo tin, công ty, tháng | `/admin/reports`: đơn theo tháng, top 10 công ty và top 10 tin theo số đơn. |
 | KHÔNG | Xem hồ sơ ứng tuyển khi có tranh chấp | Không có màn hình admin xem application detail. |
 | KHÔNG | Xóa/Ẩn danh theo yêu cầu ứng viên | Không có chức năng xóa dữ liệu hoặc anonymize. |
 | KHÔNG | Quản lý Category của Job | Category chỉ được seed và đọc; không có CRUD admin. |
@@ -59,8 +59,8 @@ Lưu ý: chưa chạy kiểm thử E2E trên trình duyệt. Kết luận dựa 
 | KHÔNG | Quản lý gói dịch vụ (giá, số tin, thời hạn) | Plan chỉ seed sẵn; không có CRUD. |
 | KHÔNG | Gán gói/sửa hạn mức cho công ty hoặc ứng viên | Entitlement chỉ đọc; không có thao tác admin. |
 | KHÔNG | Danh sách thanh toán, đánh dấu đã trả/hoàn tiền | Payment do VNPay callback tự cập nhật; admin không có màn hình quản lý. |
-| KHÔNG | Báo cáo doanh thu theo tháng | Không có query hoặc UI. |
-| MỘT PHẦN | Dashboard | Có users, companies, jobs. Thiếu số hồ sơ ứng tuyển và doanh thu. |
+| CÓ | Báo cáo doanh thu theo tháng | `/admin/reports`: doanh thu theo tháng và theo `PaymentPurpose` (chỉ Paid, theo `PaidAt`). |
+| CÓ | Dashboard | Thêm tổng đơn, đơn theo trạng thái, đơn 30 ngày, doanh thu và số payment Paid tháng này; link tới công ty Pending và Reports. |
 | CÓ | Nhật ký thao tác admin | `AdminAuditLog` + `/admin/audit-logs`, ghi cùng transaction với thao tác admin. |
 | KHÔNG | Gửi thông báo cho người dùng (tất cả/nhóm) | Chỉ có notification theo sự kiện application/interview. |
 
@@ -205,3 +205,4 @@ Cập nhật 2026-11-25: toàn bộ chức năng employer đã hoàn thiện. Ba
 - Chưa chạy E2E trình duyệt.
 - Chưa kiểm tra hành vi thanh toán với VNPay sandbox trong lần audit này.
 - 2026-11-26 (nhánh `phuong-admin`, admin giai đoạn 0): 599 test pass. Chỉ cập nhật các dòng mục I liên quan giai đoạn 0; các dòng khác chưa đối chiếu lại với nhánh này.
+- 2026-11-26 (nhánh `phuong-admin`, admin giai đoạn 1): tìm/lọc tài khoản, trang chi tiết user, reset mật khẩu, trang chi tiết công ty, lọc tin, báo cáo + dashboard mở rộng; 627 test pass.
