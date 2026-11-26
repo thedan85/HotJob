@@ -13,10 +13,9 @@ using Microsoft.ML.Trainers.FastTree;
 namespace hotjob.Services.ML;
 
 /// <summary>
-/// Match scoring and training (contract D9). Scores use the weighted skill rule;
-/// the trained FastTree model is kept for inspection but no longer affects the
-/// displayed percentage. Model access is delegated to <see cref="IMatchModelStore"/>
-/// so circuits share one loaded model.
+/// Match scoring and training (contract D9). Scores use the active FastTree model's
+/// offer probability when one is loaded, otherwise the weighted skill rule. Model
+/// access is delegated to <see cref="IMatchModelStore"/> so circuits share one model.
 /// </summary>
 public sealed class MatchScoreService(
     ApplicationDbContext dbContext,
@@ -29,8 +28,11 @@ public sealed class MatchScoreService(
     /// <summary>Algorithm marker for every score produced by the weighted skill rule.</summary>
     public const string WeightedRuleAlgorithm = "weighted-rule";
 
-    /// <summary>Algorithm marker left on rows scored by the retired FastTree path.</summary>
+    /// <summary>Prefix of the algorithm marker used by FastTree-backed scores.</summary>
     public const string ModelAlgorithm = "FastTreeBinary";
+
+    /// <summary>Algorithm marker including the active model version.</summary>
+    public static string ModelAlgorithmFor(string version) => $"{ModelAlgorithm}:{version}";
 
     private const int MinimumPerClass = 5;
     private const int SplitSeed = 20261027;
@@ -84,10 +86,13 @@ public sealed class MatchScoreService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        var activeAlgorithm = modelStore.ModelVersion is { } version
+            ? ModelAlgorithmFor(version)
+            : WeightedRuleAlgorithm;
         var scores = new Dictionary<int, double>();
         foreach (var row in rows)
         {
-            if (row.AlgorithmUsed == WeightedRuleAlgorithm)
+            if (row.AlgorithmUsed == activeAlgorithm)
             {
                 scores[row.JobPostingId] = (double)row.MatchPercentage;
             }
@@ -357,9 +362,15 @@ public sealed class MatchScoreService(
             row => row.JobPostingId == jobId && row.ResumeId == resolvedResumeId.Value,
             cancellationToken);
 
-        // Model training no longer changes the rule, so a weighted-rule row never goes stale.
-        var fresh = existing is not null
-            && existing.AlgorithmUsed == WeightedRuleAlgorithm;
+        var algorithm = WeightedRuleAlgorithm;
+        var percentage = Math.Clamp(features.MatchedWeightRatio * 100, 0, 100);
+        if (modelStore.ModelVersion is { } version && modelStore.TryPredict(features, out var probability))
+        {
+            algorithm = ModelAlgorithmFor(version);
+            percentage = Math.Clamp(probability * 100, 0, 100);
+        }
+
+        var fresh = existing is not null && existing.AlgorithmUsed == algorithm;
         if (fresh)
         {
             return ServiceResult<ScoredMatch>.Ok(new ScoredMatch(
@@ -369,9 +380,6 @@ public sealed class MatchScoreService(
                 resumeYears,
                 job.ExperienceRequired));
         }
-
-        var percentage = Math.Clamp(features.MatchedWeightRatio * 100, 0, 100);
-        const string algorithm = WeightedRuleAlgorithm;
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         if (existing is null)

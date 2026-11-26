@@ -45,6 +45,9 @@ public interface IMatchModelStore
     /// <summary>Whether the model file exists and loads successfully.</summary>
     bool IsModelAvailable { get; }
 
+    /// <summary>Stable identifier of the active model file, or null when no model is loaded.</summary>
+    string? ModelVersion { get; }
+
     /// <summary>Predicts the offer probability; false when no usable model is loaded.</summary>
     bool TryPredict(MatchFeatures features, out double probability);
 
@@ -65,6 +68,7 @@ public sealed class MatchModelStore : IMatchModelStore
     private readonly ILogger<MatchModelStore> logger;
     private readonly object sync = new();
     private ITransformer? model;
+    private string? modelVersion;
     private bool loadAttempted;
 
     /// <summary>Creates the store, resolving a relative model path against <paramref name="contentRootPath"/>.</summary>
@@ -89,6 +93,18 @@ public sealed class MatchModelStore : IMatchModelStore
             {
                 EnsureLoaded();
                 return model is not null;
+            }
+        }
+    }
+
+    public string? ModelVersion
+    {
+        get
+        {
+            lock (sync)
+            {
+                EnsureLoaded();
+                return modelVersion;
             }
         }
     }
@@ -148,6 +164,7 @@ public sealed class MatchModelStore : IMatchModelStore
 
                 File.Move(temporaryPath, ModelFilePath, overwrite: true);
                 model = trainedModel;
+                modelVersion = VersionFor(File.GetLastWriteTimeUtc(ModelFilePath));
                 loadAttempted = true;
             }
             finally
@@ -165,6 +182,7 @@ public sealed class MatchModelStore : IMatchModelStore
         lock (sync)
         {
             model = null;
+            modelVersion = null;
             loadAttempted = false;
         }
     }
@@ -185,11 +203,15 @@ public sealed class MatchModelStore : IMatchModelStore
         try
         {
             model = mlContext.Model.Load(ModelFilePath, out _);
+            modelVersion = VersionFor(File.GetLastWriteTimeUtc(ModelFilePath));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogWarning(exception, "Match model at {ModelPath} is unreadable; using weighted rule.", ModelFilePath);
             model = null;
+            modelVersion = null;
         }
     }
+
+    private static string VersionFor(DateTime timestamp) => timestamp.Ticks.ToString("x");
 }

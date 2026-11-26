@@ -1,5 +1,6 @@
 using hotjob.DTOs.Candidate;
 using hotjob.DTOs.Job;
+using hotjob.DTOs.ML;
 using hotjob.Models.Application;
 using hotjob.Models.ML;
 using hotjob.Repositories.Job;
@@ -12,6 +13,8 @@ using hotjob.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.ML;
+using Microsoft.ML.Data;
 
 namespace hotjob.Tests.MLTests;
 
@@ -24,7 +27,7 @@ public sealed class MatchScoreServiceTests
         TestFixture fx,
         TempModelDirectory temp,
         FakeTimeProvider clock,
-        MatchModelStore? store = null,
+        IMatchModelStore? store = null,
         int minTrainingRecords = 50) =>
         new(
             fx.Db,
@@ -389,4 +392,75 @@ public sealed class MatchScoreServiceTests
         Assert.Equal(ServiceErrorType.Unauthorized, result.ErrorType);
         Assert.Null(result.Data);
     }
+
+    [Fact]
+    public async Task ActiveModel_UsesPredictedProbabilityAndVersionedMarker()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        using var temp = new TempModelDirectory();
+        var clock = new FakeTimeProvider(Start);
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "model-score@example.com", ("C#", 5));
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var csharp = await MatchTestData.GetOrCreateSkillAsync(fx, "C#");
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, [(csharp.Id, 10)], experienceRequired: 1);
+        var store = new FakeModelStore { ModelVersion = "v1", Probability = 0.42 };
+
+        var result = await CreateService(fx, temp, clock, store).GetAsync(candidate.UserId, job.Id, resume.Id);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(42, result.Data!.MatchPercentage, 6);
+        Assert.Equal(MatchScoreService.ModelAlgorithmFor("v1"), result.Data.AlgorithmUsed);
+        Assert.Equal(42, (await fx.Db.MatchScores.SingleAsync()).MatchPercentage, 6);
+    }
+
+    [Fact]
+    public async Task PromotedModelVersion_RefreshesStoredScoreAndListBadge()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        using var temp = new TempModelDirectory();
+        var clock = new FakeTimeProvider(Start);
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "model-version@example.com", ("C#", 5));
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var csharp = await MatchTestData.GetOrCreateSkillAsync(fx, "C#");
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, [(csharp.Id, 10)], experienceRequired: 1);
+        var store = new FakeModelStore { ModelVersion = "v1", Probability = 0.42 };
+        var service = CreateService(fx, temp, clock, store);
+
+        var first = await service.GetAsync(candidate.UserId, job.Id, resume.Id);
+        Assert.Equal(42, first.Data!.MatchPercentage, 6);
+
+        store.ModelVersion = "v2";
+        store.Probability = 0.77;
+        clock.Advance(TimeSpan.FromMinutes(10));
+
+        var second = await service.GetAsync(candidate.UserId, job.Id, resume.Id);
+        Assert.Equal(77, second.Data!.MatchPercentage, 6);
+        Assert.Equal(MatchScoreService.ModelAlgorithmFor("v2"), second.Data.AlgorithmUsed);
+        Assert.Equal(1, await fx.Db.MatchScores.CountAsync());
+
+        var badges = await service.GetStoredForJobsAsync(candidate.UserId, [job.Id]);
+        Assert.Equal(77, badges.Data![job.Id], 6);
+    }
+
+    private sealed class FakeModelStore : IMatchModelStore
+    {
+        public string? ModelVersion { get; set; }
+
+        public double Probability { get; set; }
+
+        public string ModelFilePath => "fake-model";
+
+        public bool IsModelAvailable => ModelVersion is not null;
+
+        public bool TryPredict(MatchFeatures features, out double probability)
+        {
+            probability = Probability;
+            return ModelVersion is not null;
+        }
+
+        public void Save(ITransformer model, DataViewSchema schema) => ModelVersion ??= "saved";
+
+        public void Invalidate() => ModelVersion = null;
+    }
+
 }

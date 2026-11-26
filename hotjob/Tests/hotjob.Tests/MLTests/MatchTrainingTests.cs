@@ -107,7 +107,7 @@ public sealed class MatchTrainingTests
     }
 
     [Fact]
-    public async Task Train_WithEnoughBalancedData_PromotesModel_ButScoresWithWeightedRule()
+    public async Task Train_WithEnoughBalancedData_PromotesModel_AndScoresWithModel()
     {
         await using var fx = await TestFixture.CreateAsync();
         using var temp = new TempModelDirectory();
@@ -126,7 +126,8 @@ public sealed class MatchTrainingTests
             fx, company.Id, candidate, resume, java.Id, ApplicationStatus.Rejected, 10, latestNote: "Job closed");
 
         var probe = await MatchTestData.CreateJobAsync(fx, company.Id, [(csharp.Id, 10)], experienceRequired: 1);
-        var service = CreateService(fx, temp, clock);
+        var store = temp.CreateStore();
+        var service = CreateService(fx, temp, clock, store);
 
         var before = await service.GetAsync(candidate.UserId, probe.Id, resume.Id);
         Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, before.Data!.AlgorithmUsed);
@@ -150,15 +151,15 @@ public sealed class MatchTrainingTests
         Assert.Equal(clock.GetUtcNow().UtcDateTime, log.TrainedAt);
 
         var after = await service.GetAsync(candidate.UserId, probe.Id, resume.Id);
-        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, after.Data!.AlgorithmUsed);
-        Assert.Equal(100, after.Data.MatchPercentage, 6);
+        Assert.Equal(MatchScoreService.ModelAlgorithmFor(store.ModelVersion!), after.Data!.AlgorithmUsed);
+        Assert.InRange(after.Data.MatchPercentage, 0, 100);
 
         // A partial skill match must show its real coverage even with a promoted model active.
         var partial = await MatchTestData.CreateJobAsync(
             fx, company.Id, [(csharp.Id, 10), (java.Id, 10)], experienceRequired: 1);
         var partialScore = await service.GetAsync(candidate.UserId, partial.Id, resume.Id);
-        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, partialScore.Data!.AlgorithmUsed);
-        Assert.Equal(50, partialScore.Data.MatchPercentage, 6);
+        Assert.Equal(MatchScoreService.ModelAlgorithmFor(store.ModelVersion!), partialScore.Data!.AlgorithmUsed);
+        Assert.InRange(partialScore.Data.MatchPercentage, 0, 100);
 
         // A promoted model no longer changes scoring, so the cached row stays valid.
         clock.Advance(TimeSpan.FromHours(1));
@@ -166,7 +167,7 @@ public sealed class MatchTrainingTests
         var refreshed = await service.GetAsync(candidate.UserId, probe.Id, resume.Id);
 
         Assert.Equal(after.Data.CalculatedAt, refreshed.Data!.CalculatedAt);
-        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, refreshed.Data.AlgorithmUsed);
+        Assert.Equal(MatchScoreService.ModelAlgorithmFor(store.ModelVersion!), refreshed.Data.AlgorithmUsed);
         Assert.Equal(1, await fx.Db.MatchScores.CountAsync(score => score.JobPostingId == probe.Id));
     }
 

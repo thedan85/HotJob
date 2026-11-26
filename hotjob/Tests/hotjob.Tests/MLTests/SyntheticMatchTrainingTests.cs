@@ -38,9 +38,10 @@ public sealed class SyntheticMatchTrainingTests
             await MatchTestData.CreateJobAsync(fx, company.Id, [(sql.Id, 10), (azure.Id, 5)], 1, status: JobStatus.Draft, title: "Synthetic Data")
         };
 
+        var modelStore = temp.CreateStore();
         var matchService = new MatchScoreService(
             fx.Db,
-            temp.CreateStore(),
+            modelStore,
             new CandidatePremiumService(fx.Db, clock),
             Options.Create(temp.CreateOptions()),
             clock,
@@ -99,7 +100,7 @@ public sealed class SyntheticMatchTrainingTests
         var score = await matchService.GetAsync(probeCandidate.UserId, jobs[0].Id, probeResume.Id);
 
         Assert.True(score.Success, string.Join("; ", score.Errors));
-        Assert.Equal(MatchScoreService.WeightedRuleAlgorithm, score.Data!.AlgorithmUsed);
+        Assert.Equal(MatchScoreService.ModelAlgorithmFor(modelStore.ModelVersion!), score.Data!.AlgorithmUsed);
     }
 
     [Fact]
