@@ -43,22 +43,25 @@ Kiểm chứng sau merge ngày 2026-11-26: **614 passed, 0 failed, 0 skipped**. 
 
 | Trạng thái | Chức năng | Ghi chú |
 |---|---|---|
-| MỘT PHẦN | Liệt kê công ty theo filter Pending/Approved/Rejected | Có danh sách và paging; không có filter trạng thái. `AdminService.GetCompaniesAsync` không nhận tham số status. |
-| KHÔNG | Xem chi tiết công ty | Trang admin chỉ có bảng vài cột; không có trang chi tiết. |
-| CÓ | Duyệt công ty | `AdminCompanies.razor`, `AdminService.UpdateCompanyStatusAsync`; lưu `VerifiedAt`, `VerifiedByAdminId`. Không tự gửi notification. |
-| CÓ | Từ chối công ty + lý do | Lý do bắt buộc khi chọn Rejected, lưu `RejectionReason`; UI cho duyệt lại hai chiều. |
-| MỘT PHẦN | Thu hồi/tạm ngưng công ty đã duyệt | Reject công ty Approved chặn ATS/job/billing đã có guard; không có trạng thái Suspended riêng. Public list/detail và apply không kiểm tra company Approved nên job cũ vẫn có thể được xem/nộp; xem mục V. |
-| KHÔNG | Thông báo kết quả duyệt công ty cho owner/employer | `UpdateCompanyStatusAsync` chỉ cập nhật công ty rồi save. `AdminCompanies.razor` không có bước tạo notification bổ sung, dù `docs/idea.md` và `docs/specs/admin.md` mô tả có. |
+| CÓ | Liệt kê công ty theo filter Pending/Approved/Rejected | `ICompanyAdminService.ListAsync` nhận `CompanyStatus?` và `search`; `AdminCompanies.razor` có select trạng thái + ô tìm kiếm, Pending lên đầu. |
+| MỘT PHẦN | Xem chi tiết công ty | Có `ICompanyAdminService.GetDetailAsync` qua `CompanyAdminController` (`CompanyDetailDto`); `AdminCompanies.razor` vẫn chỉ là bảng, không mở chi tiết. |
+| CÓ | Duyệt công ty | `AdminCompanies.razor` gọi `ICompanyAdminService.ApproveAsync`; lưu `VerifiedAt`, `VerifiedByAdminId`, ghi audit. Không tự gửi notification. |
+| CÓ | Từ chối công ty + lý do | `ICompanyAdminService.RejectAsync` yêu cầu lý do, lưu `RejectionReason`, ghi audit; UI cho duyệt lại hai chiều. |
+| MỘT PHẦN | Thu hồi/tạm ngưng công ty đã duyệt | Có `DeactivateAsync`/`ReactivateAsync` và Reject công ty Approved; vẫn không có trạng thái Suspended riêng. Public list/detail và apply không kiểm tra company Approved nên job cũ vẫn có thể được xem/nộp; xem mục V. |
+| KHÔNG | Thông báo kết quả duyệt công ty cho owner/employer | `CompanyAdminService.ApproveAsync`/`RejectAsync` chỉ cập nhật công ty rồi ghi audit; không tạo notification. `docs/idea.md` và `docs/specs/admin.md` mô tả có. |
 | CÓ | Đăng nhập admin | Role Admin được seed; tài khoản admin lấy từ cấu hình. |
 | MỘT PHẦN | Danh sách người dùng, tìm theo tên/email/vai trò | Có danh sách và paging; không có ô tìm kiếm hoặc filter vai trò. |
 | KHÔNG | Xem chi tiết người dùng (Profile, CV, applications) | Không có trang hoặc service admin cho user detail. |
-| CÓ | Khóa/Mở khóa tài khoản | `ToggleUserActiveAsync` lật `IsActive`; login/refresh/khôi phục session kiểm tra cờ này. Không revoke ngay access token đã cấp; service/UI chưa có chặn admin tự khóa mình. |
+| CÓ | Khóa/Mở khóa tài khoản | `ToggleUserActiveAsync` lật `IsActive`, revoke refresh token khi khóa, chặn self-lock và khóa admin khác; login/refresh kiểm tra cờ này. Access token đã cấp không bị revoke ngay. |
 | KHÔNG | Admin gán/đổi role người dùng | Có hiển thị roles; không có thao tác quản trị role trong `IAdminService` hoặc trang Accounts. Role được gán qua seed/register/become-employer. |
 | KHÔNG | Reset password | Không có chức năng admin reset mật khẩu. `ChangePassword` chỉ dành cho chính user. |
 | CÓ | Liệt kê tất cả tin tuyển dụng | Có paging. |
-| KHÔNG | Filter tin theo công ty/trạng thái | Không có tham số filter trong `GetJobsAsync` và UI. |
-| CÓ | Hủy bỏ tin vi phạm | `DeleteJobAsync` hard delete, không phải ẩn/đóng có lý do. EF cascade xóa cả applications/history/interviews liên quan; không có moderation log. |
+| MỘT PHẦN | Filter tin theo công ty/trạng thái | `IJobAdminService.ListAsync` nhận `JobStatus?` và `search` (title/company); `AdminJobs.razor` có select trạng thái + tìm kiếm. Chưa filter riêng theo company ID. |
+| CÓ | Hủy bỏ tin vi phạm | `DeleteJobAsync` hard delete trong transaction và ghi audit `JobDelete`; vẫn không phải ẩn/đóng có lý do, EF cascade xóa applications/history/interviews liên quan. |
+| CÓ | Duyệt/từ chối tin tuyển dụng | `AdminJobs.razor` gọi `IJobAdminService.ApproveAsync`/`RejectAsync`; `PendingApproval` có lý do từ chối, ghi audit. |
 | KHÔNG | Cấp/gia hạn/thu hồi tin nổi bật | Admin không có chức năng. Employer có thể tự mua featured qua VNPay. |
+| CÓ | Quản lý membership employer | `AdminEmployers.razor` + `IEmployerAdminService`: filter status/search, detail, approve/reject có lý do, deactivate/reactivate, ghi audit. |
+| CÓ | Kiểm duyệt review và báo cáo | `AdminReviews.razor` + `IReviewAdminService`: hàng đợi reported, ẩn review hoặc bỏ qua report kèm note, ghi audit. |
 | MỘT PHẦN | Thống kê ứng tuyển theo tin, công ty, tháng | Chỉ có `ApplicationCount` theo từng job; không có thống kê theo công ty hoặc theo tháng. |
 | KHÔNG | Xem hồ sơ ứng tuyển khi có tranh chấp | Không có màn hình admin xem application detail. |
 | KHÔNG | Xóa/Ẩn danh theo yêu cầu ứng viên | Không có chức năng xóa dữ liệu hoặc anonymize. |
@@ -78,17 +81,19 @@ Kiểm chứng sau merge ngày 2026-11-26: **614 passed, 0 failed, 0 skipped**. 
 
 - `hotjob/Services/Admin/AdminService.cs`
 - `hotjob/Services/Admin/IAdminService.cs`
+- `hotjob/Services/Admin/CompanyAdminService.cs`, `EmployerAdminService.cs`, `JobAdminService.cs`, `ReviewAdminService.cs`
+- `hotjob/Controllers/Admin/CompanyAdminController.cs`, `EmployerAdminController.cs`, `JobAdminController.cs`, `ReviewAdminController.cs`
 - `hotjob/DTOs/Admin/AdminDtos.cs`
 - `hotjob/Components/Pages/Admin/AdminAccounts.razor`
 - `hotjob/Components/Pages/Admin/AdminCompanies.razor`
-- `hotjob/Components/Pages/Admin/AdminJobs.razor`
+- `hotjob/Components/Pages/Admin/AdminEmployers.razor`, `AdminJobs.razor`, `AdminReviews.razor`, `AdminAuditLogs.razor`
 - `hotjob/Components/Pages/Admin/AdminDashboard.razor`
 - `hotjob/Controllers/AdminSkillsController.cs`
 - `hotjob/Components/Pages/Admin/AdminModel.razor`
 - `hotjob/Services/ML/MatchScoreService.cs`
 - `hotjob/Services/Authentication/AuthService.cs`
 - `hotjob/Data/ApplicationDbContext.cs`
-- Test trong `hotjob/Tests/hotjob.Tests/AdminTests/`: `AdminListPagingTests.cs`, `AdminTrainingLogTests.cs`, `AdminSkillServiceTests.cs`, `AdminSkillsControllerTests.cs`, `AdminAuditServiceTests.cs`, `AdminAuditHooksTests.cs`, `AdminModerationTests.cs`.
+- Test trong `hotjob/Tests/hotjob.Tests/AdminTests/`: `AdminListPagingTests.cs`, `AdminTrainingLogTests.cs`, `AdminSkillServiceTests.cs`, `AdminSkillsControllerTests.cs`, `AdminAuthorizationTests.cs`, `AdminAuditServiceTests.cs`, `AdminAuditHooksTests.cs`, `AdminModerationTests.cs`.
 
 ---
 
@@ -166,7 +171,9 @@ Kiểm chứng sau merge ngày 2026-11-26: **614 passed, 0 failed, 0 skipped**. 
 
 ## III. Chức năng Employer
 
-Cập nhật 2026-11-25: đã xác nhận các bổ sung về snapshot dữ liệu CV, actor trong history và notification sửa/hủy lịch. Tuy nhiên, **không kết luận toàn bộ employer đã hoàn thiện**: cần phân biệt snapshot dữ liệu với mở file CV, và tạo notification DB với một luồng nhận/đọc hoàn chỉnh.
+Cập nhật 2026-11-25: đã xác nhận các bổ sung về snapshot dữ liệu CV, actor trong history và notification sửa/hủy lịch.
+
+Cập nhật 2026-11-26 sau merge `phuong-admin`: các khoảng trống employer dưới đây vẫn còn; merge chỉ bổ sung admin moderation/audit. **Không kết luận toàn bộ employer đã hoàn thiện**: cần phân biệt snapshot dữ liệu với mở file CV, và tạo notification DB với một luồng nhận/đọc hoàn chỉnh.
 
 | Trạng thái | Chức năng | Ghi chú |
 |---|---|---|
@@ -305,8 +312,8 @@ Thứ tự dưới đây là đề xuất xử lý, không phải cam kết bổ
 
 2. **Admin back-office theo checklist đã thống nhất**
    - User detail, reset password.
-   - Company filter/detail/suspend.
-   - Job filter và quản lý featured.
+   - Company detail UI và trạng thái Suspended (filter/deactivate đã có).
+   - Quản lý featured job (filter status/search đã có).
    - Category CRUD, Skills UI, quản trị role nếu thuộc scope.
    - Plan/payment/revenue.
    - Audit log: chính sách lọc secret trong `Detail`.
@@ -379,3 +386,4 @@ Cảnh báo xuất hiện trong output:
 - **2026-11-25 — Bản cập nhật employer trước lần rà soát này:** đánh dấu đã bổ sung snapshot CV, actor history, notification sửa/hủy lịch; ghi nhận 451 test pass và từng kết luận toàn bộ employer hoàn thiện.
 - **2026-11-25 — Đối chiếu lại toàn dự án:** thay kết luận hoàn thiện tuyệt đối bằng độ phủ có giới hạn; bổ sung ML/billing/alerts/discovery, thiếu notification duyệt công ty/inbox employer, lỗi guard URL snapshot và sai khác liên luồng. Làm rõ weighted-rule, Candidate-only UI so với API, tác động hard delete và mức kiểm chứng; chạy lại 451 test, ghi cả cảnh báo và giới hạn. Không sửa product code.
 - **2026-11-26 — Cập nhật sau merge `phuong-admin`:** giữ report audit riêng tại `docs/admin/admin-audit-log-phase-0.md`; đánh dấu audit log và form đổi mật khẩu đã có, cập nhật kết quả test 614/614. Không sửa product code.
+- **2026-11-26 — Đối chiếu Admin/Employer:** cập nhật các mục admin đã có (filter công ty/tin, duyệt công ty/job/employer, kiểm duyệt review, audit, self-lock guard); giữ nguyên các khoảng trống employer (mở file snapshot, mass-reject notification, inbox/badge employer-only). Không sửa product code.
