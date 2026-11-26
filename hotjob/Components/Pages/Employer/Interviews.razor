@@ -844,12 +844,6 @@
         return $"{start:MMM yyyy} – {end:MMM yyyy}";
     }
 
-    private static string? SafeUrl(string? candidate)
-    {
-        if (string.IsNullOrWhiteSpace(candidate)) return null;
-        return Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
-            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-            ? candidate
-            : null;
-    }
+    private static string? SafeUrl(string? candidate) =>
+        UploadUrlPolicy.IsSafeSnapshotUrl(candidate) ? candidate : null;
 }
