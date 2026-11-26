@@ -18,7 +18,7 @@ namespace hotjob.Tests.CandidateTests;
 /// promotion, child validation and real file lifecycle. Every assertion checks
 /// persisted state, not just the returned DTO.
 /// </summary>
-public sealed class ResumeServiceTests
+public sealed partial class ResumeServiceTests
 {
     private static ResumeService NewService(TestFixture fx, string? root = null) =>
         new(

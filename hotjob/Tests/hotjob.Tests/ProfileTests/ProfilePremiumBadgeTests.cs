@@ -18,7 +18,7 @@ using Microsoft.JSInterop;
 
 namespace hotjob.Tests;
 
-public sealed class ProfilePremiumBadgeTests
+public sealed partial class ProfilePremiumBadgeTests
 {
     [Theory]
     [InlineData(60, true)]   // Active Premium.

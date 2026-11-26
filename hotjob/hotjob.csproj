@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <!-- Runtime uploads are not build inputs or Hot Reload assets. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);wwwroot/uploads/**;uploads/**</DefaultItemExcludes>
     <DefaultItemExcludesInProjectFolder>$(DefaultItemExcludesInProjectFolder);Tests\**</DefaultItemExcludesInProjectFolder>
   </PropertyGroup>
 
@@ -13,6 +15,10 @@
     <Compile Remove="Tests/**/*.cs" />
     <EmbeddedResource Remove="Tests/**/*" />
     <None Remove="Tests/**/*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Watch Remove="wwwroot/uploads/**;uploads/**" />
   </ItemGroup>
 
   <ItemGroup>

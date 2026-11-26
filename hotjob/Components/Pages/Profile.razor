@@ -272,14 +272,14 @@ else
                                             @(primaryUpdatingId == resume.Id ? "Saving..." : "Set as primary")
                                         </button>
                                     }
-                                    <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="() => EditResumeAsync(resume.Id)">
+                                    <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" disabled="@isRemovingResumeFile" @onclick="() => EditResumeAsync(resume.Id)">
                                         Edit
                                     </button>
                                     <label class="cv-icon-button cv-upload" title="Upload CV file">
                                         <span aria-hidden="true">@(uploadingResumeId == resume.Id ? "…" : "↑")</span>
                                         <span class="visually-hidden">Upload a CV file for @resume.Title</span>
                                         <InputFile OnChange="args => UploadAsync(resume.Id, args)" accept=".pdf,.doc,.docx"
-                                                   class="cv-file-input" disabled="@(uploadingResumeId is not null)" />
+                                                   class="cv-file-input" disabled="@(uploadingResumeId is not null || isRemovingResumeFile)" />
                                     </label>
                                     @if (resume.FileUrl is not null)
                                     {
@@ -287,7 +287,7 @@ else
                                     }
                                     @if (pendingDeleteId != resume.Id)
                                     {
-                                        <button class="cv-icon-button cv-delete" type="button" title="Delete @resume.Title" @onclick="() => { pendingDeleteId = resume.Id; }">×</button>
+                                        <button class="cv-icon-button cv-delete" type="button" disabled="@isRemovingResumeFile" title="Delete @resume.Title" @onclick="() => { pendingDeleteId = resume.Id; }">×</button>
                                     }
                                 </div>
                                 @if (pendingDeleteId == resume.Id)
@@ -295,7 +295,7 @@ else
                                     <div class="cv-confirm" role="group" aria-label="Confirm deleting @resume.Title">
                                         <span>Delete this resume? This cannot be undone.</span>
                                         <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="() => { pendingDeleteId = null; }">Cancel</button>
-                                        <button class="profile-btn profile-btn-primary profile-btn-small cv-confirm-danger" type="button" @onclick="() => DeleteResumeAsync(resume.Id)">Confirm delete</button>
+                                        <button class="profile-btn profile-btn-primary profile-btn-small cv-confirm-danger" type="button" disabled="@isRemovingResumeFile" @onclick="() => DeleteResumeAsync(resume.Id)">Confirm delete</button>
                                     </div>
                                 }
                             </div>
@@ -308,8 +308,36 @@ else
                     <div class="cv-form">
                         <div class="cv-form-heading">
                             <h3>@(editingResumeId is null ? "New resume" : "Edit resume")</h3>
-                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="CancelResumeForm">Cancel</button>
+                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" disabled="@isRemovingResumeFile" @onclick="CancelResumeForm">Cancel</button>
                         </div>
+                        @if (EditingResume is { } currentResume)
+                        {
+                            <div class="cv-actions">
+                                @if (currentResume.FileUrl is { } attachedUrl)
+                                {
+                                    <span>Current attachment:</span>
+                                    <a class="profile-btn profile-btn-secondary profile-btn-small" href="@attachedUrl" target="_blank" rel="noopener noreferrer" aria-label="View CV @currentResume.Title">View CV</a>
+                                    <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                                            disabled="@(isRemovingResumeFile || uploadingResumeId is not null || isSavingResume)"
+                                            @onclick="RequestRemoveResumeFile">Remove file</button>
+                                }
+                                else
+                                {
+                                    <span>No file attached</span>
+                                }
+                            </div>
+                            @if (confirmRemoveResumeFile && currentResume.FileUrl is not null)
+                            {
+                                <div class="cv-confirm" role="group" aria-label="Confirm removing the file from @currentResume.Title" aria-busy="@isRemovingResumeFile">
+                                    <span>Remove only the attached file? Your resume stays. Past applications keep access to their original file.</span>
+                                    <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" disabled="@isRemovingResumeFile"
+                                            @onclick="CancelRemoveResumeFile">Cancel</button>
+                                    <button class="profile-btn profile-btn-primary profile-btn-small cv-confirm-danger" type="button"
+                                            disabled="@(isRemovingResumeFile || uploadingResumeId is not null || isSavingResume)"
+                                            @onclick="RemoveResumeFileAsync">@(isRemovingResumeFile ? "Removing..." : "Confirm remove file")</button>
+                                </div>
+                            }
+                        }
                         <EditForm Model="resumeForm" OnValidSubmit="SaveResumeAsync">
                             <DataAnnotationsValidator />
                             <div class="profile-form-grid">
@@ -392,7 +420,7 @@ else
                             </fieldset>
 
                             <div class="cv-form-actions">
-                                <button class="profile-btn profile-btn-primary" type="submit" disabled="@isSavingResume">
+                                <button class="profile-btn profile-btn-primary" type="submit" disabled="@(isSavingResume || isRemovingResumeFile)">
                                     @(isSavingResume ? "Saving..." : editingResumeId is null ? "Create resume" : "Save resume")
                                 </button>
                             </div>
@@ -445,6 +473,8 @@ else
     private IBrowserFile? uploadFile;
     private bool isUploadingCv;
     private bool isSavingResume;
+    private bool isRemovingResumeFile;
+    private bool confirmRemoveResumeFile;
     private string? resumeMessage;
     private string? resumeError;
     private int? pendingDeleteId;
@@ -454,6 +484,8 @@ else
     private int skillPickerYears;
     private int uploadSkillPickerId;
     private int uploadSkillPickerYears;
+
+    private ResumeListItemDto? EditingResume => resumes.FirstOrDefault(resume => resume.Id == editingResumeId);
 
     private string DisplayName => string.IsNullOrWhiteSpace(profileForm.FullName) ? "Your profile" : profileForm.FullName;
     private string Initials => string.Join("", DisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
@@ -778,6 +810,7 @@ else
 
     private void StartCreateResume()
     {
+        confirmRemoveResumeFile = false;
         showCreateChoice = false;
         showUploadForm = false;
         editingResumeId = null;
@@ -791,10 +824,12 @@ else
 
     private async Task EditResumeAsync(int resumeId)
     {
+        if (isRemovingResumeFile) return;
+        confirmRemoveResumeFile = false;
         resumeError = null;
         resumeMessage = null;
         var userId = await GetUserIdAsync();
-        var result = await ResumeService.GetAsync(userId, resumeId);
+        var result = await CircuitDbGate.RunAsync(() => ResumeService.GetAsync(userId, resumeId));
         if (!result.Success || result.Data is null)
         {
             resumeError = result.Errors.FirstOrDefault() ?? "We could not load this resume.";
@@ -837,6 +872,7 @@ else
 
     private void CancelResumeForm()
     {
+        confirmRemoveResumeFile = false;
         showResumeForm = false;
         editingResumeId = null;
         resumeForm = new ResumeInput();
@@ -845,7 +881,7 @@ else
 
     private async Task SaveResumeAsync()
     {
-        if (isSavingResume) return;
+        if (isSavingResume || isRemovingResumeFile) return;
 
         resumeError = null;
         resumeMessage = null;
@@ -859,9 +895,9 @@ else
         try
         {
             var userId = await GetUserIdAsync();
-            var result = editingResumeId is null
-                ? await ResumeService.CreateAsync(userId, resumeForm)
-                : await ResumeService.UpdateAsync(userId, editingResumeId.Value, resumeForm);
+            var result = await CircuitDbGate.RunAsync(() => editingResumeId is null
+                ? ResumeService.CreateAsync(userId, resumeForm)
+                : ResumeService.UpdateAsync(userId, editingResumeId.Value, resumeForm));
             if (!result.Success || result.Data is null)
             {
                 resumeError = string.Join(" ", result.Errors);
@@ -886,6 +922,8 @@ else
 
     private async Task UploadAsync(int resumeId, InputFileChangeEventArgs args)
     {
+        if (isRemovingResumeFile || uploadingResumeId is not null) return;
+        confirmRemoveResumeFile = false;
         resumeError = null;
         resumeMessage = null;
         var file = args.File;
@@ -905,7 +943,8 @@ else
         {
             var userId = await GetUserIdAsync();
             await using var stream = file.OpenReadStream(MaxCvBytes);
-            var result = await ResumeService.UploadFileAsync(userId, resumeId, file.Name, file.Size, stream);
+            var result = await CircuitDbGate.RunAsync(() =>
+                ResumeService.UploadFileAsync(userId, resumeId, file.Name, file.Size, stream));
             if (!result.Success)
             {
                 resumeError = result.Errors.FirstOrDefault() ?? "We could not upload this file.";
@@ -937,7 +976,7 @@ else
         try
         {
             var userId = await GetUserIdAsync();
-            var result = await ResumeService.SetPrimaryAsync(userId, resumeId);
+            var result = await CircuitDbGate.RunAsync(() => ResumeService.SetPrimaryAsync(userId, resumeId));
             if (!result.Success)
             {
                 resumeError = result.Errors.FirstOrDefault() ?? "We could not update your primary resume.";
@@ -955,12 +994,13 @@ else
 
     private async Task DeleteResumeAsync(int resumeId)
     {
+        if (isRemovingResumeFile) return;
         resumeError = null;
         resumeMessage = null;
         try
         {
             var userId = await GetUserIdAsync();
-            var result = await ResumeService.DeleteAsync(userId, resumeId);
+            var result = await CircuitDbGate.RunAsync(() => ResumeService.DeleteAsync(userId, resumeId));
             pendingDeleteId = null;
             if (!result.Success)
             {
@@ -981,10 +1021,60 @@ else
         }
     }
 
+    private void RequestRemoveResumeFile()
+    {
+        if (isRemovingResumeFile || uploadingResumeId is not null || isSavingResume) return;
+        resumeError = null;
+        resumeMessage = null;
+        confirmRemoveResumeFile = EditingResume?.FileUrl is not null;
+    }
+
+    private void CancelRemoveResumeFile()
+    {
+        if (!isRemovingResumeFile)
+            confirmRemoveResumeFile = false;
+    }
+
+    private async Task RemoveResumeFileAsync()
+    {
+        if (!confirmRemoveResumeFile || isRemovingResumeFile || uploadingResumeId is not null
+            || isSavingResume || editingResumeId is not int resumeId)
+            return;
+
+        isRemovingResumeFile = true;
+        resumeError = null;
+        resumeMessage = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(() => ResumeService.RemoveResumeFileAsync(userId, resumeId));
+            if (!result.Success || result.Data is null)
+            {
+                resumeError = result.Errors.FirstOrDefault() ?? "We could not remove the attached file.";
+                return;
+            }
+
+            // Update attachment state only: do not overwrite unsaved edits in resumeForm.
+            resumes = resumes.Select(resume => resume.Id == resumeId
+                ? resume with { FileUrl = result.Data.FileUrl }
+                : resume).ToList();
+            resumeMessage = "Attached file removed.";
+            confirmRemoveResumeFile = false;
+        }
+        catch (Exception)
+        {
+            resumeError = "We could not remove the attached file. Please try again.";
+        }
+        finally
+        {
+            isRemovingResumeFile = false;
+        }
+    }
+
     private async Task ReloadResumesAsync()
     {
         var userId = await GetUserIdAsync();
-        var result = await ResumeService.ListAsync(userId);
+        var result = await CircuitDbGate.RunAsync(() => ResumeService.ListAsync(userId));
         if (result.Success && result.Data is not null)
         {
             resumes = result.Data.ToList();

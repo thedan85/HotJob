@@ -1,3 +1,4 @@
+using System.Text.Json;
 using hotjob.Data;
 using hotjob.DTOs.Candidate;
 using hotjob.Models.Resume;
@@ -235,7 +236,7 @@ public sealed class ResumeService(
             }
         }
 
-        await fileStorage.DeleteAsync(storedFileUrl, cancellationToken);
+        await DeleteFileIfUnreferencedAsync(storedFileUrl, resumeId, cancellationToken);
         logger.LogInformation("Candidate {CandidateId} deleted resume {ResumeId}.", candidate.Data, resumeId);
         return ServiceResult.Ok();
     }
@@ -306,18 +307,109 @@ public sealed class ResumeService(
             throw;
         }
 
+        var detail = await LoadDetailAsync(candidate.Data, resumeId, cancellationToken);
         if (!string.Equals(previousUrl, stored.Data, StringComparison.Ordinal))
+            await DeleteFileIfUnreferencedAsync(previousUrl, resumeId, cancellationToken);
+
+        return ServiceResult<ResumeDetailDto>.Ok(detail!);
+    }
+
+    public async Task<ServiceResult<ResumeDetailDto>> RemoveResumeFileAsync(
+        string? userId,
+        int resumeId,
+        CancellationToken cancellationToken = default)
+    {
+        var candidate = await ResolveCandidateAsync(userId, cancellationToken);
+        if (!candidate.Success)
+            return ServiceResult<ResumeDetailDto>.Fail(candidate.ErrorType!.Value, candidate.Errors);
+
+        var resume = await dbContext.Resumes.FirstOrDefaultAsync(
+            row => row.Id == resumeId && row.CandidateId == candidate.Data, cancellationToken);
+        if (resume is null)
+            return ServiceResult<ResumeDetailDto>.Fail(ServiceErrorType.NotFound, "Resume not found.");
+
+        var previousUrl = resume.FileUrl;
+        if (!string.IsNullOrWhiteSpace(previousUrl))
         {
-            // ponytail: an application snapshot may still point at the old file; keep it until no snapshot uses it.
-            var referencedBySnapshot = previousUrl is not null
-                && await dbContext.Applications.AnyAsync(
-                    application => application.SnapshotFileUrl == previousUrl, cancellationToken);
-            if (!referencedBySnapshot)
-                await fileStorage.DeleteAsync(previousUrl, cancellationToken);
+            if (!await dbContext.ResumeSkills.AnyAsync(row => row.ResumeId == resumeId, cancellationToken))
+            {
+                return ServiceResult<ResumeDetailDto>.Fail(ServiceErrorType.Validation,
+                    "Add and save at least one skill before removing the attached file.");
+            }
+
+            resume.FileUrl = null;
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         var detail = await LoadDetailAsync(candidate.Data, resumeId, cancellationToken);
+        await DeleteFileIfUnreferencedAsync(previousUrl, resumeId, cancellationToken);
         return ServiceResult<ResumeDetailDto>.Ok(detail!);
+    }
+
+    private async Task DeleteFileIfUnreferencedAsync(
+        string? fileUrl, int resumeId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(fileUrl))
+            return;
+
+        try
+        {
+            if (await dbContext.Resumes.AnyAsync(row => row.FileUrl == fileUrl, cancellationToken)
+                || await dbContext.Applications.AnyAsync(
+                    row => row.SnapshotFileUrl == fileUrl, cancellationToken))
+                return;
+
+            // JSON may be escaped or use camelCase. Parse it rather than searching its raw text.
+            // Null JSON is legacy data covered by SnapshotFileUrl; unknown non-null JSON is unsafe.
+            var snapshots = await dbContext.Applications.AsNoTracking()
+                .Where(row => row.SnapshotJson != null)
+                .Select(row => row.SnapshotJson!)
+                .ToListAsync(cancellationToken);
+            foreach (var json in snapshots)
+            {
+                if (SnapshotMayReferenceFile(json, fileUrl))
+                    return;
+            }
+
+            await fileStorage.DeleteAsync(fileUrl, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // The database write already succeeded. Keep the file on uncertainty or cleanup failure.
+            // Do not log snapshot JSON, file URLs or exception messages containing personal data.
+            logger.LogWarning("CV cleanup for resume {ResumeId} could not be completed; the saved change remains successful.",
+                resumeId);
+        }
+    }
+
+    private static bool SnapshotMayReferenceFile(string json, string fileUrl)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return true;
+
+            var foundFileUrl = false;
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (!string.Equals(property.Name, "FileUrl", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                foundFileUrl = true;
+                if (property.Value.ValueKind == JsonValueKind.Null)
+                    continue;
+                if (property.Value.ValueKind != JsonValueKind.String
+                    || string.Equals(property.Value.GetString(), fileUrl, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return !foundFileUrl;
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
     }
 
     public async Task<ServiceResult<IReadOnlyList<SkillOptionDto>>> ListSkillsAsync(

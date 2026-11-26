@@ -51,6 +51,12 @@ public interface IResumeService
         Stream content,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Clears an attachment without deleting the resume or files referenced by application snapshots.</summary>
+    Task<ServiceResult<ResumeDetailDto>> RemoveResumeFileAsync(
+        string? userId,
+        int resumeId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Lists every skill the candidate can attach to a resume.</summary>
     Task<ServiceResult<IReadOnlyList<SkillOptionDto>>> ListSkillsAsync(
         CancellationToken cancellationToken = default);

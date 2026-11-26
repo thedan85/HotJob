@@ -134,7 +134,7 @@ public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             // ponytail: the database row is already correct; a stale file must not turn a delete into an error.
-            logger.LogWarning(exception, "Could not delete stored CV file {FileUrl}.", relativeUrl);
+            logger.LogWarning("Could not delete a stored CV file; the saved change remains successful.");
         }
 
         return Task.CompletedTask;
