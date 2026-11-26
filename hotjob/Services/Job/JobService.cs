@@ -21,9 +21,11 @@ public sealed class JobService(
     IEntitlementService entitlementService,
     IJobAlertService jobAlertService,
     ILogger<JobService> logger,
-    TimeProvider? timeProvider = null,
+    TimeProvider timeProvider,
     INotificationBroadcaster? broadcaster = null) : IJobService
 {
+    private readonly TimeProvider clock = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+
     private static readonly ApplicationStatus[] OpenStatuses =
     [
         ApplicationStatus.Pending,
@@ -237,7 +239,7 @@ public sealed class JobService(
         }
 
         job.Status = JobStatus.Closed;
-        var changedAt = timeProvider?.GetUtcNow().UtcDateTime ?? DateTime.UtcNow;
+        var changedAt = clock.GetUtcNow().UtcDateTime;
         var notifiedUserIds = new List<string>();
         foreach (var application in job.Applications.Where(application => OpenStatuses.Contains(application.CurrentStatus)))
         {

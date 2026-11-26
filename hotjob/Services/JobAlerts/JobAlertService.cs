@@ -119,7 +119,8 @@ public sealed class JobAlertService(
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
-                if (broadcaster is not null)
+                // Job alerts live on their own page; the nav badge counts other notifications.
+                if (broadcaster is not null && notification.Kind != NotificationKinds.JobAlert)
                     await broadcaster.NotifyAsync(userId, notification.Title, cancellationToken);
                 created++;
                 logger.LogInformation(

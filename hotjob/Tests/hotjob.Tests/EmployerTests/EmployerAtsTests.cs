@@ -429,9 +429,10 @@ public sealed class EmployerAtsTests
         var (appId, _, _) = await SeedApplicationAsync(fx, companyId);
         Detach(fx);
 
+        var roundStart = new DateTimeOffset(2026, 11, 26, 9, 0, 0, TimeSpan.Zero).UtcDateTime;
         var invalid = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
         {
-            InterviewDate = DateTime.UtcNow.AddDays(1),
+            InterviewDate = roundStart.AddDays(1),
             InterviewType = InterviewType.Online,
             Round = 0
         });
@@ -440,12 +441,13 @@ public sealed class EmployerAtsTests
 
         var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
         {
-            InterviewDate = DateTime.UtcNow.AddDays(2),
+            InterviewDate = roundStart.AddDays(2),
             InterviewType = InterviewType.Online,
             Round = 2
         });
         Assert.True(created.Success, string.Join("; ", created.Errors));
         Assert.Equal(2, created.Data!.Round);
+        Assert.Contains("Round 2", Assert.Single(fx.Db.Notifications).Content);
 
         Detach(fx);
         var list = await Interviews(fx).ListAsync(owner, appId);

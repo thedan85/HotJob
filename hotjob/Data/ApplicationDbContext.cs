@@ -98,6 +98,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<ApplicationStatusHistory>().HasOne(x => x.ChangedBy).WithMany().HasForeignKey(x => x.ChangedByUserId).OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<Interview>().HasOne(x => x.Application).WithMany(x => x.Interviews).HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Interview>().Property(x => x.Round).HasDefaultValue(1);
 
         modelBuilder.Entity<Review>().HasOne(x => x.Company).WithMany(x => x.Reviews).HasForeignKey(x => x.CompanyProfileId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Review>().HasOne(x => x.Candidate).WithMany(x => x.Reviews).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);

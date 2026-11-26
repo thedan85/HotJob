@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.ML;
 using Microsoft.ML.Data;
+using System.Reflection;
 
 namespace hotjob.Tests.MLTests;
 
@@ -244,7 +245,8 @@ public sealed class MatchScoreServiceTests
             new JobPostingRepository(fx.Db),
             new EntitlementService(fx.Db, clock),
             new StubJobAlertService(),
-            NullLogger<JobService>.Instance);
+            NullLogger<JobService>.Instance,
+            clock);
         var assign = await jobService.AssignSkillsAsync(employer.UserId, job.Id, new AssignSkillsRequest
         {
             Skills = [new JobSkillInput { SkillId = sql.Id, ImportanceWeight = 10 }]
@@ -461,6 +463,49 @@ public sealed class MatchScoreServiceTests
         public void Save(ITransformer model, DataViewSchema schema) => ModelVersion ??= "saved";
 
         public void Invalidate() => ModelVersion = null;
+    }
+
+
+    [Theory]
+    [InlineData("FastTreeBinary:v1", true)]
+    [InlineData("FastTreeBinary", true)]
+    [InlineData("weighted-rule", false)]
+    [InlineData(null, false)]
+    public void IsModelAlgorithm_RecognisesVersionedAndLegacyMarkers(string? algorithm, bool expected) =>
+        Assert.Equal(expected, MatchScoreService.IsModelAlgorithm(algorithm));
+
+    [Fact]
+    public void FailedPrediction_ClearsStaleModelVersion()
+    {
+        using var temp = new TempModelDirectory();
+        var store = temp.CreateStore();
+        SetField(store, "model", new ThrowingTransformer());
+        SetField(store, "modelVersion", "stale");
+        SetField(store, "loadAttempted", true);
+
+        Assert.False(store.TryPredict(new MatchFeatures(1, 1, 0, true), out _));
+        Assert.Null(store.ModelVersion);
+    }
+
+    private static void SetField(object target, string name, object? value) =>
+        typeof(MatchModelStore).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(target, value);
+
+    private sealed class ThrowingTransformer : ITransformer
+    {
+        public bool IsRowToRowMapper => false;
+
+        public DataViewSchema GetOutputSchema(DataViewSchema inputSchema) =>
+            throw new InvalidOperationException("bad model");
+
+        public IDataView Transform(IDataView input) =>
+            throw new InvalidOperationException("bad model");
+
+        public IRowToRowMapper GetRowToRowMapper(DataViewSchema inputSchema) =>
+            throw new InvalidOperationException("bad model");
+
+        public void Save(ModelSaveContext context) =>
+            throw new InvalidOperationException("bad model");
     }
 
 }

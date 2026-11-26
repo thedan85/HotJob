@@ -8,6 +8,7 @@ using hotjob.Repositories.Job;
 using hotjob.Services.Common;
 using hotjob.Services.Billing;
 using hotjob.Services.Job;
+using hotjob.Services.Notifications;
 using hotjob.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,8 +18,18 @@ namespace hotjob.Tests.JobTests;
 /// <summary>Employer job posting CRUD over the real service + repository (SQLite in-memory).</summary>
 public sealed class EmployerJobCrudTests
 {
-    private static JobService CreateService(TestFixture fx) =>
-        new(fx.Db, new JobPostingRepository(fx.Db), new EntitlementService(fx.Db, TimeProvider.System), new StubJobAlertService(), NullLogger<JobService>.Instance);
+    private static JobService CreateService(
+        TestFixture fx,
+        TimeProvider? clock = null,
+        INotificationBroadcaster? broadcaster = null) =>
+        new(
+            fx.Db,
+            new JobPostingRepository(fx.Db),
+            new EntitlementService(fx.Db, TimeProvider.System),
+            new StubJobAlertService(),
+            NullLogger<JobService>.Instance,
+            clock ?? TimeProvider.System,
+            broadcaster);
 
     private static async Task<(string UserId, int SkillId, int CategoryId)> SeedEmployerAsync(
         TestFixture fx, string email = "owner@example.com")
@@ -176,4 +187,43 @@ public sealed class EmployerJobCrudTests
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.Unauthorized, result.ErrorType);
     }
+
+    [Fact]
+    public async Task JobService_RequiresRegisteredTimeProvider()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+
+        Assert.Throws<ArgumentNullException>(() => new JobService(
+            fx.Db,
+            new JobPostingRepository(fx.Db),
+            new EntitlementService(fx.Db, TimeProvider.System),
+            new StubJobAlertService(),
+            NullLogger<JobService>.Instance,
+            null!,
+            null));
+    }
+
+    [Fact]
+    public async Task Delete_Published_UsesRegisteredClockAndBroadcastsOncePerCandidate()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 26, 9, 0, 0, TimeSpan.Zero));
+        var broadcaster = new RecordingBroadcaster();
+        var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
+        var svc = CreateService(fx, clock, broadcaster);
+        var created = await svc.CreateAsync(userId, NewRequest(skillId, categoryId, JobStatus.Published));
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        var posting = (await fx.Db.JobPostings.FindAsync(created.Data!.Id))!;
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "clock-close@example.com");
+        await MatchTestData.CreateApplicationAsync(fx, posting, resume, candidate, ApplicationStatus.Pending);
+
+        var closed = await svc.DeleteOrCloseAsync(userId, created.Data.Id);
+
+        Assert.True(closed.Success, string.Join("; ", closed.Errors));
+        var note = Assert.Single(fx.Db.Notifications);
+        Assert.Equal(clock.GetUtcNow().UtcDateTime, note.CreatedAt);
+        Assert.Equal(clock.GetUtcNow().UtcDateTime, Assert.Single(fx.Db.ApplicationStatusHistories).ChangedAt);
+        Assert.Equal(candidate.UserId, Assert.Single(broadcaster.UserIds));
+    }
+
 }

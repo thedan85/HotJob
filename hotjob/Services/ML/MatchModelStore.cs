@@ -139,6 +139,7 @@ public sealed class MatchModelStore : IMatchModelStore
                 // file — log once and let every caller use the weighted rule.
                 logger.LogWarning(exception, "Match model at {ModelPath} could not score; using weighted rule.", ModelFilePath);
                 model = null;
+                modelVersion = null;
                 return false;
             }
         }

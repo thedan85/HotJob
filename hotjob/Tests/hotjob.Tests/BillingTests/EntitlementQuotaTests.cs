@@ -22,7 +22,7 @@ public sealed class EntitlementQuotaTests
         new JobPostingRepository(fx.Db),
         new EntitlementService(fx.Db, TimeProvider.System),
         new StubJobAlertService(),
-        NullLogger<JobService>.Instance);
+        NullLogger<JobService>.Instance, TimeProvider.System);
 
     private static EntitlementService Entitlements(TestFixture fx) =>
         new(fx.Db, TimeProvider.System);

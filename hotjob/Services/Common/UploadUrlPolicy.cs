@@ -3,6 +3,9 @@ namespace hotjob.Services.Common;
 /// <summary>Validates links rendered from stored upload paths.</summary>
 public static class UploadUrlPolicy
 {
+    /// <summary>Local URL prefix shared with CV upload storage.</summary>
+    public const string LocalPrefix = "/uploads/cv/";
+
     /// <summary>Accepts HTTP(S) links and local CV upload paths; rejects script, traversal and query/fragment tricks.</summary>
     public static bool IsSafeSnapshotUrl(string? url)
     {
@@ -17,7 +20,7 @@ public static class UploadUrlPolicy
             return true;
         }
 
-        const string prefix = "/uploads/cv/";
+        const string prefix = LocalPrefix;
         if (!url.StartsWith(prefix, StringComparison.Ordinal))
         {
             return false;

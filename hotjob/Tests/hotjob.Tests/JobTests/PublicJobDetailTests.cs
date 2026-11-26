@@ -47,7 +47,7 @@ public sealed class PublicJobDetailTests
     }
 
     private static JobService CreateService(TestFixture fx) =>
-        new(fx.Db, new JobPostingRepository(fx.Db), new EntitlementService(fx.Db, TimeProvider.System), new StubJobAlertService(), NullLogger<JobService>.Instance);
+        new(fx.Db, new JobPostingRepository(fx.Db), new EntitlementService(fx.Db, TimeProvider.System), new StubJobAlertService(), NullLogger<JobService>.Instance, TimeProvider.System);
 
     [Fact]
     public async Task GetPublishedAsync_ReturnsDetail_ForPublishedJob()

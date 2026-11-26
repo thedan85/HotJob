@@ -15,7 +15,7 @@ namespace hotjob.Migrations
                 table: "Interviews",
                 type: "int",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 1);
         }
 
         /// <inheritdoc />

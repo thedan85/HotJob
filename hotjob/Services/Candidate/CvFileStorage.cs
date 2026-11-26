@@ -2,6 +2,8 @@ using System.Globalization;
 using hotjob.Services.Common;
 using Microsoft.Extensions.Logging;
 
+using hotjob.Services.Common;
+
 namespace hotjob.Services.Candidate;
 
 /// <summary>
@@ -14,7 +16,7 @@ public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger
     public const long MaxFileSizeBytes = 5 * 1024 * 1024;
 
     /// <summary>Public URL prefix for every stored CV.</summary>
-    public const string PublicPrefix = "/uploads/cv/";
+    public const string PublicPrefix = UploadUrlPolicy.LocalPrefix;
 
     private static readonly string[] AllowedExtensions = [".pdf", ".doc", ".docx"];
     private readonly string fullRoot = Path.GetFullPath(rootPath);

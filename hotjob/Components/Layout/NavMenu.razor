@@ -176,10 +176,13 @@
         {
             notificationSubscription = NotificationRealtime.Subscribe(
                 userId,
-                () => InvokeAsync(async () =>
+                () => InvokeAsync(() =>
                 {
-                    await RefreshUnreadAsync();
+                    // The write that published this push may hold the same circuit's
+                    // DbContext gate. Count locally; full count reloads on auth change.
+                    unreadCount++;
                     StateHasChanged();
+                    return Task.CompletedTask;
                 }));
         }
     }

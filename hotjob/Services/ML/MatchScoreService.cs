@@ -34,6 +34,11 @@ public sealed class MatchScoreService(
     /// <summary>Algorithm marker including the active model version.</summary>
     public static string ModelAlgorithmFor(string version) => $"{ModelAlgorithm}:{version}";
 
+    /// <summary>Recognises both legacy and versioned FastTree markers.</summary>
+    public static bool IsModelAlgorithm(string? algorithm) =>
+        algorithm == ModelAlgorithm
+        || (algorithm?.StartsWith(ModelAlgorithm + ":", StringComparison.Ordinal) ?? false);
+
     private const int MinimumPerClass = 5;
     private const int SplitSeed = 20261027;
     private const double TestFraction = 0.2;

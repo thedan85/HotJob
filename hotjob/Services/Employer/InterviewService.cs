@@ -75,7 +75,7 @@ public sealed class InterviewService(
             {
                 UserId = candidateUserId,
                 Title = "Interview scheduled",
-                Content = Cap($"An interview for \"{app.JobPosting.Title}\" is scheduled at {interview.InterviewDate:u}."
+                Content = Cap($"Round {interview.Round}: an interview for \"{app.JobPosting.Title}\" is scheduled at {interview.InterviewDate:u}."
                     + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}.")),
                 IsRead = false,
                 CreatedAt = now
@@ -160,7 +160,7 @@ public sealed class InterviewService(
             {
                 UserId = interview.Application.Candidate.UserId,
                 Title = "Interview updated",
-                Content = Cap($"The interview for \"{interview.Application.JobPosting.Title}\" was updated to {interview.InterviewDate:u}."
+                Content = Cap($"Round {interview.Round}: the interview for \"{interview.Application.JobPosting.Title}\" was updated to {interview.InterviewDate:u}."
                     + (string.IsNullOrWhiteSpace(interview.LocationOrLink) ? string.Empty : $" Location: {interview.LocationOrLink}.")),
                 IsRead = false,
                 CreatedAt = now
@@ -192,7 +192,7 @@ public sealed class InterviewService(
         {
             UserId = interview.Application.Candidate.UserId,
             Title = "Interview cancelled",
-            Content = $"The interview for \"{interview.Application.JobPosting.Title}\" scheduled at {interview.InterviewDate:u} was cancelled.",
+            Content = $"Round {interview.Round}: the interview for \"{interview.Application.JobPosting.Title}\" scheduled at {interview.InterviewDate:u} was cancelled.",
             IsRead = false,
             CreatedAt = timeProvider.GetUtcNow().UtcDateTime
         });

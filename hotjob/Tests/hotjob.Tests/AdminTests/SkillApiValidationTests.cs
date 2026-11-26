@@ -151,7 +151,7 @@ public sealed class SkillApiValidationTests
             new JobPostingRepository(fx.Db),
             new EntitlementService(fx.Db, TimeProvider.System),
             new StubJobAlertService(),
-            NullLogger<JobService>.Instance));
+            NullLogger<JobService>.Instance, TimeProvider.System));
 
         var app = builder.Build();
         app.UseAuthentication();

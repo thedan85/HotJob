@@ -316,7 +316,9 @@ namespace hotjob.Migrations
                         .HasColumnType("varchar(2000)");
 
                     b.Property<int>("Round")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<int>("Status")
                         .HasColumnType("int");

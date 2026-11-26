@@ -69,4 +69,41 @@ public sealed class NotificationRealtimeTests
 
         Assert.Equal(1, calls);
     }
+
+    [Fact]
+    public async Task Publish_DoesNotWaitForSlowSubscriber()
+    {
+        var realtime = new NotificationRealtime(NullLogger<NotificationRealtime>.Instance);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var slow = realtime.Subscribe("user-1", async () =>
+        {
+            started.SetResult();
+            await release.Task;
+        });
+
+        var publish = realtime.PublishAsync("user-1");
+        await started.Task;
+
+        Assert.True(publish.IsCompleted);
+        release.SetResult();
+    }
+
+    [Fact]
+    public async Task CanceledSubscriber_DoesNotBlockOtherSubscribers()
+    {
+        var realtime = new NotificationRealtime(NullLogger<NotificationRealtime>.Instance);
+        var calls = 0;
+        using var canceled = realtime.Subscribe("user-1", () => throw new OperationCanceledException());
+        using var healthy = realtime.Subscribe("user-1", () =>
+        {
+            calls++;
+            return Task.CompletedTask;
+        });
+
+        await realtime.PublishAsync("user-1");
+
+        Assert.Equal(1, calls);
+    }
+
 }

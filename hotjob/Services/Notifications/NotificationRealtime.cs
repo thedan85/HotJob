@@ -27,31 +27,62 @@ public sealed class NotificationRealtime(ILogger<NotificationRealtime> logger) :
         return subscription;
     }
 
-    public async Task PublishAsync(string userId, CancellationToken cancellationToken = default)
+    public Task PublishAsync(string userId, CancellationToken cancellationToken = default)
     {
         Subscription[] snapshot;
         lock (sync)
         {
             if (!subscribers.TryGetValue(userId, out var set) || set.Count == 0)
             {
-                return;
+                return Task.CompletedTask;
             }
 
             snapshot = set.ToArray();
         }
 
+        // Push is best-effort after the notification is committed. Never await a
+        // circuit callback from the write path: it can be the same circuit and
+        // hold the same DbContext gate that the write just used.
         foreach (var subscription in snapshot)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                await subscription.Callback();
+                var callback = subscription.Callback();
+                if (!callback.IsCompletedSuccessfully)
+                {
+                    _ = ObserveAsync(userId, callback);
+                }
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception)
             {
-                logger.LogWarning(exception, "Notification push to user {UserId} failed.", userId);
+                LogFailure(userId, exception);
             }
         }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ObserveAsync(string userId, Task callback)
+    {
+        try
+        {
+            await callback.ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            LogFailure(userId, exception);
+        }
+    }
+
+    private void LogFailure(string userId, Exception exception)
+    {
+        if (exception is OperationCanceledException)
+        {
+            logger.LogDebug("Notification push to user {UserId} was canceled.", userId);
+            return;
+        }
+
+        logger.LogWarning(exception, "Notification push to user {UserId} failed.", userId);
     }
 
     private void Unsubscribe(Subscription subscription)

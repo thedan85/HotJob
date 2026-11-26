@@ -35,7 +35,7 @@ Các khoảng trống lớn:
 - Thông báo đã tự cập nhật realtime trong cùng instance Blazor Server; thiếu notification khi admin duyệt/từ chối công ty và thiếu inbox riêng cho employer-only. Cần backplane nếu chạy nhiều instance.
 - Quy tắc công ty bị Rejected chưa nhất quán giữa public jobs, save/recommend và ATS.
 
-Kiểm chứng sau khi hoàn thiện ngày 2026-11-26: **632 passed, 0 failed, 0 skipped**. Có cảnh báo dependency và compiler; chi tiết, lịch sử kết quả và giới hạn kiểm chứng ở mục VII.
+Kiểm chứng sau khi hoàn thiện ngày 2026-11-26: **642 passed, 0 failed, 0 skipped**. Có cảnh báo dependency và compiler; chi tiết, lịch sử kết quả và giới hạn kiểm chứng ở mục VII.
 
 ---
 
@@ -332,7 +332,7 @@ Chạy từ repository root (`hotjob/`):
 dotnet test hotjob.slnx --nologo -v q
 ```
 
-Kết quả: **632 passed, 0 failed, 0 skipped, total 632**, exit code 0. Lệnh có build và chạy test project `hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj` trên `net10.0`.
+Kết quả: **642 passed, 0 failed, 0 skipped, total 642**, exit code 0. Lệnh có build và chạy test project `hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj` trên `net10.0`.
 
 Cảnh báo xuất hiện trong output:
 
@@ -369,4 +369,5 @@ Cảnh báo xuất hiện trong output:
 - **2026-11-26 — Cập nhật sau merge `phuong-admin`:** giữ report audit riêng tại `docs/admin/admin-audit-log-phase-0.md`; đánh dấu audit log và form đổi mật khẩu đã có, cập nhật kết quả test 614/614. Không sửa product code.
 - **2026-11-26 — Đối chiếu Admin/Employer:** cập nhật các mục admin đã có (filter công ty/tin, duyệt công ty/job/employer, kiểm duyệt review, audit, self-lock guard); giữ nguyên các khoảng trống employer (mở file snapshot, mass-reject notification, inbox/badge employer-only). Không sửa product code.
 - **2026-11-26 — Chuẩn hóa checklist:** bảng I–III đi theo `docs/features-needed.md`; tính năng ngoài checklist gom thành ghi chú riêng. Không sửa product code.
-- **2026-11-26 — Hoàn thiện employer/realtime/ML:** FastTree inference có version marker và fallback; snapshot URL nội bộ mở được; interview có `Round`; đóng job notify candidate; notification push theo circuit. Chạy lại **632/632** test.
+- **2026-11-26 — Hoàn thiện employer/realtime/ML:** FastTree inference có version marker và fallback; snapshot URL nội bộ mở được; interview có `Round`; đóng job notify candidate; notification push theo circuit. Chạy lại **642/642** test.
+- **2026-11-26 — Sửa theo code review:** migration `Round` default 1; prediction lỗi xóa version marker; label FastTree nhận marker có version; push không đợi callback và badge không query DB trong callback; notification phỏng vấn có số vòng; `JobService` bắt buộc `TimeProvider`; job alert không đẩy badge. Chạy lại **642/642** test.
