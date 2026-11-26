@@ -9,6 +9,7 @@
 @using hotjob.Services.Account
 @using hotjob.Services.Common
 @using hotjob.Services.Authentication
+@using hotjob.Services.Billing
 @using hotjob.Services.Candidate
 @using hotjob.Services.Employer
 @using Microsoft.AspNetCore.Components.Authorization
@@ -18,6 +19,7 @@
 @inject IAccountService AccountService
 @inject IResumeService ResumeService
 @inject ICandidateSearchService CandidateSearchService
+@inject ICandidatePremiumService CandidatePremiumService
 @inject CircuitDbGate CircuitDbGate
 
 <PageTitle>Your profile | HotJob</PageTitle>
@@ -61,7 +63,13 @@ else
                         }
                     </div>
                     <a class="profile-avatar-edit" href="/profile#avatar-url" title="Set avatar URL" aria-label="Set avatar URL">+</a>
-                    <h2>@DisplayName</h2>
+                    <h2>
+                        @DisplayName
+                        @if (isPremium)
+                        {
+                            <span class="profile-badge profile-badge-green">Premium</span>
+                        }
+                    </h2>
                     <p>@(string.IsNullOrWhiteSpace(profileForm.Position) ? "Candidate" : profileForm.Position)</p>
                     <span class="profile-status @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "profile-status-empty" : string.Empty)"><span></span> @(string.IsNullOrWhiteSpace(profileForm.JobSeekingStatus) ? "Add your job seeking status" : profileForm.JobSeekingStatus)</span>
                 </div>
@@ -417,6 +425,7 @@ else
     private const long MaxCvBytes = 5 * 1024 * 1024;
 
     private bool isLoading = true;
+    private bool isPremium;
     private bool hasLoadedOnce;
     private bool isSaving;
     private bool saveIsError;
@@ -516,6 +525,8 @@ else
                 errorMessage = result.Errors.FirstOrDefault() ?? "We could not load your candidate profile.";
                 return;
             }
+
+            isPremium = await CircuitDbGate.RunAsync(() => CandidatePremiumService.IsPremiumAsync(userId));
 
             var candidate = result.Data.Candidate;
             profileForm = new ProfileForm
