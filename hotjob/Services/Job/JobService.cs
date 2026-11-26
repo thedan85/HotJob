@@ -19,7 +19,8 @@ public sealed class JobService(
     IJobPostingRepository jobRepository,
     IEntitlementService entitlementService,
     IJobAlertService jobAlertService,
-    ILogger<JobService> logger) : IJobService
+    ILogger<JobService> logger,
+    TimeProvider? timeProvider = null) : IJobService
 {
     private static readonly ApplicationStatus[] OpenStatuses =
     [
@@ -218,7 +219,7 @@ public sealed class JobService(
         }
 
         var job = await dbContext.JobPostings
-            .Include(posting => posting.Applications)
+            .Include(posting => posting.Applications).ThenInclude(application => application.Candidate)
             .FirstOrDefaultAsync(posting => posting.Id == id && posting.CompanyProfileId == employer.CompanyProfileId, cancellationToken);
         if (job is null)
         {
@@ -234,6 +235,7 @@ public sealed class JobService(
         }
 
         job.Status = JobStatus.Closed;
+        var changedAt = timeProvider?.GetUtcNow().UtcDateTime ?? DateTime.UtcNow;
         foreach (var application in job.Applications.Where(application => OpenStatuses.Contains(application.CurrentStatus)))
         {
             application.CurrentStatus = ApplicationStatus.Rejected;
@@ -243,7 +245,15 @@ public sealed class JobService(
                 Status = ApplicationStatus.Rejected,
                 ChangedByUserId = userId,
                 Notes = "Job closed",
-                ChangedAt = DateTime.UtcNow
+                ChangedAt = changedAt
+            });
+            dbContext.Notifications.Add(new Notification
+            {
+                UserId = application.Candidate.UserId,
+                Title = "Application Rejected",
+                Content = $"Your application for \"{job.Title}\" was rejected. Reason: Job closed.",
+                IsRead = false,
+                CreatedAt = changedAt
             });
         }
 

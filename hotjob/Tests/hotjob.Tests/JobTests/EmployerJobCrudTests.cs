@@ -1,6 +1,7 @@
 using hotjob.Data;
 using hotjob.DTOs.Job;
 using hotjob.Models;
+using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Models.Users;
 using hotjob.Repositories.Job;
@@ -8,6 +9,7 @@ using hotjob.Services.Common;
 using hotjob.Services.Billing;
 using hotjob.Services.Job;
 using hotjob.Tests.Support;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace hotjob.Tests.JobTests;
@@ -129,6 +131,37 @@ public sealed class EmployerJobCrudTests
         var stillThere = await svc.GetAsync(userId, created.Data.Id);
         Assert.True(stillThere.Success);
         Assert.Equal(JobStatus.Closed, stillThere.Data!.Status);
+    }
+
+
+    [Fact]
+    public async Task Delete_Published_NotifiesCandidatesForOpenApplications()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (userId, skillId, categoryId) = await SeedEmployerAsync(fx);
+        var svc = CreateService(fx);
+        var created = await svc.CreateAsync(userId, NewRequest(skillId, categoryId, JobStatus.Published));
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        var posting = (await fx.Db.JobPostings.FindAsync(created.Data!.Id))!;
+        var (pendingCandidate, pendingResume) = await MatchTestData.CreateCandidateAsync(fx, "close-pending@example.com");
+        var (interviewCandidate, interviewResume) = await MatchTestData.CreateCandidateAsync(fx, "close-interview@example.com");
+        var (rejectedCandidate, rejectedResume) = await MatchTestData.CreateCandidateAsync(fx, "close-rejected@example.com");
+        await MatchTestData.CreateApplicationAsync(fx, posting, pendingResume, pendingCandidate, ApplicationStatus.Pending);
+        await MatchTestData.CreateApplicationAsync(fx, posting, interviewResume, interviewCandidate, ApplicationStatus.Interviewing);
+        await MatchTestData.CreateApplicationAsync(fx, posting, rejectedResume, rejectedCandidate, ApplicationStatus.Rejected);
+
+        var closed = await svc.DeleteOrCloseAsync(userId, created.Data.Id);
+
+        Assert.True(closed.Success, string.Join("; ", closed.Errors));
+        var notifications = await fx.Db.Notifications.OrderBy(note => note.UserId).ToListAsync();
+        Assert.Equal(2, notifications.Count);
+        Assert.All(notifications, note =>
+        {
+            Assert.Equal("Application Rejected", note.Title);
+            Assert.Contains("Job closed", note.Content);
+        });
+        Assert.Equal(3, await fx.Db.Applications.CountAsync(app =>
+            app.JobPostingId == created.Data.Id && app.CurrentStatus == ApplicationStatus.Rejected));
     }
 
     [Fact]
