@@ -102,7 +102,8 @@ public sealed record JobListItemResponse(
     IReadOnlyList<string> CategoryNames,
     int ApplicationsCount,
     DateTime CreatedAt,
-    DateTime? FeaturedUntil);
+    DateTime? FeaturedUntil,
+    string? RejectionReason = null);
 
 public sealed record JobDeleteResponse(int Id, bool Closed, JobStatus Status);
 

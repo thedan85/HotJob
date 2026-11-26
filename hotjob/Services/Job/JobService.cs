@@ -319,6 +319,29 @@ public sealed class JobService(
         return await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
     }
 
+    public async Task<ServiceResult<IReadOnlyDictionary<JobStatus, int>>> GetStatusCountsAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var employer = await GetAuthorizedEmployerAsync(userId, cancellationToken);
+        if (employer is null)
+        {
+            return ServiceResult<IReadOnlyDictionary<JobStatus, int>>.Fail(ServiceErrorType.Unauthorized, "Employer membership is not active or the company is not approved.");
+        }
+
+        // One GROUP BY instead of one COUNT round-trip per status.
+        var rows = await dbContext.JobPostings
+            .AsNoTracking()
+            .Where(job => job.CompanyProfileId == employer.CompanyProfileId)
+            .GroupBy(job => job.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+
+        IReadOnlyDictionary<JobStatus, int> counts = Enum.GetValues<JobStatus>()
+            .ToDictionary(status => status, status => rows.FirstOrDefault(row => row.Status == status)?.Count ?? 0);
+        return ServiceResult<IReadOnlyDictionary<JobStatus, int>>.Ok(counts);
+    }
+
     public async Task<ServiceResult<PagedResponse<JobListItemResponse>>> ListAsync(
         string userId,
         JobStatus? status,
@@ -1055,5 +1078,6 @@ public sealed class JobService(
             job.CategoryMappings.Select(mapping => mapping.Category?.Name ?? string.Empty).ToList(),
             applicationsCount,
             job.CreatedAt,
-            job.FeaturedUntil);
+            job.FeaturedUntil,
+            job.Status == JobStatus.Rejected ? job.RejectionReason : null);
 }

@@ -68,4 +68,26 @@ public sealed class JobVisibilityTests
         Assert.Equal(job.Id, Assert.Single((await BrowseAsync(jobs)).Data!.Items).Id);
         Assert.True((await jobs.GetPublishedAsync(job.Id)).Success);
     }
+
+    [Fact]
+    public async Task EmployerStatusCounts_CountOnlyTheirCompany_IncludingApprovalStates()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var other = await MatchTestData.CreateCompanyAsync(fx);
+        var employer = await MatchTestData.CreateEmployerAsync(fx, company.Id, "hr@example.com");
+        foreach (var status in new[] { JobStatus.Published, JobStatus.Published, JobStatus.PendingApproval, JobStatus.Rejected })
+        {
+            await MatchTestData.CreateJobAsync(fx, company.Id, [], status: status);
+        }
+        await MatchTestData.CreateJobAsync(fx, other.Id, [], status: JobStatus.Published);
+
+        var counts = await CreateJobService(fx).GetStatusCountsAsync(employer.UserId);
+
+        Assert.Equal(2, counts.Data![JobStatus.Published]);
+        Assert.Equal(1, counts.Data[JobStatus.PendingApproval]);
+        Assert.Equal(1, counts.Data[JobStatus.Rejected]);
+        Assert.Equal(0, counts.Data[JobStatus.Approved]);
+        Assert.Equal(Enum.GetValues<JobStatus>().Length, counts.Data.Count);
+    }
 }

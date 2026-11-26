@@ -125,6 +125,10 @@ public sealed class JobSearchControllerTests
             string userId, int id, AssignSkillsRequest request, CancellationToken cancellationToken = default) =>
             Task.FromResult(ServiceResult<JobDetailResponse>.Fail(ServiceErrorType.NotFound));
 
+        public Task<ServiceResult<IReadOnlyDictionary<JobStatus, int>>> GetStatusCountsAsync(
+            string userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ServiceResult<PagedResponse<JobListItemResponse>>> ListAsync(
             string userId, JobStatus? status, string? search, int page, int pageSize,
             CancellationToken cancellationToken = default) =>
