@@ -264,6 +264,10 @@
                                             {
                                                 <p class="ej-job-meta">Rejected: @job.RejectionReason</p>
                                             }
+                                            @if (job.ModerationReason is not null)
+                                            {
+                                                <p class="ej-job-meta">Removed by admin: @job.ModerationReason</p>
+                                            }
                                             @if (job.FeaturedUntil is { } featuredUntil && featuredUntil > DateTime.UtcNow)
                                             {
                                                 <span class="workspace-badge is-published">Featured until @featuredUntil.ToString("dd MMM")</span>
@@ -294,7 +298,10 @@
                                         <td data-label="Actions">
                                             <div class="ej-row-actions">
                                                 <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => ViewDetailAsync(job.Id)">View</button>
-                                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => OpenEditFormAsync(job.Id)">Edit</button>
+                                                @if (job.ModerationReason is null)
+                                                {
+                                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="() => OpenEditFormAsync(job.Id)">Edit</button>
+                                                }
                                                 @if (job.Status == JobStatus.Published
                                                     && entitlement?.IsOwner == true
                                                     && (job.FeaturedUntil is null || job.FeaturedUntil <= DateTime.UtcNow))
@@ -382,6 +389,10 @@
                             {
                                 <div><dt>Rejection reason</dt><dd>@selected.RejectionReason</dd></div>
                             }
+                            @if (selected.ModerationReason is not null)
+                            {
+                                <div><dt>Removed by admin</dt><dd>@selected.ModerationReason (cannot be reopened)</dd></div>
+                            }
                             <div><dt>Salary</dt><dd>@SalaryDetail(selected)</dd></div>
                             <div><dt>Job type</dt><dd>@selected.JobType</dd></div>
                             <div><dt>Experience</dt><dd>@selected.ExperienceRequired year@(selected.ExperienceRequired == 1 ? string.Empty : "s")</dd></div>
@@ -401,7 +412,10 @@
                         <div class="ej-detail-desc">@selected.Description</div>
                         <div class="workspace-form-actions">
                             <a class="workspace-btn workspace-btn-secondary" href="/employer/interviews?jobId=@selected.Id">View applicants</a>
-                            <button class="workspace-btn workspace-btn-ghost" type="button" @onclick="() => EditFromDetailAsync(selected.Id)">Edit job</button>
+                            @if (selected.ModerationReason is null)
+                            {
+                                <button class="workspace-btn workspace-btn-ghost" type="button" @onclick="() => EditFromDetailAsync(selected.Id)">Edit job</button>
+                            }
                         </div>
                     </section>
                 }

@@ -12,7 +12,9 @@ public record JobListItemDto(
     DateTime? ExpiresAt,
     DateTime CreatedAt,
     DateTime? SubmittedForApprovalAt,
-    int ApplicationCount);
+    int ApplicationCount,
+    DateTime? ModeratedAt = null,
+    string? ModerationReason = null);
 
 /// <summary>Detailed view of a job posting.</summary>
 public record JobDetailDto(
@@ -29,7 +31,13 @@ public record JobDetailDto(
     DateTime? ApprovedAt,
     DateTime? RejectedAt,
     string? RejectionReason,
-    string? ReviewedByAdminId);
+    string? ReviewedByAdminId,
+    DateTime? ModeratedAt = null,
+    string? ModerationReason = null);
+
+/// <summary>Why an admin is taking a posting down; shown to the employer.</summary>
+public record RemoveJobRequest(
+    [Required, MinLength(1), MaxLength(500)] string Reason);
 
 public record RejectJobRequest(
     [Required, MinLength(1), MaxLength(500)] string Reason);

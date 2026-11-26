@@ -79,6 +79,16 @@ public class JobPosting
     public string? RejectionReason { get; set; }
 
     /// <summary>Company that owns this posting.</summary>
+    /// <summary>When an administrator removed this posting for a policy violation; null otherwise. Removed postings stay Closed.</summary>
+    public DateTime? ModeratedAt { get; set; }
+
+    [MaxLength(255)]
+    public string? ModeratedByAdminId { get; set; }
+
+    /// <summary>Why the posting was removed; shown to the employer.</summary>
+    [MaxLength(500)]
+    public string? ModerationReason { get; set; }
+
     public Users.CompanyProfile Company { get; set; } = default!;
 
     /// <summary>Employer who created this posting. Null if the author left.</summary>
@@ -86,6 +96,9 @@ public class JobPosting
 
     /// <summary>Admin who reviewed this job posting.</summary>
     public Users.ApplicationUser? ReviewedBy { get; set; }
+
+    /// <summary>Administrator who removed the posting; null when not removed or that account is gone.</summary>
+    public Users.ApplicationUser? ModeratedBy { get; set; }
 
     /// <summary>Required skills with importance weights.</summary>
     public ICollection<JobSkill> JobSkills { get; set; } = new List<JobSkill>();

@@ -21,13 +21,6 @@ public sealed class JobService(
     IJobAlertService jobAlertService,
     ILogger<JobService> logger) : IJobService
 {
-    private static readonly ApplicationStatus[] OpenStatuses =
-    [
-        ApplicationStatus.Pending,
-        ApplicationStatus.Viewed,
-        ApplicationStatus.Shortlisted,
-        ApplicationStatus.Interviewing
-    ];
 
     public async Task<ServiceResult<JobDetailResponse>> CreateAsync(
         string userId,
@@ -145,6 +138,13 @@ public sealed class JobService(
         // Closed/Expired/Rejected jobs hold no quota slot; moving one back into the pipeline takes one.
         var reopening = job.Status is JobStatus.Closed or JobStatus.Expired or JobStatus.Rejected
             && requestedStatus is JobStatus.Draft or JobStatus.Published;
+        if (reopening && job.ModeratedAt is not null)
+        {
+            return ServiceResult<JobDetailResponse>.Fail(
+                ServiceErrorType.Conflict,
+                "This job was removed by an administrator and cannot be reopened.");
+        }
+
         if (reopening)
         {
             var entitlement = await entitlementService.GetForCompanyAsync(
@@ -219,6 +219,7 @@ public sealed class JobService(
 
         var job = await dbContext.JobPostings
             .Include(posting => posting.Applications)
+            .ThenInclude(application => application.Candidate)
             .FirstOrDefaultAsync(posting => posting.Id == id && posting.CompanyProfileId == employer.CompanyProfileId, cancellationToken);
         if (job is null)
         {
@@ -234,18 +235,8 @@ public sealed class JobService(
         }
 
         job.Status = JobStatus.Closed;
-        foreach (var application in job.Applications.Where(application => OpenStatuses.Contains(application.CurrentStatus)))
-        {
-            application.CurrentStatus = ApplicationStatus.Rejected;
-            dbContext.ApplicationStatusHistories.Add(new ApplicationStatusHistory
-            {
-                ApplicationId = application.Id,
-                Status = ApplicationStatus.Rejected,
-                ChangedByUserId = userId,
-                Notes = "Job closed",
-                ChangedAt = DateTime.UtcNow
-            });
-        }
+        JobClosure.RejectOpenApplications(
+            dbContext, job, userId, ApplicationHistoryNotes.JobClosed, DateTime.UtcNow);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Employer {EmployerId} closed job {JobId}.", employer.Id, job.Id);
@@ -858,7 +849,8 @@ public sealed class JobService(
             job.FeaturedUntil,
             job.SubmittedForApprovalAt,
             job.ReviewedAt,
-            job.RejectionReason);
+            job.RejectionReason,
+            job.ModerationReason);
 
     public async Task<ServiceResult<PagedResponse<SkillMatchJobListItemDto>>> GetJobsMatchingResumeAsync(
         string userId,

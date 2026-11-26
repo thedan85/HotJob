@@ -500,7 +500,7 @@ public sealed class MatchScoreService(
         var eligible = applications
             .Where(application => !(application.Status == ApplicationStatus.Rejected
                 && latestNoteByApplication.TryGetValue(application.Id, out var note)
-                && string.Equals(note, "Job closed", StringComparison.Ordinal)))
+                && ApplicationHistoryNotes.IsAutoRejection(note)))
             .ToList();
 
         if (eligible.Count == 0)

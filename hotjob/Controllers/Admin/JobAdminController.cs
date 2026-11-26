@@ -67,4 +67,23 @@ public sealed class JobAdminController(IJobAdminService jobAdminService) : Admin
 
         return NoContentOrFailure(await jobAdminService.RejectAsync(id, adminId, request.Reason, cancellationToken));
     }
+
+    /// <summary>Takes a violating posting down (Closed, kept on record). Returns the number of applications closed.</summary>
+    [HttpPost("{id:int}/remove")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Remove(
+        int id,
+        [FromBody] RemoveJobRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (CurrentAdminUserId is not { } adminId)
+        {
+            return MissingAdminIdentity();
+        }
+
+        return OkOrFailure(await jobAdminService.RemoveAsync(id, adminId, request.Reason, cancellationToken));
+    }
 }

@@ -77,6 +77,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<JobPosting>().HasOne(x => x.Company).WithMany(x => x.JobPostings).HasForeignKey(x => x.CompanyProfileId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<JobPosting>().HasOne(x => x.CreatedBy).WithMany(x => x.CreatedJobs).HasForeignKey(x => x.CreatedByEmployerId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<JobPosting>().HasOne(x => x.ReviewedBy).WithMany().HasForeignKey(x => x.ReviewedByAdminId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<JobPosting>().HasOne(x => x.ModeratedBy).WithMany().HasForeignKey(x => x.ModeratedByAdminId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<JobPosting>().Property(x => x.SalaryMin).HasPrecision(18, 2);
         modelBuilder.Entity<JobPosting>().Property(x => x.SalaryMax).HasPrecision(18, 2);
 

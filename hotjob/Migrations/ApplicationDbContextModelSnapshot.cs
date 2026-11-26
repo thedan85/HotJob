@@ -531,6 +531,17 @@ namespace hotjob.Migrations
                     b.Property<int>("JobType")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("ModeratedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ModeratedByAdminId")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ModerationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("RejectionReason")
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)");
@@ -568,6 +579,8 @@ namespace hotjob.Migrations
                     b.HasIndex("CreatedByEmployerId");
 
                     b.HasIndex("FeaturedUntil");
+
+                    b.HasIndex("ModeratedByAdminId");
 
                     b.HasIndex("ReviewedByAdminId");
 
@@ -1504,6 +1517,11 @@ namespace hotjob.Migrations
                         .HasForeignKey("CreatedByEmployerId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("hotjob.Models.Users.ApplicationUser", "ModeratedBy")
+                        .WithMany()
+                        .HasForeignKey("ModeratedByAdminId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("hotjob.Models.Users.ApplicationUser", "ReviewedBy")
                         .WithMany()
                         .HasForeignKey("ReviewedByAdminId")
@@ -1512,6 +1530,8 @@ namespace hotjob.Migrations
                     b.Navigation("Company");
 
                     b.Navigation("CreatedBy");
+
+                    b.Navigation("ModeratedBy");
 
                     b.Navigation("ReviewedBy");
                 });

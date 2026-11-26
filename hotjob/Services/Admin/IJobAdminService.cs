@@ -23,4 +23,12 @@ public interface IJobAdminService
 
     Task<ServiceResult> RejectAsync(
         int jobId, string adminUserId, string reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes a violating posting down for good: Closed with the reason and admin recorded, open
+    /// applications auto-rejected (history kept), candidates and the company's employers notified.
+    /// Returns how many applications were rejected.
+    /// </summary>
+    Task<ServiceResult<int>> RemoveAsync(
+        int jobId, string adminUserId, string reason, CancellationToken cancellationToken = default);
 }

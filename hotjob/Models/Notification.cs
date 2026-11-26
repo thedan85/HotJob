@@ -7,6 +7,12 @@ public static class NotificationKinds
 {
     /// <summary>A newly published job matched a Premium candidate's best resume.</summary>
     public const string JobAlert = "JobAlert";
+
+    /// <summary>An administrator approved or rejected the recipient's company.</summary>
+    public const string CompanyReview = "CompanyReview";
+
+    /// <summary>An administrator removed one of the recipient company's job postings.</summary>
+    public const string JobModeration = "JobModeration";
 }
 
 /// <summary>In-app notification for a user.</summary>

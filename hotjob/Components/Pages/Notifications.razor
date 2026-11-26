@@ -11,14 +11,14 @@
 
 <PageTitle>Notifications | HotJob</PageTitle>
 
-<AuthorizeView Roles="Candidate">
-    <Authorized>
+<AuthorizeView Roles="Candidate,Employer">
+    <Authorized Context="notificationsAuth">
         <div class="workspace">
             <section class="workspace-header">
                 <div class="workspace-header-copy">
-                    <p class="workspace-eyebrow">Candidate workspace</p>
+                    <p class="workspace-eyebrow">@(notificationsAuth.User.IsInRole("Candidate") ? "Candidate workspace" : "Employer workspace")</p>
                     <h1>Notifications</h1>
-                    <p class="workspace-lede">Status updates and messages from employers. Job alerts live on their own page.</p>
+                    <p class="workspace-lede">Application updates, company review results and messages. Job alerts live on their own page.</p>
                 </div>
                 <div class="workspace-actions">
                     <button class="workspace-btn workspace-btn-secondary" type="button"
@@ -45,8 +45,11 @@
             {
                 <section class="workspace-card">
                     <h2>No messages yet</h2>
-                    <p class="workspace-sub">When an employer sends you an update, it shows up here.</p>
-                    <a class="workspace-btn workspace-btn-primary" href="/my-applications">My applications</a>
+                    <p class="workspace-sub">New applications, company review results and employer updates show up here.</p>
+                    @if (notificationsAuth.User.IsInRole("Candidate"))
+                    {
+                        <a class="workspace-btn workspace-btn-primary" href="/my-applications">My applications</a>
+                    }
                 </section>
             }
             else

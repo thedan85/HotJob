@@ -218,6 +218,10 @@ public sealed class AdminService(
         if (job is null)
             return ServiceResult<bool>.Fail(ServiceErrorType.NotFound, "Job not found.");
 
+        // Deleting would cascade away applications, their history and interviews.
+        if (await dbContext.Applications.AnyAsync(application => application.JobPostingId == jobId, cancellationToken).ConfigureAwait(false))
+            return ServiceResult<bool>.Fail(ServiceErrorType.Conflict, "This job has applications. Remove it instead so their history is kept.");
+
         var jobTitle = job.Title;
         var companyName = job.Company.CompanyName;
 

@@ -42,6 +42,17 @@
                     <NavLink class="nav-link nav-link-employer" href="employer/interviews">Applicants</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="employer/company">Company</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="employer/billing">Billing</NavLink>
+                    @if (!employerAuth.User.IsInRole("Candidate"))
+                    {
+                        @* Candidates already get this link below; employer-only users need their own. *@
+                        <NavLink class="nav-link nav-link-employer nav-link-notifications" href="notifications">
+                            Notifications
+                            @if (unreadCount > 0)
+                            {
+                                <span class="nav-badge" aria-label="@unreadCount unread">@unreadCount</span>
+                            }
+                        </NavLink>
+                    }
                 </Authorized>
             </AuthorizeView>
             <AuthorizeView Roles="Candidate">
@@ -137,7 +148,8 @@
 
     private async Task RefreshUnreadAsync(AuthenticationState state)
     {
-        if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
+        if (state.User.Identity?.IsAuthenticated != true
+            || !(state.User.IsInRole("Candidate") || state.User.IsInRole("Employer")))
         {
             unreadCount = 0;
             return;

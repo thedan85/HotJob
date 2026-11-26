@@ -1,6 +1,7 @@
 using hotjob.Data;
 using hotjob.DTOs.Admin;
 using hotjob.DTOs.Common;
+using hotjob.Models;
 using hotjob.Models.Admin;
 using hotjob.Models.Users;
 using hotjob.Services.Common;
@@ -127,6 +128,15 @@ public sealed class CompanyAdminService(
             company.VerifiedByAdminId = adminUserId;
             company.RejectionReason = null;
             company.IsActive = true;
+            await CompanyMemberNotifier.StageForActiveMembersAsync(
+                dbContext,
+                company.Id,
+                NotificationKinds.CompanyReview,
+                "Company approved",
+                $"\"{company.CompanyName}\" has been approved. You can now post jobs and review applicants.",
+                relatedJobId: null,
+                company.VerifiedAt.Value,
+                cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             await auditService.LogAsync(
@@ -166,6 +176,15 @@ public sealed class CompanyAdminService(
             company.RejectionReason = trimmed;
             company.VerifiedAt = DateTime.UtcNow;
             company.VerifiedByAdminId = adminUserId;
+            await CompanyMemberNotifier.StageForActiveMembersAsync(
+                dbContext,
+                company.Id,
+                NotificationKinds.CompanyReview,
+                "Company rejected",
+                $"\"{company.CompanyName}\" was rejected by an administrator. Reason: {trimmed}",
+                relatedJobId: null,
+                company.VerifiedAt.Value,
+                cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             await auditService.LogAsync(

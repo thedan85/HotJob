@@ -88,7 +88,8 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
                 job.Applications.Count,
                 job.CreatedAt,
                 job.FeaturedUntil,
-                job.Status == JobStatus.Rejected ? job.RejectionReason : null))
+                job.Status == JobStatus.Rejected ? job.RejectionReason : null,
+                job.ModerationReason))
             .ToListAsync(cancellationToken);
 
         return (items, total);

@@ -19,7 +19,7 @@
                 <div class="workspace-header-copy">
                     <p class="workspace-eyebrow">Administration</p>
                     <h1>Job posting management</h1>
-                    <p class="workspace-lede">Approve or reject postings waiting for review, and remove inappropriate or outdated listings.</p>
+                    <p class="workspace-lede">Approve or reject postings waiting for review. Removing a posting closes it for good, keeps its applications on record and tells the employer why.</p>
                 </div>
             </section>
 
@@ -85,23 +85,74 @@
                                         <td>@job.CompanyName</td>
                                         <td>@(string.IsNullOrWhiteSpace(job.City) ? "-" : job.City)</td>
                                         <td>
-                                            <span class="workspace-badge @StatusClass(job.Status)">@job.Status</span>
+                                            @if (job.ModeratedAt is not null)
+                                            {
+                                                <span class="workspace-badge is-rejected" title="@job.ModerationReason">Removed</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="workspace-badge @StatusClass(job.Status)">@job.Status</span>
+                                            }
                                         </td>
                                         <td>@job.CreatedAt.ToString("dd MMM yyyy")</td>
                                         <td>@job.ApplicationCount</td>
                                         <td>
-                                            <div class="workspace-toolbar-actions">
-                                                @if (job.Status == nameof(JobStatus.PendingApproval))
-                                                {
-                                                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" disabled="@busy" @onclick="() => ApproveJobAsync(job.Id)">Approve</button>
-                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginReject(job.Id)">Reject</button>
-                                                }
-                                                <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => DeleteJobAsync(job.Id)">
-                                                    @(pendingDeleteId == job.Id ? "Confirm delete?" : "Delete")
-                                                </button>
-                                            </div>
+                                            @if (job.ModeratedAt is not null)
+                                            {
+                                                <span class="workspace-sub">Removed @job.ModeratedAt.Value.ToString("dd MMM yyyy")</span>
+                                            }
+                                            else
+                                            {
+                                                <div class="workspace-toolbar-actions">
+                                                    @if (job.Status == nameof(JobStatus.PendingApproval))
+                                                    {
+                                                        <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" disabled="@busy" @onclick="() => ApproveJobAsync(job.Id)">Approve</button>
+                                                        <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginReject(job.Id)">Reject</button>
+                                                    }
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginRemove(job.Id)">Remove</button>
+                                                    @if (job.ApplicationCount == 0)
+                                                    {
+                                                        <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => DeleteJobAsync(job.Id)">
+                                                            @(pendingDeleteId == job.Id ? "Confirm delete?" : "Delete")
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
                                         </td>
                                     </tr>
+                                    @if (job.ModeratedAt is not null && !string.IsNullOrWhiteSpace(job.ModerationReason))
+                                    {
+                                        <tr>
+                                            <td colspan="7"><span class="workspace-sub">Removal reason: @job.ModerationReason</span></td>
+                                        </tr>
+                                    }
+                                    @if (removingId == job.Id)
+                                    {
+                                        <tr>
+                                            <td colspan="7">
+                                                <div class="admin-reject-form">
+                                                    <label class="workspace-field">
+                                                        <span>Removal reason (required, shown to the employer)</span>
+                                                        <textarea @bind="removalReason" maxlength="500" rows="2"
+                                                                  placeholder="Explain which rule this posting breaks."></textarea>
+                                                    </label>
+                                                    <p class="workspace-sub">The posting is closed permanently and its @job.ApplicationCount application(s) stay on record; open ones are rejected and the candidates notified.</p>
+                                                    @if (removeError is not null)
+                                                    {
+                                                        <div class="workspace-alert" role="alert">@removeError</div>
+                                                    }
+                                                    <div class="workspace-toolbar-actions">
+                                                        <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button"
+                                                                disabled="@busy" @onclick="() => RemoveJobAsync(job.Id)">
+                                                            @(busy ? "Removing…" : "Confirm removal")
+                                                        </button>
+                                                        <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
+                                                                disabled="@busy" @onclick="CancelRemove">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
                                     @if (rejectingId == job.Id)
                                     {
                                         <tr>
@@ -167,6 +218,9 @@
     private string? rejectionReason;
     private string? rejectError;
     private int? pendingDeleteId;
+    private int? removingId;
+    private string? removalReason;
+    private string? removeError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -212,8 +266,62 @@
             "Job approved. The employer can now publish it.");
     }
 
+    private void BeginRemove(int jobId)
+    {
+        CancelReject();
+        pendingDeleteId = null;
+        removingId = jobId;
+        removalReason = null;
+        removeError = null;
+    }
+
+    private void CancelRemove()
+    {
+        removingId = null;
+        removalReason = null;
+        removeError = null;
+    }
+
+    private async Task RemoveJobAsync(int jobId)
+    {
+        var reason = removalReason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            removeError = "Enter a removal reason.";
+            return;
+        }
+
+        var adminId = await GetAdminIdAsync();
+        if (adminId is null)
+        {
+            removeError = string.Join("; ", NotSignedIn().Errors);
+            return;
+        }
+
+        var closed = 0;
+        var failure = await RunAsync(
+            async () =>
+            {
+                var result = await JobAdminService.RemoveAsync(jobId, adminId, reason);
+                closed = result.Data;
+                return result;
+            },
+            () => closed == 0
+                ? "Job removed. The employer has been notified."
+                : $"Job removed. {closed} open application(s) were closed and the candidates notified.");
+        if (failure is null)
+        {
+            CancelRemove();
+        }
+        else
+        {
+            removeError = failure;
+        }
+    }
+
     private void BeginReject(int jobId)
     {
+        CancelRemove();
         rejectingId = jobId;
         rejectionReason = null;
         rejectError = null;
@@ -263,7 +371,10 @@
     }
 
     /// <summary>Runs an admin write, then reloads. Returns the error, if any.</summary>
-    private async Task<string?> RunAsync(Func<Task<ServiceResult>> write, string successMessage)
+    private Task<string?> RunAsync(Func<Task<ServiceResult>> write, string successMessage) =>
+        RunAsync(write, () => successMessage);
+
+    private async Task<string?> RunAsync(Func<Task<ServiceResult>> write, Func<string> successMessage)
     {
         busy = true;
         actionMessage = null;
@@ -277,7 +388,7 @@
             }
 
             actionSucceeded = true;
-            actionMessage = successMessage;
+            actionMessage = successMessage();
             await LoadAsync();
             return null;
         }

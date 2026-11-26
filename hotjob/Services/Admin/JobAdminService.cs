@@ -1,9 +1,12 @@
 using hotjob.Data;
 using hotjob.DTOs.Admin;
 using hotjob.DTOs.Common;
+using hotjob.Models;
 using hotjob.Models.Admin;
+using hotjob.Models.Application;
 using hotjob.Models.Job;
 using hotjob.Services.Common;
+using hotjob.Services.Job;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -12,8 +15,11 @@ namespace hotjob.Services.Admin;
 public sealed class JobAdminService(
     ApplicationDbContext dbContext,
     IAdminAuditService auditService,
-    ILogger<JobAdminService> logger) : IJobAdminService
+    ILogger<JobAdminService> logger,
+    TimeProvider? timeProvider = null) : IJobAdminService
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     private const int MaxReasonLength = 500;
 
     public async Task<ServiceResult<PagedResponse<JobListItemDto>>> ListAsync(
@@ -59,7 +65,9 @@ public sealed class JobAdminService(
                 j.ExpiryDate,
                 j.CreatedAt,
                 j.SubmittedForApprovalAt,
-                j.Applications.Count))
+                j.Applications.Count,
+                j.ModeratedAt,
+                j.ModerationReason))
             .ToListAsync(cancellationToken);
 
         return ServiceResult<PagedResponse<JobListItemDto>>.Ok(new PagedResponse<JobListItemDto>
@@ -105,7 +113,9 @@ public sealed class JobAdminService(
             job.Status is JobStatus.Approved or JobStatus.Published ? job.ReviewedAt : null,
             job.Status == JobStatus.Rejected ? job.ReviewedAt : null,
             job.RejectionReason,
-            job.ReviewedByAdminId));
+            job.ReviewedByAdminId,
+            job.ModeratedAt,
+            job.ModerationReason));
     }
 
     public async Task<ServiceResult> ApproveAsync(
@@ -175,6 +185,63 @@ public sealed class JobAdminService(
 
         logger.LogInformation("Admin {AdminId} rejected job posting {JobId}. Reason: {Reason}", adminUserId, jobId, trimmed);
         return ServiceResult.Ok();
+    }
+
+    public async Task<ServiceResult<int>> RemoveAsync(
+        int jobId,
+        string adminUserId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        AdminWriteTransaction.EnsureNone(dbContext);
+        var trimmed = reason?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            return ServiceResult<int>.Fail(ServiceErrorType.Validation, "A removal reason is required.");
+        if (trimmed.Length > MaxReasonLength)
+            return ServiceResult<int>.Fail(ServiceErrorType.Validation, $"The reason must be at most {MaxReasonLength} characters.");
+
+        var job = await dbContext.JobPostings
+            .Include(j => j.Company)
+            .Include(j => j.Applications)
+            .ThenInclude(application => application.Candidate)
+            .FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken);
+        if (job is null)
+            return ServiceResult<int>.Fail(ServiceErrorType.NotFound, "Job posting not found.");
+        if (job.ModeratedAt is not null)
+            return ServiceResult<int>.Fail(ServiceErrorType.Conflict, "This job has already been removed.");
+
+        var rejected = 0;
+        await AdminWriteTransaction.RunAsync(dbContext, async () =>
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+            job.Status = JobStatus.Closed;
+            job.ModeratedAt = now;
+            job.ModeratedByAdminId = adminUserId;
+            job.ModerationReason = trimmed;
+            rejected = JobClosure.RejectOpenApplications(
+                dbContext, job, adminUserId, ApplicationHistoryNotes.JobRemovedByAdmin, now);
+            await CompanyMemberNotifier.StageForActiveMembersAsync(
+                dbContext,
+                job.CompanyProfileId,
+                NotificationKinds.JobModeration,
+                "Job removed by admin",
+                $"\"{job.Title}\" was removed by an administrator and can no longer be reopened. Reason: {trimmed}",
+                job.Id,
+                now,
+                cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            await auditService.LogAsync(
+                AuditActions.JobRemove,
+                AuditTargetTypes.Job,
+                job.Id.ToString(),
+                $"Removed job '{job.Title}' at '{job.Company.CompanyName}' ({rejected} open application(s) closed): {trimmed}");
+        }, cancellationToken);
+
+        logger.LogInformation(
+            "Admin {AdminId} removed job posting {JobId}; {Rejected} open applications closed. Reason: {Reason}",
+            adminUserId, jobId, rejected, trimmed);
+        return ServiceResult<int>.Ok(rejected);
     }
 
     private Task<JobPosting?> FindAsync(int jobId, CancellationToken cancellationToken) =>

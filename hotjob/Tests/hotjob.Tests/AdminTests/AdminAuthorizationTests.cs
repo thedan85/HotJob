@@ -164,6 +164,19 @@ public sealed class AdminAuthorizationTests
     }
 
     [Fact]
+    public async Task Remove_UsesTheAdminIdFromTheToken_AndReturnsClosedCount()
+    {
+        var service = new RecordingJobAdminService();
+        var controller = WithUser(new JobAdminController(service), Principal(AppRoles.Admin, "admin-from-token"));
+
+        var result = await controller.Remove(7, new RemoveJobRequest("Scam"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(3, ok.Value);
+        Assert.Equal((7, "admin-from-token", "Scam"), service.Removed);
+    }
+
+    [Fact]
     public async Task Approve_WithoutSubjectClaim_Returns401AndDoesNothing()
     {
         var service = new RecordingJobAdminService();
@@ -237,6 +250,13 @@ public sealed class AdminAuthorizationTests
     {
         public (int, string)? Approved { get; private set; }
         public (int, string, string)? Rejected { get; private set; }
+        public (int, string, string)? Removed { get; private set; }
+
+        public Task<ServiceResult<int>> RemoveAsync(int jobId, string adminUserId, string reason, CancellationToken cancellationToken = default)
+        {
+            Removed = (jobId, adminUserId, reason);
+            return Task.FromResult(ServiceResult<int>.Ok(3));
+        }
 
         public Task<ServiceResult> ApproveAsync(int jobId, string adminUserId, CancellationToken cancellationToken = default)
         {
