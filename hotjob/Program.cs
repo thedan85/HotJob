@@ -25,25 +25,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using hotjob.Configuration;
+using hotjob.Services.Email;
+using hotjob.Services.Account.PasswordRecovery;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var envLocalPath = Path.Combine(builder.Environment.ContentRootPath, ".env.local");
-if (!File.Exists(envLocalPath))
-    envLocalPath = Path.Combine(Directory.GetCurrentDirectory(), ".env.local");
-if (!File.Exists(envLocalPath))
-    envLocalPath = Path.Combine(Directory.GetCurrentDirectory(), "hotjob", ".env.local");
-if (File.Exists(envLocalPath))
-{
-    var dotEnv = File.ReadAllLines(envLocalPath)
-        .Select(l => l.Trim())
-        .Where(l => l.Length > 0 && !l.StartsWith('#'))
-        .Select(l => l.StartsWith("export ") ? l[7..].TrimStart() : l)
-        .Select(l => l.Split('=', 2))
-        .Where(p => p.Length == 2 && !string.IsNullOrWhiteSpace(p[0]))
-        .ToDictionary(p => p[0].Trim().Replace("__", ":"), p => p[1].Trim().Trim('"', '\''), StringComparer.OrdinalIgnoreCase);
-    builder.Configuration.AddInMemoryCollection(dotEnv!);
-}
+DevelopmentEnvironmentFile.Load(builder.Configuration, builder.Environment, Directory.GetCurrentDirectory());
+builder.Services.AddRecoveryEmail(builder.Configuration, builder.Environment);
+builder.Services.AddPasswordRecovery(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

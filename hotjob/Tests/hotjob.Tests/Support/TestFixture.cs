@@ -25,6 +25,7 @@ public sealed class TestFixture : IAsyncDisposable
     public ApplicationDbContext Db => _scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     public UserManager<ApplicationUser> UserManager => _scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     public RoleManager<IdentityRole> RoleManager => _scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    public T GetService<T>() where T : notnull => _scope.ServiceProvider.GetRequiredService<T>();
 
     public AccountService Service => new(
         UserManager,
@@ -85,7 +86,7 @@ public sealed class TestFixture : IAsyncDisposable
         _scope = scope;
     }
 
-    public static async Task<TestFixture> CreateAsync()
+    public static async Task<TestFixture> CreateAsync(Action<IServiceCollection>? configure = null)
     {
         var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
@@ -109,6 +110,7 @@ public sealed class TestFixture : IAsyncDisposable
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddDefaultTokenProviders();
 
+        configure?.Invoke(services);
         var provider = services.BuildServiceProvider();
         var scope = provider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

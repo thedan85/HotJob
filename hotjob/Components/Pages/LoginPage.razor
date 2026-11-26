@@ -21,6 +21,7 @@
             <p class="intro">Pick up where you left off and find your next opportunity.</p>
 
             <PasswordChangedNotice Flag="@PasswordChanged" />
+            <PasswordResetNotice Flag="@PasswordReset" />
 
             @if (GoogleEnabled)
             {
@@ -49,7 +50,7 @@
                 <div class="field-group">
                     <div class="field-label-row">
                         <label for="login-password">Password</label>
-                        <a href="/">Forgot password?</a>
+                        <a href="/forgot-password">Forgot password?</a>
                     </div>
                     <div class="password-wrap">
                         <InputText id="login-password" type="@(showPassword ? "text" : "password")" @bind-Value="form.Password" placeholder="Enter your password" autocomplete="current-password" />
@@ -99,6 +100,9 @@
 
     [SupplyParameterFromQuery(Name = "passwordChanged")]
     private string? PasswordChanged { get; set; }
+
+    [SupplyParameterFromQuery(Name = "passwordReset")]
+    private string? PasswordReset { get; set; }
 
     private bool GoogleEnabled =>
         !string.IsNullOrWhiteSpace(Configuration["Google:ClientId"]) &&

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using hotjob.DTOs.Authentication;
 using hotjob.Services.Account;
 using hotjob.Services.Common;
+using hotjob.Services.Account.PasswordRecovery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,6 +12,34 @@ namespace hotjob.Controllers;
 [Route("api/account")]
 public sealed class AccountController(IAccountService accountService) : ControllerBase
 {
+    /// <summary>Request a password reset link. Always returns a fixed generic notice.</summary>
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ForgotPassword(
+        [FromBody] ForgotPasswordRequest request,
+        [FromServices] IPasswordResetService recovery,
+        CancellationToken cancellationToken)
+    {
+        var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}/";
+        await recovery.RequestPasswordResetAsync(request.Email, baseUrl, cancellationToken);
+        return Ok(PasswordResetService.RequestNotice);
+    }
+
+    /// <summary>Consume a reset link. Retrying a successful reset returns the invalid-link error.</summary>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword(
+        [FromBody] ResetPasswordRequest request,
+        [FromServices] IPasswordResetService recovery,
+        CancellationToken cancellationToken)
+    {
+        var result = await recovery.ResetPasswordAsync(request.Email, request.Token, request.NewPassword, cancellationToken);
+        return result.Success ? NoContent() : MapError(result);
+    }
+
     [HttpGet("profile")]
     [Authorize]
     [ProducesResponseType(typeof(ProfileResponse), StatusCodes.Status200OK)]
