@@ -1,7 +1,11 @@
+using System.Security.Claims;
 using hotjob.Data;
 using hotjob.Models.Users;
 using hotjob.Services.Account;
+using hotjob.Services.Admin;
 using hotjob.Services.Authentication;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +37,52 @@ public sealed class TestFixture : IAsyncDisposable
         Db,
         AuthService,
         NullLogger<AccountService>.Instance);
+
+    public HttpContextAccessor HttpContextAccessor { get; } = new();
+    public TestAuthenticationStateProvider AuthStateProvider { get; } = new();
+
+    public IAdminAuditService CreateAuditService() =>
+        new AdminAuditService(Db, HttpContextAccessor, AuthStateProvider);
+
+    public AdminService CreateAdminService() =>
+        new(Db, UserManager, RoleManager, CreateAuditService());
+
+    public AdminService CreateAdminService(ApplicationDbContext db) =>
+        new(db, UserManager, RoleManager, CreateAuditService());
+
+    public CompanyAdminService CreateCompanyAdminService() =>
+        new(Db, CreateAuditService(), NullLogger<CompanyAdminService>.Instance);
+
+    public EmployerAdminService CreateEmployerAdminService() =>
+        new(Db, CreateAuditService(), NullLogger<EmployerAdminService>.Instance);
+
+    public JobAdminService CreateJobAdminService() =>
+        new(Db, CreateAuditService(), NullLogger<JobAdminService>.Instance);
+
+    public ReviewAdminService CreateReviewAdminService() =>
+        new(Db, CreateAuditService(), NullLogger<ReviewAdminService>.Instance);
+
+    /// <summary>Puts an authenticated admin on the HTTP request (API/JWT path).</summary>
+    public void SignInAdmin(string userId, string email)
+    {
+        HttpContextAccessor.HttpContext = new DefaultHttpContext
+        {
+            User = BuildPrincipal(userId, email)
+        };
+    }
+
+    /// <summary>Puts an authenticated admin on the Blazor authentication state (circuit path).</summary>
+    public void SignInAdminOnCircuit(string userId, string email) =>
+        AuthStateProvider.SignIn(BuildPrincipal(userId, email));
+
+    private static ClaimsPrincipal BuildPrincipal(string userId, string email) =>
+        new(new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, userId),
+                new Claim(ClaimTypes.Email, email),
+                new Claim(ClaimTypes.Role, AppRoles.Admin)
+            ],
+            "TestJwt"));
 
     public AuthService AuthService => new(
         UserManager,
@@ -126,5 +176,15 @@ public sealed class TestFixture : IAsyncDisposable
         Connection.Dispose();
         if (Services is IDisposable d) d.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    public sealed class TestAuthenticationStateProvider : AuthenticationStateProvider
+    {
+        private ClaimsPrincipal _user = new(new ClaimsIdentity());
+
+        public void SignIn(ClaimsPrincipal user) => _user = user;
+
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() =>
+            Task.FromResult(new AuthenticationState(_user));
     }
 }

@@ -1,3 +1,4 @@
+using hotjob.DTOs.Job;
 using hotjob.Models.Job;
 
 namespace hotjob.Repositories.Job;
@@ -14,7 +15,8 @@ public interface IJobPostingRepository
         int id,
         CancellationToken cancellationToken = default);
 
-    Task<(IReadOnlyList<JobPosting> Items, int TotalCount)> ListOwnedAsync(
+    /// <summary>One page of the company's jobs, projected to list rows (no entity tracking).</summary>
+    Task<(IReadOnlyList<JobListItemResponse> Items, int TotalCount)> ListOwnedAsync(
         int companyId,
         JobStatus? status,
         string? search,
@@ -22,7 +24,8 @@ public interface IJobPostingRepository
         int pageSize,
         CancellationToken cancellationToken = default);
 
-    Task<(IReadOnlyList<JobPosting> Items, int TotalCount)> BrowsePublishedAsync(
+    /// <summary>One page of jobs open to candidates, projected to public list rows.</summary>
+    Task<(IReadOnlyList<PublicJobListItemResponse> Items, int TotalCount)> BrowsePublishedAsync(
         string? keyword,
         string? city,
         string? skill,

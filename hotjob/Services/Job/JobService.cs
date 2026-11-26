@@ -66,6 +66,11 @@ public sealed class JobService(
                 ServiceErrorType.Conflict, JobSlotLimitMessage(entitlement));
         }
 
+        var requestedStatus = request.Status ?? JobStatus.Draft;
+
+        // Automatically convert Published to PendingApproval when creating
+        var actualStatus = requestedStatus == JobStatus.Published ? JobStatus.PendingApproval : requestedStatus;
+
         var job = new JobPosting
         {
             CompanyProfileId = employer.CompanyProfileId,
@@ -77,7 +82,8 @@ public sealed class JobService(
             ExperienceRequired = request.ExperienceRequired,
             JobType = request.JobType,
             ExpiryDate = request.ExpiryDate,
-            Status = request.Status ?? JobStatus.Draft,
+            Status = actualStatus,
+            SubmittedForApprovalAt = actualStatus == JobStatus.PendingApproval ? DateTime.UtcNow : null,
             JobSkills = request.Skills
                 .Select(skill => new JobSkill
                 {
@@ -93,7 +99,7 @@ public sealed class JobService(
 
         await jobRepository.AddAsync(job, cancellationToken);
         await jobRepository.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Employer {EmployerId} created job {JobId}.", employer.Id, job.Id);
+        logger.LogInformation("Employer {EmployerId} created job {JobId} with status {Status}.", employer.Id, job.Id, actualStatus);
 
         var detail = await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
         if (job.Status == JobStatus.Published)
@@ -135,9 +141,10 @@ public sealed class JobService(
         }
 
         var wasPublished = job.Status == JobStatus.Published;
-        var targetStatus = request.Status ?? job.Status;
-        var reopening = job.Status is JobStatus.Closed or JobStatus.Expired
-            && targetStatus is JobStatus.Draft or JobStatus.Published;
+        var requestedStatus = request.Status ?? job.Status;
+        // Closed/Expired/Rejected jobs hold no quota slot; moving one back into the pipeline takes one.
+        var reopening = job.Status is JobStatus.Closed or JobStatus.Expired or JobStatus.Rejected
+            && requestedStatus is JobStatus.Draft or JobStatus.Published;
         if (reopening)
         {
             var entitlement = await entitlementService.GetForCompanyAsync(
@@ -155,6 +162,20 @@ public sealed class JobService(
             }
         }
 
+        // Only an admin-approved (or already live) job can go Published. Asking to publish anything
+        // else - a Draft, a Rejected job, or reopening a Closed/Expired one - submits it for (re)review,
+        // mirroring CreateAsync.
+        var submittingForApproval = requestedStatus == JobStatus.Published
+            && job.Status is not (JobStatus.Approved or JobStatus.Published);
+        if (submittingForApproval)
+        {
+            requestedStatus = JobStatus.PendingApproval;
+            job.SubmittedForApprovalAt = DateTime.UtcNow;
+            job.ReviewedAt = null;
+            job.ReviewedByAdminId = null;
+            job.RejectionReason = null;
+        }
+
         job.Title = request.Title.Trim();
         job.Description = request.Description.Trim();
         job.SalaryMin = request.SalaryMin;
@@ -163,7 +184,7 @@ public sealed class JobService(
         job.ExperienceRequired = request.ExperienceRequired;
         job.JobType = request.JobType;
         job.ExpiryDate = request.ExpiryDate;
-        job.Status = request.Status ?? job.Status;
+        job.Status = requestedStatus;
 
         var skillsChanged = ReplaceSkills(job, request.Skills);
         ReplaceCategories(job, request.CategoryIds);
@@ -298,6 +319,29 @@ public sealed class JobService(
         return await GetDetailAsync(employer.CompanyProfileId, job.Id, cancellationToken);
     }
 
+    public async Task<ServiceResult<IReadOnlyDictionary<JobStatus, int>>> GetStatusCountsAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var employer = await GetAuthorizedEmployerAsync(userId, cancellationToken);
+        if (employer is null)
+        {
+            return ServiceResult<IReadOnlyDictionary<JobStatus, int>>.Fail(ServiceErrorType.Unauthorized, "Employer membership is not active or the company is not approved.");
+        }
+
+        // One GROUP BY instead of one COUNT round-trip per status.
+        var rows = await dbContext.JobPostings
+            .AsNoTracking()
+            .Where(job => job.CompanyProfileId == employer.CompanyProfileId)
+            .GroupBy(job => job.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+
+        IReadOnlyDictionary<JobStatus, int> counts = Enum.GetValues<JobStatus>()
+            .ToDictionary(status => status, status => rows.FirstOrDefault(row => row.Status == status)?.Count ?? 0);
+        return ServiceResult<IReadOnlyDictionary<JobStatus, int>>.Ok(counts);
+    }
+
     public async Task<ServiceResult<PagedResponse<JobListItemResponse>>> ListAsync(
         string userId,
         JobStatus? status,
@@ -316,11 +360,10 @@ public sealed class JobService(
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var (items, total) = await jobRepository.ListOwnedAsync(employer.CompanyProfileId, status, search, page, pageSize, cancellationToken);
-        var counts = await ApplicationCountsAsync(items.Select(job => job.Id).ToList(), cancellationToken);
 
         return ServiceResult<PagedResponse<JobListItemResponse>>.Ok(new PagedResponse<JobListItemResponse>
         {
-            Items = items.Select(job => ToListItem(job, counts.GetValueOrDefault(job.Id))).ToList(),
+            Items = items,
             TotalCount = total,
             Page = page,
             PageSize = pageSize
@@ -373,7 +416,7 @@ public sealed class JobService(
 
         return ServiceResult<PagedResponse<PublicJobListItemResponse>>.Ok(new PagedResponse<PublicJobListItemResponse>
         {
-            Items = items.Select(ToPublicListItem).ToList(),
+            Items = items,
             TotalCount = total,
             Page = page,
             PageSize = pageSize
@@ -431,6 +474,7 @@ public sealed class JobService(
         IQueryable<int> visibleJobIds = dbContext.JobPostings
             .AsNoTracking()
             .WhereCompanyApproved()
+            .Where(job => job.Company.IsActive)
             .Select(job => job.Id);
 
         var baseQuery = dbContext.SavedJobs
@@ -499,12 +543,8 @@ public sealed class JobService(
         var now = DateTime.UtcNow;
         var isOpen = await dbContext.JobPostings
             .AsNoTracking()
-            .WhereCompanyApproved()
-            .AnyAsync(
-                job => job.Id == jobId
-                    && job.Status == JobStatus.Published
-                    && (job.ExpiryDate == null || job.ExpiryDate > now),
-                cancellationToken)
+            .Where(JobVisibility.OpenToCandidates(now))
+            .AnyAsync(job => job.Id == jobId, cancellationToken)
             .ConfigureAwait(false);
 
         if (!isOpen)
@@ -627,7 +667,9 @@ public sealed class JobService(
             .FirstOrDefaultAsync(
                 employer => employer.UserId == userId
                     && employer.MembershipStatus == MembershipStatus.Active
-                    && employer.Company.Status == CompanyStatus.Approved,
+                    && employer.IsActive
+                    && employer.Company.Status == CompanyStatus.Approved
+                    && employer.Company.IsActive,
                 cancellationToken);
 
     private static void Normalize(CreateJobRequest request)
@@ -794,20 +836,6 @@ public sealed class JobService(
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    private async Task<Dictionary<int, int>> ApplicationCountsAsync(List<int> jobIds, CancellationToken cancellationToken)
-    {
-        if (jobIds.Count == 0)
-        {
-            return new Dictionary<int, int>();
-        }
-
-        return await dbContext.Applications
-            .Where(application => jobIds.Contains(application.JobPostingId))
-            .GroupBy(application => application.JobPostingId)
-            .Select(group => new { JobId = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(row => row.JobId, row => row.Count, cancellationToken);
-    }
-
     private static string JobSlotLimitMessage(EmployerEntitlement entitlement) =>
         $"You have used all {entitlement.ActiveJobCount}/{entitlement.JobQuota} job slots on your plan. Upgrade to post more.";
 
@@ -833,21 +861,10 @@ public sealed class JobService(
             applicationsCount,
             job.CreatedAt,
             job.Company?.Location,
-            job.FeaturedUntil);
-
-    private static PublicJobListItemResponse ToPublicListItem(JobPosting job) =>
-        new(
-            job.Id,
-            job.Title,
-            job.Company?.CompanyName ?? string.Empty,
-            job.Company?.Location,
-            job.SalaryMin,
-            job.SalaryMax,
-            job.JobType,
-            job.ExpiryDate,
-            job.CreatedAt,
-            job.JobSkills.Select(jobSkill => jobSkill.Skill?.Name ?? string.Empty).Where(name => name.Length > 0).ToList(),
-            job.FeaturedUntil);
+            job.FeaturedUntil,
+            job.SubmittedForApprovalAt,
+            job.ReviewedAt,
+            job.RejectionReason);
 
     public async Task<ServiceResult<PagedResponse<SkillMatchJobListItemDto>>> GetJobsMatchingResumeAsync(
         string userId,
@@ -910,10 +927,8 @@ public sealed class JobService(
 
         var query = dbContext.JobPostings
             .AsNoTracking()
-            .Where(job => job.Status == JobStatus.Published
-                && (job.ExpiryDate == null || job.ExpiryDate > now)
-                && job.JobSkills.Any(jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)))
-            .WhereCompanyApproved();
+            .Where(JobVisibility.OpenToCandidates(now))
+            .Where(job => job.JobSkills.Any(jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)));
 
         if (!string.IsNullOrWhiteSpace(city))
         {
@@ -1024,21 +1039,4 @@ public sealed class JobService(
                 PageSize = pageSize
             });
     }
-
-    private static JobListItemResponse ToListItem(JobPosting job, int applicationsCount) =>
-        new(
-            job.Id,
-            job.Title,
-            job.SalaryMin,
-            job.SalaryMax,
-            job.ExperienceRequired,
-            job.JobType,
-            job.ExpiryDate,
-            job.Status,
-            job.Company?.CompanyName ?? string.Empty,
-            job.JobSkills.Count,
-            job.CategoryMappings.Select(mapping => mapping.Category?.Name ?? string.Empty).ToList(),
-            applicationsCount,
-            job.CreatedAt,
-            job.FeaturedUntil);
 }

@@ -77,7 +77,7 @@ public sealed class CompanyService(
         var ownerName = await repository.GetOwnerNameAsync(id, cancellationToken);
         var rating = await dbContext.Reviews
             .AsNoTracking()
-            .Where(review => review.CompanyProfileId == id)
+            .Where(review => review.CompanyProfileId == id && !review.IsDeleted)
             .GroupBy(review => review.CompanyProfileId)
             .Select(group => new
             {
@@ -154,13 +154,15 @@ public sealed class CompanyService(
 
         var companyExists = await dbContext.CompanyProfiles
             .AsNoTracking()
-            .AnyAsync(
-                company => company.Id == companyId && company.Status == CompanyStatus.Approved,
-                cancellationToken)
+            .Where(CompanyVisibility.IsPublic)
+            .AnyAsync(company => company.Id == companyId, cancellationToken)
             .ConfigureAwait(false);
 
         if (!companyExists)
             return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
+
+        if (!await HasAppliedToCompanyAsync(candidate.Id, companyId, cancellationToken).ConfigureAwait(false))
+            return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.Validation, NeverAppliedMessage);
 
         var alreadyReviewed = await dbContext.Reviews
             .AsNoTracking()
@@ -206,6 +208,160 @@ public sealed class CompanyService(
             review.CreatedAt));
     }
 
+    public async Task<ServiceResult> ReportReviewAsync(
+        string? userId,
+        int reviewId,
+        ReportReviewRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return ServiceResult.Fail(ServiceErrorType.Unauthorized, "Sign in to report a review.");
+        if (request is null || !Enum.IsDefined(request.Reason))
+            return ServiceResult.Fail(ServiceErrorType.Validation, "Choose a reason for the report.");
+
+        var details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim();
+        if (details is { Length: > 500 })
+            return ServiceResult.Fail(ServiceErrorType.Validation, "Details must be 500 characters or fewer.");
+        if (request.Reason == ReviewReportReason.Other && details is null)
+            return ServiceResult.Fail(ServiceErrorType.Validation, "Describe the problem when choosing \"Other\".");
+
+        // Only reviews the public can currently see can be reported.
+        var review = await dbContext.Reviews
+            .AsNoTracking()
+            .Where(row => row.Id == reviewId
+                && !row.IsDeleted
+                && row.Company.Status == CompanyStatus.Approved
+                && row.Company.IsActive)
+            .Select(row => new { row.Id, AuthorUserId = row.Candidate.UserId })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (review is null)
+            return ServiceResult.Fail(ServiceErrorType.NotFound, "Review not found.");
+        if (review.AuthorUserId == userId)
+            return ServiceResult.Fail(ServiceErrorType.Validation, "You cannot report your own review.");
+
+        var alreadyReported = await dbContext.ReviewReports
+            .AsNoTracking()
+            .AnyAsync(report => report.ReviewId == reviewId && report.ReporterUserId == userId, cancellationToken)
+            .ConfigureAwait(false);
+        if (alreadyReported)
+            return ServiceResult.Fail(ServiceErrorType.Conflict, "You already reported this review.");
+
+        var report = new ReviewReport
+        {
+            ReviewId = reviewId,
+            ReporterUserId = userId,
+            Reason = request.Reason,
+            Details = details,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime
+        };
+        dbContext.ReviewReports.Add(report);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // Unique (review, reporter) index: a concurrent submit already stored one.
+            dbContext.Entry(report).State = EntityState.Detached;
+            return ServiceResult.Fail(ServiceErrorType.Conflict, "You already reported this review.");
+        }
+
+        logger.LogInformation("User {UserId} reported review {ReviewId} ({Reason}).", userId, reviewId, request.Reason);
+        return ServiceResult.Ok();
+    }
+
+    private const string NeverAppliedMessage =
+        "You can review a company only after applying to one of its jobs.";
+
+    /// <summary>
+    /// Only candidates who applied to one of the company's jobs (any status, withdrawn included)
+    /// may review it, so reviews come from people who actually went through its hiring process.
+    /// </summary>
+    private Task<bool> HasAppliedToCompanyAsync(int candidateId, int companyId, CancellationToken cancellationToken) =>
+        dbContext.Applications
+            .AsNoTracking()
+            .AnyAsync(
+                application => application.CandidateId == candidateId
+                    && application.JobPosting.CompanyProfileId == companyId,
+                cancellationToken);
+
+    public async Task<ServiceResult<ReviewEligibilityDto>> GetReviewEligibilityAsync(
+        string? userId,
+        int companyId,
+        CancellationToken cancellationToken = default)
+    {
+        var mine = await GetMyReviewsAsync(userId, companyId, cancellationToken).ConfigureAwait(false);
+        if (!mine.Success)
+            return ServiceResult<ReviewEligibilityDto>.Fail(mine.ErrorType!.Value, mine.Errors);
+
+        var existing = mine.Data!.FirstOrDefault();
+        if (existing is not null)
+            return ServiceResult<ReviewEligibilityDto>.Ok(
+                new ReviewEligibilityDto(false, "You already reviewed this company.", existing));
+
+        var companyIsPublic = await dbContext.CompanyProfiles
+            .AsNoTracking()
+            .Where(CompanyVisibility.IsPublic)
+            .AnyAsync(company => company.Id == companyId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!companyIsPublic)
+            return ServiceResult<ReviewEligibilityDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
+
+        var candidateId = await dbContext.Candidates
+            .AsNoTracking()
+            .Where(row => row.UserId == userId)
+            .Select(row => row.Id)
+            .FirstAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var hasApplied = await HasAppliedToCompanyAsync(candidateId, companyId, cancellationToken).ConfigureAwait(false);
+
+        return ServiceResult<ReviewEligibilityDto>.Ok(hasApplied
+            ? new ReviewEligibilityDto(true, null, null)
+            : new ReviewEligibilityDto(false, NeverAppliedMessage, null));
+    }
+
+    public async Task<ServiceResult<IReadOnlyList<MyReviewDto>>> GetMyReviewsAsync(
+        string? userId,
+        int? companyId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return ServiceResult<IReadOnlyList<MyReviewDto>>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
+
+        var candidateId = await dbContext.Candidates
+            .AsNoTracking()
+            .Where(row => row.UserId == userId)
+            .Select(row => (int?)row.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (candidateId is null)
+            return ServiceResult<IReadOnlyList<MyReviewDto>>.Fail(ServiceErrorType.NotFound, "Candidate profile not found.");
+
+        // Scoped to the caller's CandidateId: nobody can list another candidate's reviews.
+        var query = dbContext.Reviews
+            .AsNoTracking()
+            .Where(review => review.CandidateId == candidateId.Value);
+        if (companyId.HasValue)
+            query = query.Where(review => review.CompanyProfileId == companyId.Value);
+
+        var reviews = await query
+            .OrderByDescending(review => review.CreatedAt)
+            .ThenByDescending(review => review.Id)
+            .Select(review => new MyReviewDto(
+                review.Id,
+                review.CompanyProfileId,
+                review.Company.CompanyName,
+                review.RatingScore,
+                review.ReviewText,
+                review.CreatedAt,
+                review.IsDeleted))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return ServiceResult<IReadOnlyList<MyReviewDto>>.Ok(reviews);
+    }
+
     private async Task<Dictionary<int, (double Average, int Count)>> LoadRatingsAsync(
         IReadOnlyCollection<int> companyIds,
         CancellationToken cancellationToken)
@@ -217,7 +373,7 @@ public sealed class CompanyService(
 
         var rows = await dbContext.Reviews
             .AsNoTracking()
-            .Where(review => companyIds.Contains(review.CompanyProfileId))
+            .Where(review => companyIds.Contains(review.CompanyProfileId) && !review.IsDeleted)
             .GroupBy(review => review.CompanyProfileId)
             .Select(group => new
             {

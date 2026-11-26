@@ -1,0 +1,302 @@
+@page "/admin/employers"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Admin
+@using hotjob.DTOs.Common
+@using hotjob.Models.Users
+@using hotjob.Services.Admin
+@using hotjob.Services.Common
+@inject IEmployerAdminService EmployerAdminService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Admin employers | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Employer accounts</h1>
+                    <p class="workspace-lede">Approve or reject employers waiting to join a company, and suspend accounts that break the rules.</p>
+                </div>
+            </section>
+
+            <section class="workspace-toolbar" aria-label="Filter employers">
+                <label class="workspace-field">
+                    <span>Membership</span>
+                    <select @bind="statusFilter" @bind:after="ApplyFiltersAsync">
+                        <option value="">All statuses</option>
+                        @foreach (var option in Enum.GetValues<MembershipStatus>())
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </label>
+                <label class="workspace-field">
+                    <span>Search</span>
+                    <input type="search" @bind="searchTerm" @bind:after="ApplyFiltersAsync" placeholder="Name, email or company" />
+                </label>
+            </section>
+
+            @if (actionMessage is not null)
+            {
+                <div class="@(actionSucceeded ? "workspace-notice" : "workspace-alert")" role="@(actionSucceeded ? "status" : "alert")">@actionMessage</div>
+            }
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading employers">
+                    <p class="workspace-sub">Loading employers…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else if (paged is not null)
+            {
+                <section class="workspace-card" aria-labelledby="admin-employers-heading">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2 id="admin-employers-heading">@(statusFilter is null ? "All employers" : $"{statusFilter} employers")</h2>
+                            <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Employer</th>
+                                    <th>Company</th>
+                                    <th>Role</th>
+                                    <th>Membership</th>
+                                    <th>Account</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var employer in paged.Items)
+                                {
+                                    <tr>
+                                        <td>
+                                            <strong>@employer.FullName</strong><br />
+                                            <span class="workspace-sub">@employer.Email</span>
+                                        </td>
+                                        <td>@(employer.CompanyName ?? "-")</td>
+                                        <td>@(employer.IsOwner ? "Owner" : employer.Position ?? "Member")</td>
+                                        <td><span class="workspace-badge is-@(MembershipClass(employer.MembershipStatus))">@employer.MembershipStatus</span></td>
+                                        <td>
+                                            @if (employer.IsActive)
+                                            {
+                                                <span class="workspace-badge is-success">Active</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="workspace-badge is-muted">Deactivated</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="workspace-toolbar-actions">
+                                                @if (employer.MembershipStatus == nameof(MembershipStatus.Pending))
+                                                {
+                                                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" disabled="@busy" @onclick="() => ApproveAsync(employer.Id)">Approve</button>
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginReason(employer.Id, ReasonMode.Reject)">Reject</button>
+                                                }
+                                                @if (employer.IsActive)
+                                                {
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginReason(employer.Id, ReasonMode.Deactivate)">Deactivate</button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => ReactivateAsync(employer.Id)">Reactivate</button>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    @if (reasonFor == employer.Id)
+                                    {
+                                        <tr>
+                                            <td colspan="6">
+                                                <div class="admin-reject-form">
+                                                    <label class="workspace-field">
+                                                        <span>@(reasonMode == ReasonMode.Reject ? "Rejection reason (required)" : "Deactivation reason (optional)")</span>
+                                                        <textarea @bind="reason" maxlength="500" rows="2"></textarea>
+                                                    </label>
+                                                    @if (reasonError is not null)
+                                                    {
+                                                        <div class="workspace-alert" role="alert">@reasonError</div>
+                                                    }
+                                                    <div class="workspace-toolbar-actions">
+                                                        <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => ConfirmReasonAsync(employer.Id)">
+                                                            @(reasonMode == ReasonMode.Reject ? "Confirm rejection" : "Confirm deactivation")
+                                                        </button>
+                                                        <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="CancelReason">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (paged.TotalPages > 1)
+                    {
+                        <nav class="jobs-pager" aria-label="Employer pages">
+                            <button type="button" class="page-btn" disabled="@(paged.Page <= 1)" @onclick="() => LoadAsync(paged.Page - 1)">← Prev</button>
+                            <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount employers</span>
+                            <button type="button" class="page-btn" disabled="@(paged.Page >= paged.TotalPages)" @onclick="() => LoadAsync(paged.Page + 1)">Next →</button>
+                        </nav>
+                    }
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private enum ReasonMode { Reject, Deactivate }
+
+    private const int PageSize = 20;
+
+    private PagedResponse<EmployerListItemDto>? paged;
+    private int page = 1;
+    private MembershipStatus? statusFilter;
+    private string? searchTerm;
+    private bool isLoading = true;
+    private bool busy;
+    private string? errorMessage;
+    private string? actionMessage;
+    private bool actionSucceeded;
+    private int? reasonFor;
+    private ReasonMode reasonMode;
+    private string? reason;
+    private string? reasonError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private Task ApplyFiltersAsync() => LoadAsync(1);
+
+    private async Task LoadAsync(int? requestedPage = null)
+    {
+        page = requestedPage ?? page;
+        try
+        {
+            var result = await EmployerAdminService.ListAsync(page, PageSize, searchTerm, statusFilter);
+            if (!result.Success || result.Data is null)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            errorMessage = null;
+            paged = result.Data;
+            if (paged.TotalCount > 0 && page > paged.TotalPages)
+            {
+                await LoadAsync(paged.TotalPages);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private Task ApproveAsync(int employerId) =>
+        RunAsync(adminId => EmployerAdminService.ApproveAsync(employerId, adminId), "Employer approved.");
+
+    private Task ReactivateAsync(int employerId) =>
+        RunAsync(adminId => EmployerAdminService.ReactivateAsync(employerId, adminId), "Employer reactivated.");
+
+    private void BeginReason(int employerId, ReasonMode mode)
+    {
+        reasonFor = employerId;
+        reasonMode = mode;
+        reason = null;
+        reasonError = null;
+    }
+
+    private void CancelReason()
+    {
+        reasonFor = null;
+        reason = null;
+        reasonError = null;
+    }
+
+    private async Task ConfirmReasonAsync(int employerId)
+    {
+        var text = reason?.Trim();
+        if (reasonMode == ReasonMode.Reject && string.IsNullOrWhiteSpace(text))
+        {
+            reasonError = "Enter a rejection reason.";
+            return;
+        }
+
+        var failure = reasonMode == ReasonMode.Reject
+            ? await RunAsync(adminId => EmployerAdminService.RejectAsync(employerId, adminId, text!), "Employer rejected.")
+            : await RunAsync(adminId => EmployerAdminService.DeactivateAsync(employerId, adminId, text), "Employer deactivated. They can no longer manage jobs or applicants.");
+        if (failure is null)
+        {
+            CancelReason();
+        }
+        else
+        {
+            reasonError = failure;
+        }
+    }
+
+    /// <summary>Runs an admin write as the signed-in admin, then reloads. Returns the error, if any.</summary>
+    private async Task<string?> RunAsync(Func<string, Task<ServiceResult>> write, string successMessage)
+    {
+        busy = true;
+        actionMessage = null;
+        actionSucceeded = false;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var adminId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+            if (string.IsNullOrWhiteSpace(adminId))
+            {
+                return actionMessage = "Sign in as an administrator to manage employers.";
+            }
+
+            var result = await write(adminId);
+            if (!result.Success)
+            {
+                return actionMessage = string.Join("; ", result.Errors);
+            }
+
+            actionSucceeded = true;
+            actionMessage = successMessage;
+            await LoadAsync();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return actionMessage = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private static string MembershipClass(string status) => status switch
+    {
+        nameof(MembershipStatus.Pending) => "pending",
+        nameof(MembershipStatus.Active) => "active",
+        nameof(MembershipStatus.Rejected) => "rejected",
+        _ => "muted"
+    };
+}

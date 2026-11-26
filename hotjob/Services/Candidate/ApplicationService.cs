@@ -83,12 +83,14 @@ public sealed class ApplicationService(
                 row.Status,
                 row.ExpiryDate,
                 row.CompanyProfileId,
-                row.Title
+                row.Title,
+                // Same company rule as JobVisibility.OpenToCandidates: approved and not deactivated.
+                CompanyOpen = row.Company.Status == CompanyStatus.Approved && row.Company.IsActive
             })
             .FirstOrDefaultAsync(cancellationToken);
         if (job is null)
             return ServiceResult<ApplyResultDto>.Fail(ServiceErrorType.NotFound, "Job not found.");
-        if (job.Status != JobStatus.Published)
+        if (job.Status != JobStatus.Published || !job.CompanyOpen)
         {
             return ServiceResult<ApplyResultDto>.Fail(
                 ServiceErrorType.Conflict, "This job is not accepting applications.");

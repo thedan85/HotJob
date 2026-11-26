@@ -23,7 +23,9 @@ public sealed class EntitlementService(ApplicationDbContext dbContext, TimeProvi
             .FirstOrDefaultAsync(
                 member => member.UserId == userId
                     && member.MembershipStatus == MembershipStatus.Active
-                    && member.Company.Status == CompanyStatus.Approved,
+                    && member.IsActive
+                    && member.Company.Status == CompanyStatus.Approved
+                    && member.Company.IsActive,
                 cancellationToken);
 
         return employer is null
@@ -64,11 +66,16 @@ public sealed class EntitlementService(ApplicationDbContext dbContext, TimeProvi
         // scratch database has not been seeded yet.
         plan ??= new Plan { Code = Plan.FreeCode, Name = "Free", JobQuota = 1, DurationDays = 0 };
 
+        // Every job that is live or on its way to going live holds a slot, so submitting many
+        // postings for approval cannot bypass the plan quota. Rejected/Closed/Expired free it.
         var activeJobs = await dbContext.JobPostings
             .AsNoTracking()
             .CountAsync(
                 job => job.CompanyProfileId == companyProfileId
-                    && (job.Status == JobStatus.Draft || job.Status == JobStatus.Published),
+                    && (job.Status == JobStatus.Draft
+                        || job.Status == JobStatus.PendingApproval
+                        || job.Status == JobStatus.Approved
+                        || job.Status == JobStatus.Published),
                 cancellationToken);
 
         return new EmployerEntitlement(

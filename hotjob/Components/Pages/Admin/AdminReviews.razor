@@ -1,0 +1,334 @@
+@page "/admin/reviews"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Admin
+@using hotjob.DTOs.Common
+@using hotjob.Services.Admin
+@using hotjob.Services.Common
+@inject IReviewAdminService ReviewAdminService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Admin reviews | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Review moderation</h1>
+                    <p class="workspace-lede">Work through reported reviews: hide the ones that break the rules, or dismiss the reports and keep the review public.</p>
+                </div>
+            </section>
+
+            <section class="workspace-toolbar" aria-label="Filter reviews">
+                <label class="workspace-field">
+                    <span>Show</span>
+                    <select @bind="view" @bind:after="ApplyFiltersAsync">
+                        <option value="@View.Reported">Reported (needs a decision)</option>
+                        <option value="@View.Visible">Visible</option>
+                        <option value="@View.Hidden">Hidden</option>
+                        <option value="@View.All">All reviews</option>
+                    </select>
+                </label>
+            </section>
+
+            @if (actionMessage is not null)
+            {
+                <div class="@(actionSucceeded ? "workspace-notice" : "workspace-alert")" role="@(actionSucceeded ? "status" : "alert")">@actionMessage</div>
+            }
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading reviews">
+                    <p class="workspace-sub">Loading reviews…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else if (paged is not null)
+            {
+                <section class="workspace-card" aria-labelledby="admin-reviews-heading">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2 id="admin-reviews-heading">@ViewTitle</h2>
+                            <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
+                        </div>
+                    </div>
+                    @if (paged.TotalCount == 0)
+                    {
+                        <p class="workspace-sub">@(view == View.Reported ? "No reports are waiting. Nice work." : "No reviews match this filter.")</p>
+                    }
+                    else
+                    {
+                        <div style="overflow-x:auto">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Company</th>
+                                        <th>Author</th>
+                                        <th>Rating</th>
+                                        <th>Review</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var review in paged.Items)
+                                    {
+                                        <tr>
+                                            <td>@review.CompanyName</td>
+                                            <td>@review.CandidateName</td>
+                                            <td>@review.RatingScore / 5</td>
+                                            <td>@(string.IsNullOrWhiteSpace(review.ReviewText) ? "-" : Truncate(review.ReviewText, 140))</td>
+                                            <td>
+                                                @if (review.IsDeleted)
+                                                {
+                                                    <span class="workspace-badge is-muted">Hidden</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="workspace-badge is-success">Visible</span>
+                                                }
+                                                @if (review.PendingReportCount > 0)
+                                                {
+                                                    <span class="workspace-badge is-danger">@review.PendingReportCount report@(review.PendingReportCount == 1 ? "" : "s")</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="workspace-toolbar-actions">
+                                                    <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => ToggleReportsAsync(review.Id)">
+                                                        @(expandedId == review.Id ? "Close" : "Reports")
+                                                    </button>
+                                                    @if (!review.IsDeleted)
+                                                    {
+                                                        <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginDecision(review.Id, Decision.Hide)">Hide</button>
+                                                    }
+                                                    @if (review.PendingReportCount > 0 && !review.IsDeleted)
+                                                    {
+                                                        <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginDecision(review.Id, Decision.Dismiss)">Dismiss reports</button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        @if (decisionFor == review.Id)
+                                        {
+                                            <tr>
+                                                <td colspan="6">
+                                                    <div class="admin-reject-form">
+                                                        <label class="workspace-field">
+                                                            <span>@(decision == Decision.Hide ? "Reason for hiding (optional, shown to moderators)" : "Note on why the review stays (optional)")</span>
+                                                            <textarea @bind="note" maxlength="500" rows="2"></textarea>
+                                                        </label>
+                                                        <div class="workspace-toolbar-actions">
+                                                            <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => ConfirmDecisionAsync(review.Id)">
+                                                                @(decision == Decision.Hide ? "Hide review" : "Dismiss reports")
+                                                            </button>
+                                                            <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => decisionFor = null">Cancel</button>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                        @if (expandedId == review.Id)
+                                        {
+                                            <tr>
+                                                <td colspan="6">
+                                                    @if (reports is null)
+                                                    {
+                                                        <p class="workspace-sub">Loading reports…</p>
+                                                    }
+                                                    else if (reports.Count == 0)
+                                                    {
+                                                        <p class="workspace-sub">Nobody has reported this review.</p>
+                                                    }
+                                                    else
+                                                    {
+                                                        <ul class="review-list">
+                                                            @foreach (var report in reports)
+                                                            {
+                                                                <li class="review-card">
+                                                                    <p class="review-author">@report.Reason · <span class="workspace-badge is-@(report.Status.ToLowerInvariant() == "pending" ? "pending" : "muted")">@report.Status</span></p>
+                                                                    <p class="review-date">@report.ReporterEmail · @report.CreatedAt.ToString("dd MMM yyyy HH:mm")</p>
+                                                                    @if (!string.IsNullOrWhiteSpace(report.Details))
+                                                                    {
+                                                                        <p class="review-text">@report.Details</p>
+                                                                    }
+                                                                    @if (!string.IsNullOrWhiteSpace(report.ResolutionNote))
+                                                                    {
+                                                                        <p class="workspace-sub">Moderator note: @report.ResolutionNote</p>
+                                                                    }
+                                                                </li>
+                                                            }
+                                                        </ul>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    @if (paged.TotalPages > 1)
+                    {
+                        <nav class="jobs-pager" aria-label="Review pages">
+                            <button type="button" class="page-btn" disabled="@(paged.Page <= 1)" @onclick="() => LoadAsync(paged.Page - 1)">← Prev</button>
+                            <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount reviews</span>
+                            <button type="button" class="page-btn" disabled="@(paged.Page >= paged.TotalPages)" @onclick="() => LoadAsync(paged.Page + 1)">Next →</button>
+                        </nav>
+                    }
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private enum View { Reported, Visible, Hidden, All }
+
+    private enum Decision { Hide, Dismiss }
+
+    private const int PageSize = 20;
+
+    private PagedResponse<ReviewListItemDto>? paged;
+    private IReadOnlyList<ReviewReportDto>? reports;
+    private int page = 1;
+    private View view = View.Reported;
+    private bool isLoading = true;
+    private bool busy;
+    private string? errorMessage;
+    private string? actionMessage;
+    private bool actionSucceeded;
+    private int? expandedId;
+    private int? decisionFor;
+    private Decision decision;
+    private string? note;
+
+    private string ViewTitle => view switch
+    {
+        View.Reported => "Report queue",
+        View.Visible => "Visible reviews",
+        View.Hidden => "Hidden reviews",
+        _ => "All reviews"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private Task ApplyFiltersAsync()
+    {
+        expandedId = null;
+        decisionFor = null;
+        return LoadAsync(1);
+    }
+
+    private async Task LoadAsync(int? requestedPage = null)
+    {
+        page = requestedPage ?? page;
+        try
+        {
+            bool? isDeleted = view switch { View.Visible => false, View.Hidden => true, _ => null };
+            var result = await ReviewAdminService.ListAsync(page, PageSize, isDeleted, null, view == View.Reported);
+            if (!result.Success || result.Data is null)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            errorMessage = null;
+            paged = result.Data;
+            if (paged.TotalCount > 0 && page > paged.TotalPages)
+            {
+                await LoadAsync(paged.TotalPages);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleReportsAsync(int reviewId)
+    {
+        if (expandedId == reviewId)
+        {
+            expandedId = null;
+            return;
+        }
+
+        expandedId = reviewId;
+        reports = null;
+        var result = await ReviewAdminService.GetReportsAsync(reviewId);
+        reports = result.Success ? result.Data : [];
+        if (!result.Success)
+        {
+            actionSucceeded = false;
+            actionMessage = string.Join("; ", result.Errors);
+        }
+    }
+
+    private void BeginDecision(int reviewId, Decision kind)
+    {
+        decisionFor = reviewId;
+        decision = kind;
+        note = null;
+    }
+
+    private async Task ConfirmDecisionAsync(int reviewId)
+    {
+        busy = true;
+        actionMessage = null;
+        actionSucceeded = false;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var adminId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+            if (string.IsNullOrWhiteSpace(adminId))
+            {
+                actionMessage = "Sign in as an administrator to moderate reviews.";
+                return;
+            }
+
+            var text = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+            var result = decision == Decision.Hide
+                ? await ReviewAdminService.DeleteAsync(reviewId, adminId, text)
+                : await ReviewAdminService.DismissReportsAsync(reviewId, adminId, text);
+            if (!result.Success)
+            {
+                actionMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            actionSucceeded = true;
+            actionMessage = decision == Decision.Hide
+                ? "Review hidden. Its reports were closed as upheld."
+                : "Reports dismissed. The review stays public.";
+            decisionFor = null;
+            expandedId = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            actionMessage = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private static string Truncate(string text, int max) =>
+        text.Length <= max ? text : text[..max] + "…";
+}

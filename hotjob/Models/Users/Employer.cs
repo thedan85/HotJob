@@ -32,6 +32,20 @@ public class Employer
 
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Soft delete flag. Deactivated employers cannot access the system.</summary>
+    public bool IsActive { get; set; } = true;
+
+    /// <summary>When this employer was deactivated by admin.</summary>
+    public DateTime? DeactivatedAt { get; set; }
+
+    /// <summary>Admin who deactivated this employer account.</summary>
+    [MaxLength(255)]
+    public string? DeactivatedByAdminId { get; set; }
+
+    /// <summary>Reason for deactivation.</summary>
+    [MaxLength(500)]
+    public string? DeactivationReason { get; set; }
+
     /// <summary>Identity user owning this profile.</summary>
     public ApplicationUser User { get; set; } = default!;
 

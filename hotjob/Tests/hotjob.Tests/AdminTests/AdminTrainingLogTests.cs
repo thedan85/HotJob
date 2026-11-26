@@ -31,7 +31,7 @@ public sealed class AdminTrainingLogTests
             });
         await fx.Db.SaveChangesAsync();
 
-        var service = new AdminService(fx.Db, fx.UserManager, fx.RoleManager);
+        var service = fx.CreateAdminService();
         var result = await service.GetTrainingLogsAsync();
 
         Assert.True(result.Success);

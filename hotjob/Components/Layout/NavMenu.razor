@@ -56,6 +56,7 @@
                     </NavLink>
                     <NavLink class="nav-link" href="recommended-jobs">Recommended</NavLink>
                     <NavLink class="nav-link" href="saved-jobs">Saved jobs</NavLink>
+                    <NavLink class="nav-link" href="my-reviews">My reviews</NavLink>
                     <NavLink class="nav-link" href="job-alerts">Alerts</NavLink>
                     <NavLink class="nav-link" href="premium">Premium</NavLink>
                 </Authorized>
@@ -63,10 +64,13 @@
             <AuthorizeView Roles="Admin">
                 <Authorized>
                     <span class="nav-group-label">Admin</span>
-                    <NavLink class="nav-link nav-link-employer" href="admin">Dashboard</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin" Match="NavLinkMatch.All">Dashboard</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="admin/accounts">Accounts</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="admin/companies">Companies</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/employers">Employers</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="admin/jobs">Jobs</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/reviews">Reviews</NavLink>
+                    <NavLink class="nav-link nav-link-employer" href="admin/audit-logs">Audit log</NavLink>
                     <NavLink class="nav-link nav-link-employer" href="admin/model">ML model</NavLink>
                 </Authorized>
             </AuthorizeView>

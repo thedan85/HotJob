@@ -12,10 +12,9 @@ node_modules/
 AGENTS.md
 hotjob/Tests/AGENTS.md
 
-.dll
+*.dll
 hotjob/appsettings.json
 Directory.Build.props
-
 
 # Candidate CV uploads are runtime data
 hotjob/wwwroot/uploads/

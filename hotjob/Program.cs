@@ -91,6 +91,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddAuthorization();
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<SeedOptions>(
     builder.Configuration.GetSection(SeedOptions.SectionName));
 builder.Services.AddOptions<JwtOptions>()
@@ -154,6 +155,10 @@ builder.Services.AddAuthentication(options =>
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = hotjob.Services.Authentication.ActiveAccountTokenValidation.RejectInactiveAccountAsync
+        };
     });
 
 // Optional: password/JWT auth still works when Google credentials are absent.
@@ -212,9 +217,12 @@ builder.Services.AddScoped<AuthSession>();
 builder.Services.AddScoped<HotJobAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(services =>
     services.GetRequiredService<HotJobAuthStateProvider>());
+builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler,
+    AccountStatusCircuitHandler>();
 builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
 builder.Services.AddScoped<hotjob.Services.Employer.ICandidateSearchService, hotjob.Services.Employer.CandidateSearchService>();
 builder.Services.AddScoped<hotjob.Services.Admin.IAdminService, hotjob.Services.Admin.AdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IAdminAuditService, hotjob.Services.Admin.AdminAuditService>();
 builder.Services.AddScoped<IVnPayService, VnPayService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<IEntitlementService, EntitlementService>();
@@ -226,6 +234,11 @@ builder.Services.AddSingleton<IMatchModelStore>(services => new MatchModelStore(
 builder.Services.AddScoped<IMatchScoreService, MatchScoreService>();
 builder.Services.AddScoped<ISyntheticMatchTrainingService, SyntheticMatchTrainingService>();
 builder.Services.AddScoped<IJobAlertService, JobAlertService>();
+builder.Services.AddScoped<hotjob.Services.Employer.IReviewService, hotjob.Services.Employer.ReviewService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IEmployerAdminService, hotjob.Services.Admin.EmployerAdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.ICompanyAdminService, hotjob.Services.Admin.CompanyAdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IJobAdminService, hotjob.Services.Admin.JobAdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IReviewAdminService, hotjob.Services.Admin.ReviewAdminService>();
 
 var app = builder.Build();
 

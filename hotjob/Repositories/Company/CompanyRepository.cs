@@ -24,7 +24,7 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
 
         var query = dbContext.CompanyProfiles
             .AsNoTracking()
-            .Where(company => company.Status == CompanyStatus.Approved);
+            .Where(CompanyVisibility.IsPublic);
 
         if (term is not null)
             query = query.Where(company => company.CompanyName.ToLower().Contains(term));
@@ -51,16 +51,21 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
     {
         var industries = await dbContext.CompanyProfiles
             .AsNoTracking()
-            .Where(company => company.Status == CompanyStatus.Approved && company.Industry != null)
+            .Where(CompanyVisibility.IsPublic)
+            .Where(company => company.Industry != null)
             .Select(company => company.Industry!)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
         var locations = await dbContext.CompanyProfiles
             .AsNoTracking()
-            .Where(company => company.Status == CompanyStatus.Approved && company.Location != null)
+            .Where(CompanyVisibility.IsPublic)
+            .Where(company => company.Location != null)
             .Select(company => company.Location!)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
+        // DB Distinct trims the payload; Dedupe still folds case/whitespace variants.
         return (Dedupe(industries), Dedupe(locations));
     }
 
@@ -69,9 +74,8 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
         CancellationToken cancellationToken = default) =>
         dbContext.CompanyProfiles
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                company => company.Id == id && company.Status == CompanyStatus.Approved,
-                cancellationToken);
+            .Where(CompanyVisibility.IsPublic)
+            .FirstOrDefaultAsync(company => company.Id == id, cancellationToken);
 
     public Task<string?> GetOwnerNameAsync(
         int companyId,
@@ -84,7 +88,7 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
             .Select(employer => employer.FullName)
             .FirstOrDefaultAsync(cancellationToken);
 
-    public async Task<(IReadOnlyList<Review> Items, int TotalCount)> ListReviewsAsync(
+    public async Task<(IReadOnlyList<hotjob.Models.Review> Items, int TotalCount)> ListReviewsAsync(
         int companyId,
         int page,
         int pageSize,
@@ -96,7 +100,10 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
         var query = dbContext.Reviews
             .AsNoTracking()
             .Include(review => review.Candidate)
-            .Where(review => review.CompanyProfileId == companyId);
+            .Where(review => review.CompanyProfileId == companyId
+                && !review.IsDeleted
+                && review.Company.Status == CompanyStatus.Approved
+                && review.Company.IsActive);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query

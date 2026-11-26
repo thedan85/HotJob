@@ -24,7 +24,7 @@ public interface ICompanyRepository
         int companyId,
         CancellationToken cancellationToken = default);
 
-    Task<(IReadOnlyList<Review> Items, int TotalCount)> ListReviewsAsync(
+    Task<(IReadOnlyList<hotjob.Models.Review> Items, int TotalCount)> ListReviewsAsync(
         int companyId,
         int page,
         int pageSize,

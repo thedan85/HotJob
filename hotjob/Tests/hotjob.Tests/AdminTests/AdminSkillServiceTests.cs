@@ -7,6 +7,7 @@ using hotjob.Models.Users;
 using hotjob.Services.Admin;
 using hotjob.Services.Common;
 using hotjob.Tests.Support;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -14,8 +15,11 @@ namespace hotjob.Tests.AdminTests;
 
 public sealed class AdminSkillServiceTests
 {
-    private static AdminService CreateService(TestFixture fx) =>
-        new(fx.Db, fx.UserManager, fx.RoleManager);
+    private static AdminService CreateService(TestFixture fx)
+    {
+        fx.SignInAdmin("admin-1", "admin@example.com");
+        return fx.CreateAdminService();
+    }
 
     private static async Task<Skill> SeedSkillAsync(
         TestFixture fx,
@@ -296,7 +300,7 @@ public sealed class AdminSkillServiceTests
             ? new DbUpdateConcurrencyException("The row changed concurrently.")
             : new DbUpdateException("Storage unavailable.", new IOException("Disk failure."));
         await using var db = CreateInterceptedDb(fx, () => throw failure);
-        var service = new AdminService(db, fx.UserManager, fx.RoleManager);
+        var service = fx.CreateAdminService(db);
 
         var thrown = await Record.ExceptionAsync(() => WriteSkillAsync(service, operation, skill.Id));
 
@@ -310,11 +314,11 @@ public sealed class AdminSkillServiceTests
     {
         await using var fx = await TestFixture.CreateAsync();
         var skill = await SeedSkillAsync(fx, "Existing");
-        await using var db = CreateInterceptedDb(fx, async () =>
+        await using var db = CreateBeforeTransactionDb(fx, async () =>
         {
             await SeedSkillAsync(fx, "Rust");
         });
-        var service = new AdminService(db, fx.UserManager, fx.RoleManager);
+        var service = fx.CreateAdminService(db);
 
         var result = await WriteSkillAsync(service, operation, skill.Id);
 
@@ -322,6 +326,7 @@ public sealed class AdminSkillServiceTests
         Assert.Equal(ServiceErrorType.Conflict, result.ErrorType);
         Assert.Equal(1, await fx.Db.Skills.CountAsync(row => row.Name == "Rust"));
         Assert.Equal("Existing", (await fx.Db.Skills.AsNoTracking().SingleAsync(row => row.Id == skill.Id)).Name);
+        Assert.Empty(await fx.Db.AdminAuditLogs.AsNoTracking().ToListAsync());
     }
 
     [Theory]
@@ -334,7 +339,7 @@ public sealed class AdminSkillServiceTests
         var (_, resume) = await MatchTestData.CreateCandidateAsync(fx, "race@example.com");
         var company = await MatchTestData.CreateCompanyAsync(fx);
         var job = await MatchTestData.CreateJobAsync(fx, company.Id, []);
-        await using var db = CreateInterceptedDb(fx, async () =>
+        await using var db = CreateBeforeTransactionDb(fx, async () =>
         {
             if (link == "resume")
                 fx.Db.ResumeSkills.Add(new ResumeSkill { ResumeId = resume.Id, SkillId = skill.Id });
@@ -342,7 +347,7 @@ public sealed class AdminSkillServiceTests
                 fx.Db.JobSkills.Add(new JobSkill { JobPostingId = job.Id, SkillId = skill.Id });
             await fx.Db.SaveChangesAsync();
         });
-        var service = new AdminService(db, fx.UserManager, fx.RoleManager);
+        var service = fx.CreateAdminService(db);
 
         var result = await service.DeleteSkillAsync(skill.Id);
 
@@ -351,6 +356,7 @@ public sealed class AdminSkillServiceTests
         Assert.True(await fx.Db.Skills.AsNoTracking().AnyAsync(row => row.Id == skill.Id));
         Assert.Equal(link == "resume" ? 1 : 0, await fx.Db.ResumeSkills.CountAsync());
         Assert.Equal(link == "job" ? 1 : 0, await fx.Db.JobSkills.CountAsync());
+        Assert.Empty(await fx.Db.AdminAuditLogs.AsNoTracking().ToListAsync());
     }
 
     private static ApplicationDbContext CreateInterceptedDb(TestFixture fx, Func<Task> beforeSave) =>
@@ -358,6 +364,23 @@ public sealed class AdminSkillServiceTests
             .UseSqlite(fx.Connection)
             .AddInterceptors(new BeforeSaveInterceptor(beforeSave))
             .Options);
+
+    private static ApplicationDbContext CreateBeforeTransactionDb(TestFixture fx, Func<Task> beforeTransaction) =>
+        new(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlite(fx.Connection)
+            .AddInterceptors(new BeforeTransactionInterceptor(beforeTransaction))
+            .Options);
+
+    private sealed class BeforeTransactionInterceptor(Func<Task> beforeTransaction) : DbTransactionInterceptor
+    {
+        public override async ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(
+            DbConnection connection, TransactionStartingEventData eventData,
+            InterceptionResult<DbTransaction> result, CancellationToken cancellationToken = default)
+        {
+            await beforeTransaction();
+            return result;
+        }
+    }
 
     private static async Task<ServiceResult> WriteSkillAsync(AdminService service, string operation, int skillId) =>
         operation switch

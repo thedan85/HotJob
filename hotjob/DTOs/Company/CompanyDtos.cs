@@ -41,6 +41,32 @@ public sealed record CompanyReviewDto(
     string ReviewerName,
     DateTime CreatedAt);
 
+/// <summary>A review as its author sees it, including whether a moderator hid it.</summary>
+public sealed record MyReviewDto(
+    int Id,
+    int CompanyId,
+    string CompanyName,
+    int RatingScore,
+    string? ReviewText,
+    DateTime CreatedAt,
+    bool IsHidden);
+
+/// <summary>A signed-in user's report that a review breaks the rules.</summary>
+public sealed class ReportReviewRequest
+{
+    [EnumDataType(typeof(hotjob.Models.ReviewReportReason))]
+    public hotjob.Models.ReviewReportReason Reason { get; set; } = hotjob.Models.ReviewReportReason.Other;
+
+    [MaxLength(500)]
+    public string? Details { get; set; }
+}
+
+/// <summary>Whether the caller may review a company, and why not when they may not.</summary>
+public sealed record ReviewEligibilityDto(
+    bool CanReview,
+    string? Reason,
+    MyReviewDto? ExistingReview);
+
 public sealed record CompanyFilterOptionsDto(
     IReadOnlyList<string> Industries,
     IReadOnlyList<string> Locations);

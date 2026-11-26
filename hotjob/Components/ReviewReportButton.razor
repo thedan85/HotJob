@@ -1,0 +1,120 @@
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Company
+@using hotjob.Models
+@using hotjob.Services.Authentication
+@using hotjob.Services.Company
+@inject ICompanyService CompanyService
+@inject HotJobAuthStateProvider AuthStateProvider
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
+@inject IJSRuntime JS
+
+@* Interactive island on the statically rendered company page: lets a signed-in user report one review. *@
+<AuthorizeView>
+    <Authorized>
+        @if (sent)
+        {
+            <p class="workspace-sub" role="status">Thanks — a moderator will look at this review.</p>
+        }
+        else if (!isOpen)
+        {
+            <button type="button" class="workspace-btn workspace-btn-ghost workspace-btn-small" @onclick="Open">Report</button>
+        }
+        else
+        {
+            <div class="admin-reject-form" role="group" aria-label="Report this review">
+                <label class="workspace-field">
+                    <span>Reason</span>
+                    <select @bind="form.Reason">
+                        <option value="@ReviewReportReason.Spam">Spam or advertising</option>
+                        <option value="@ReviewReportReason.Offensive">Offensive or abusive</option>
+                        <option value="@ReviewReportReason.FalseInformation">False information</option>
+                        <option value="@ReviewReportReason.PersonalData">Shares someone's personal data</option>
+                        <option value="@ReviewReportReason.Other">Other</option>
+                    </select>
+                </label>
+                <label class="workspace-field">
+                    <span>Details @(form.Reason == ReviewReportReason.Other ? "(required)" : "(optional)")</span>
+                    <textarea @bind="form.Details" maxlength="500" rows="2"></textarea>
+                </label>
+                @if (error is not null)
+                {
+                    <div class="workspace-alert" role="alert">@error</div>
+                }
+                <div class="workspace-toolbar-actions">
+                    <button type="button" class="workspace-btn workspace-btn-danger workspace-btn-small" disabled="@busy" @onclick="SubmitAsync">
+                        @(busy ? "Sending…" : "Send report")
+                    </button>
+                    <button type="button" class="workspace-btn workspace-btn-ghost workspace-btn-small" disabled="@busy" @onclick="() => isOpen = false">Cancel</button>
+                </div>
+            </div>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    [Parameter, EditorRequired]
+    public int ReviewId { get; set; }
+
+    private ReportReviewRequest form = new();
+    private bool isOpen;
+    private bool busy;
+    private bool sent;
+    private string? error;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || AuthSession.IsAuthenticated) return;
+
+        // A fresh circuit on a statically rendered page starts signed out; restore it like JobDetail does.
+        try
+        {
+            var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
+            if (result.Ok && result.Data is not null && !AuthSession.IsAuthenticated)
+            {
+                AuthStateProvider.SignIn(result.ToTokens());
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            // JS interop unavailable during prerender; guests simply see no Report button.
+        }
+    }
+
+    private void Open()
+    {
+        form = new ReportReviewRequest();
+        error = null;
+        isOpen = true;
+    }
+
+    private async Task SubmitAsync()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+            var result = await CompanyService.ReportReviewAsync(userId, ReviewId, form);
+            if (result.Success)
+            {
+                sent = true;
+                isOpen = false;
+            }
+            else
+            {
+                error = string.Join(" ", result.Errors);
+            }
+        }
+        catch (Exception exception)
+        {
+            error = exception.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

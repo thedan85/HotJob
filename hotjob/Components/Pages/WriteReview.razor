@@ -33,6 +33,33 @@
                     <p class="workspace-sub" role="status">Loading company…</p>
                 </section>
             }
+            else if (eligibility is { CanReview: false, ExistingReview: null })
+            {
+                <section class="workspace-card" aria-label="Not eligible to review">
+                    <h2>You can't review this company yet</h2>
+                    <p class="workspace-sub">@eligibility.Reason</p>
+                    <a class="workspace-btn workspace-btn-secondary" href="/it-jobs?companyId=@Id">See this company's jobs</a>
+                </section>
+            }
+            else if (existingReview is not null)
+            {
+                <section class="workspace-card" aria-label="Your existing review">
+                    <h2>You already reviewed this company</h2>
+                    <p class="workspace-sub">
+                        Each candidate can review a company once. You rated it @existingReview.RatingScore / 5
+                        on @existingReview.CreatedAt.ToString("dd MMM yyyy").
+                        @if (existingReview.IsHidden)
+                        {
+                            <span> A moderator has hidden this review, so it is not public.</span>
+                        }
+                    </p>
+                    @if (!string.IsNullOrWhiteSpace(existingReview.ReviewText))
+                    {
+                        <p class="review-text">@existingReview.ReviewText</p>
+                    }
+                    <a class="workspace-btn workspace-btn-secondary" href="/my-reviews">See all my reviews</a>
+                </section>
+            }
             else
             {
                 <section class="workspace-card">
@@ -77,6 +104,8 @@
     public int Id { get; set; }
 
     private CompanyDetailDto? company;
+    private MyReviewDto? existingReview;
+    private ReviewEligibilityDto? eligibility;
     private CreateReviewRequest form = new();
     private bool isLoading = true;
     private bool isSubmitting;
@@ -96,6 +125,15 @@
         if (result.Success && result.Data is not null)
         {
             company = result.Data;
+
+            // Explain up front (already reviewed / never applied) instead of failing only after submit.
+            var userId = await GetUserIdAsync();
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                var check = await CompanyService.GetReviewEligibilityAsync(userId, Id);
+                eligibility = check.Success ? check.Data : null;
+                existingReview = eligibility?.ExistingReview;
+            }
         }
         else
         {
