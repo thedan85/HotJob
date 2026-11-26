@@ -108,6 +108,14 @@ internal static class MatchTestData
         return job;
     }
 
+    /// <summary>Makes the candidate an applicant of the company (needed before they may review it).</summary>
+    public static async Task<Application> ApplyToCompanyAsync(
+        TestFixture fx, Candidate candidate, Resume resume, int companyId)
+    {
+        var job = await CreateJobAsync(fx, companyId, [], title: $"Role {Guid.NewGuid():N}");
+        return await CreateApplicationAsync(fx, job, resume, candidate, ApplicationStatus.Pending);
+    }
+
     public static async Task<Application> CreateApplicationAsync(
         TestFixture fx,
         JobPosting job,

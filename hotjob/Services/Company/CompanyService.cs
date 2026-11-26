@@ -154,13 +154,15 @@ public sealed class CompanyService(
 
         var companyExists = await dbContext.CompanyProfiles
             .AsNoTracking()
-            .AnyAsync(
-                company => company.Id == companyId && company.Status == CompanyStatus.Approved,
-                cancellationToken)
+            .Where(CompanyVisibility.IsPublic)
+            .AnyAsync(company => company.Id == companyId, cancellationToken)
             .ConfigureAwait(false);
 
         if (!companyExists)
             return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
+
+        if (!await HasAppliedToCompanyAsync(candidate.Id, companyId, cancellationToken).ConfigureAwait(false))
+            return ServiceResult<CompanyReviewDto>.Fail(ServiceErrorType.Validation, NeverAppliedMessage);
 
         var alreadyReviewed = await dbContext.Reviews
             .AsNoTracking()
@@ -204,6 +206,56 @@ public sealed class CompanyService(
             review.ReviewText,
             candidate.FullName,
             review.CreatedAt));
+    }
+
+    private const string NeverAppliedMessage =
+        "You can review a company only after applying to one of its jobs.";
+
+    /// <summary>
+    /// Only candidates who applied to one of the company's jobs (any status, withdrawn included)
+    /// may review it, so reviews come from people who actually went through its hiring process.
+    /// </summary>
+    private Task<bool> HasAppliedToCompanyAsync(int candidateId, int companyId, CancellationToken cancellationToken) =>
+        dbContext.Applications
+            .AsNoTracking()
+            .AnyAsync(
+                application => application.CandidateId == candidateId
+                    && application.JobPosting.CompanyProfileId == companyId,
+                cancellationToken);
+
+    public async Task<ServiceResult<ReviewEligibilityDto>> GetReviewEligibilityAsync(
+        string? userId,
+        int companyId,
+        CancellationToken cancellationToken = default)
+    {
+        var mine = await GetMyReviewsAsync(userId, companyId, cancellationToken).ConfigureAwait(false);
+        if (!mine.Success)
+            return ServiceResult<ReviewEligibilityDto>.Fail(mine.ErrorType!.Value, mine.Errors);
+
+        var existing = mine.Data!.FirstOrDefault();
+        if (existing is not null)
+            return ServiceResult<ReviewEligibilityDto>.Ok(
+                new ReviewEligibilityDto(false, "You already reviewed this company.", existing));
+
+        var companyIsPublic = await dbContext.CompanyProfiles
+            .AsNoTracking()
+            .Where(CompanyVisibility.IsPublic)
+            .AnyAsync(company => company.Id == companyId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!companyIsPublic)
+            return ServiceResult<ReviewEligibilityDto>.Fail(ServiceErrorType.NotFound, "Company not found.");
+
+        var candidateId = await dbContext.Candidates
+            .AsNoTracking()
+            .Where(row => row.UserId == userId)
+            .Select(row => row.Id)
+            .FirstAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var hasApplied = await HasAppliedToCompanyAsync(candidateId, companyId, cancellationToken).ConfigureAwait(false);
+
+        return ServiceResult<ReviewEligibilityDto>.Ok(hasApplied
+            ? new ReviewEligibilityDto(true, null, null)
+            : new ReviewEligibilityDto(false, NeverAppliedMessage, null));
     }
 
     public async Task<ServiceResult<IReadOnlyList<MyReviewDto>>> GetMyReviewsAsync(

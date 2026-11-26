@@ -39,9 +39,11 @@ public sealed class CandidateReviewTests
     public async Task TextOver2000Characters_IsRejected_AndWhitespaceTextIsStoredAsNull()
     {
         await using var fx = await TestFixture.CreateAsync();
-        var (candidate, _) = await MatchTestData.CreateCandidateAsync(fx, "lan@example.com");
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "lan@example.com");
         var first = await MatchTestData.CreateCompanyAsync(fx);
         var second = await MatchTestData.CreateCompanyAsync(fx);
+        await MatchTestData.ApplyToCompanyAsync(fx, candidate, resume, first.Id);
+        await MatchTestData.ApplyToCompanyAsync(fx, candidate, resume, second.Id);
         var service = CreateService(fx);
 
         var tooLong = await service.CreateReviewAsync(
@@ -69,6 +71,67 @@ public sealed class CandidateReviewTests
             candidate.UserId, company.Id, new CreateReviewRequest { RatingScore = 4 });
 
         Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task CandidateWhoNeverApplied_CannotReview_AndEligibilitySaysWhy()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "lan@example.com");
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var otherCompany = await MatchTestData.CreateCompanyAsync(fx);
+        await MatchTestData.ApplyToCompanyAsync(fx, candidate, resume, otherCompany.Id);
+        var service = CreateService(fx);
+
+        var eligibility = await service.GetReviewEligibilityAsync(candidate.UserId, company.Id);
+        var created = await service.CreateReviewAsync(
+            candidate.UserId, company.Id, new CreateReviewRequest { RatingScore = 5 });
+
+        Assert.False(eligibility.Data!.CanReview);
+        Assert.Contains("applying", eligibility.Data.Reason);
+        Assert.Equal(ServiceErrorType.Validation, created.ErrorType);
+        Assert.Empty(await fx.Db.Reviews.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(hotjob.Models.Application.ApplicationStatus.Withdrawn)]
+    [InlineData(hotjob.Models.Application.ApplicationStatus.Rejected)]
+    public async Task AnyPastApplication_MakesTheCandidateEligible(hotjob.Models.Application.ApplicationStatus status)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "lan@example.com");
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, []);
+        await MatchTestData.CreateApplicationAsync(fx, job, resume, candidate, status);
+        var service = CreateService(fx);
+
+        Assert.True((await service.GetReviewEligibilityAsync(candidate.UserId, company.Id)).Data!.CanReview);
+        Assert.True((await service.CreateReviewAsync(
+            candidate.UserId, company.Id, new CreateReviewRequest { RatingScore = 4 })).Success);
+        var after = await service.GetReviewEligibilityAsync(candidate.UserId, company.Id);
+        Assert.False(after.Data!.CanReview);
+        Assert.NotNull(after.Data.ExistingReview);
+    }
+
+    [Fact]
+    public async Task DeactivatedCompany_IsHiddenAndCannotBeReviewed()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "lan@example.com");
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        await MatchTestData.ApplyToCompanyAsync(fx, candidate, resume, company.Id);
+        fx.Db.Reviews.Add(new Review { CompanyProfileId = company.Id, CandidateId = candidate.Id, RatingScore = 5 });
+        company.IsActive = false;
+        await fx.Db.SaveChangesAsync();
+        var service = CreateService(fx);
+
+        var list = await service.ListAsync(new CompanyListQuery());
+        var detail = await service.GetDetailAsync(company.Id);
+        var reviews = await service.GetReviewsAsync(company.Id, 1);
+
+        Assert.DoesNotContain(list.Data!.Items, item => item.Id == company.Id);
+        Assert.Equal(ServiceErrorType.NotFound, detail.ErrorType);
+        Assert.Empty(reviews.Data!.Items);
     }
 
     [Fact]
@@ -114,8 +177,9 @@ public sealed class CandidateReviewTests
     public async Task ReviewHiddenByAModerator_StillCountsAsTheCandidatesOneReview()
     {
         await using var fx = await TestFixture.CreateAsync();
-        var (candidate, _) = await MatchTestData.CreateCandidateAsync(fx, "lan@example.com");
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, "lan@example.com");
         var company = await MatchTestData.CreateCompanyAsync(fx);
+        await MatchTestData.ApplyToCompanyAsync(fx, candidate, resume, company.Id);
         fx.Db.Reviews.Add(new Review { CompanyProfileId = company.Id, CandidateId = candidate.Id, RatingScore = 1, IsDeleted = true });
         await fx.Db.SaveChangesAsync();
 

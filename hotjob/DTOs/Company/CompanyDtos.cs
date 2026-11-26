@@ -51,6 +51,12 @@ public sealed record MyReviewDto(
     DateTime CreatedAt,
     bool IsHidden);
 
+/// <summary>Whether the caller may review a company, and why not when they may not.</summary>
+public sealed record ReviewEligibilityDto(
+    bool CanReview,
+    string? Reason,
+    MyReviewDto? ExistingReview);
+
 public sealed record CompanyFilterOptionsDto(
     IReadOnlyList<string> Industries,
     IReadOnlyList<string> Locations);
