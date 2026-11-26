@@ -35,7 +35,7 @@
 
             @if (actionMessage is not null)
             {
-                <div class="workspace-alert" role="alert">@actionMessage</div>
+                <div class="@(actionSucceeded ? "workspace-notice" : "workspace-alert")" role="@(actionSucceeded ? "status" : "alert")">@actionMessage</div>
             }
 
             @if (isLoading)
@@ -204,6 +204,7 @@
     private bool busy;
     private string? errorMessage;
     private string? actionMessage;
+    private bool actionSucceeded;
     private int? expandedId;
     private int? decisionFor;
     private Decision decision;
@@ -273,6 +274,7 @@
         reports = result.Success ? result.Data : [];
         if (!result.Success)
         {
+            actionSucceeded = false;
             actionMessage = string.Join("; ", result.Errors);
         }
     }
@@ -288,6 +290,7 @@
     {
         busy = true;
         actionMessage = null;
+        actionSucceeded = false;
         try
         {
             var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -308,6 +311,7 @@
                 return;
             }
 
+            actionSucceeded = true;
             actionMessage = decision == Decision.Hide
                 ? "Review hidden. Its reports were closed as upheld."
                 : "Reports dismissed. The review stays public.";

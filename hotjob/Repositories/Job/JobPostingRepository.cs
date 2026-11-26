@@ -57,9 +57,12 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
+            // The employer UI promises "Title, skill or category".
             query = query.Where(job =>
                 EF.Functions.Like(job.Title, $"%{term}%") ||
-                EF.Functions.Like(job.Description, $"%{term}%"));
+                EF.Functions.Like(job.Description, $"%{term}%") ||
+                job.JobSkills.Any(jobSkill => EF.Functions.Like(jobSkill.Skill.Name, $"%{term}%")) ||
+                job.CategoryMappings.Any(mapping => EF.Functions.Like(mapping.Category.Name, $"%{term}%")));
         }
 
         var total = await query.CountAsync(cancellationToken);

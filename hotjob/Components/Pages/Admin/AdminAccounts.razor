@@ -122,13 +122,18 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadAsyncAsync(1);
+    }
+
+    // The circuit session is restored via JS after the first render, so the signed-in user
+    // arrives as a later cascading-parameter update, not in OnInitialized.
+    protected override async Task OnParametersSetAsync()
+    {
         if (AuthState is not null)
         {
             var state = await AuthState;
             currentUserId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         }
-
-        await LoadAsyncAsync(1);
     }
 
     private async Task LoadAsyncAsync(int page)

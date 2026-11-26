@@ -41,7 +41,7 @@
 
             @if (actionMessage is not null)
             {
-                <div class="workspace-alert" role="alert">@actionMessage</div>
+                <div class="@(actionSucceeded ? "workspace-notice" : "workspace-alert")" role="@(actionSucceeded ? "status" : "alert")">@actionMessage</div>
             }
 
             @if (isLoading)
@@ -173,6 +173,7 @@
     private bool busy;
     private string? errorMessage;
     private string? actionMessage;
+    private bool actionSucceeded;
     private int? rejectingId;
     private string? rejectionReason;
     private string? rejectError;
@@ -261,6 +262,7 @@
     {
         busy = true;
         actionMessage = null;
+        actionSucceeded = false;
         try
         {
             var adminId = await GetAdminIdAsync();
@@ -275,6 +277,7 @@
                 return actionMessage = string.Join("; ", result.Errors);
             }
 
+            actionSucceeded = true;
             actionMessage = successMessage;
             await LoadAsync();
             return null;

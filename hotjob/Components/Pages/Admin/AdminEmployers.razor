@@ -41,7 +41,7 @@
 
             @if (actionMessage is not null)
             {
-                <div class="workspace-alert" role="alert">@actionMessage</div>
+                <div class="@(actionSucceeded ? "workspace-notice" : "workspace-alert")" role="@(actionSucceeded ? "status" : "alert")">@actionMessage</div>
             }
 
             @if (isLoading)
@@ -171,6 +171,7 @@
     private bool busy;
     private string? errorMessage;
     private string? actionMessage;
+    private bool actionSucceeded;
     private int? reasonFor;
     private ReasonMode reasonMode;
     private string? reason;
@@ -260,6 +261,7 @@
     {
         busy = true;
         actionMessage = null;
+        actionSucceeded = false;
         try
         {
             var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -275,6 +277,7 @@
                 return actionMessage = string.Join("; ", result.Errors);
             }
 
+            actionSucceeded = true;
             actionMessage = successMessage;
             await LoadAsync();
             return null;

@@ -116,6 +116,21 @@ public sealed class JobListProjectionTests
         Assert.Equal(seed.PublishedJobId, Assert.Single(items).Id);
     }
 
+    [Theory]
+    [InlineData("SQL")]    // skill name
+    [InlineData("Cloud")]  // category name
+    public async Task ListOwned_SearchMatchesSkillAndCategoryNames(string term)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var seed = await SeedAsync(fx);
+
+        var (items, total) = await new JobPostingRepository(fx.Db)
+            .ListOwnedAsync(seed.CompanyId, null, term, 1, 20);
+
+        Assert.Equal(1, total);
+        Assert.Equal(seed.PublishedJobId, Assert.Single(items).Id);
+    }
+
     [Fact]
     public async Task BrowsePublished_ProjectsCardFields()
     {
