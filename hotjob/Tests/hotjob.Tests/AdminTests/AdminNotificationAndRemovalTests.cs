@@ -108,6 +108,31 @@ public sealed class AdminNotificationAndRemovalTests
         Assert.Equal(1, await fx.Db.Notifications.CountAsync());
     }
 
+    [Fact]
+    public async Task DeactivateAndReactivateCompany_NotifyActiveMembers()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var adminId = await SignInAdminAsync(fx);
+        var (company, owner, _, _) = await SeedPendingCompanyAsync(fx);
+        company.Status = CompanyStatus.Approved;
+        await fx.Db.SaveChangesAsync();
+        fx.Db.ChangeTracker.Clear();
+        var service = fx.CreateCompanyAdminService();
+
+        Assert.True((await service.DeactivateAsync(company.Id, adminId, "Fake listings.")).Success);
+        Assert.True((await service.ReactivateAsync(company.Id, adminId)).Success);
+        Assert.Equal(ServiceErrorType.Conflict, (await service.ReactivateAsync(company.Id, adminId)).ErrorType);
+
+        var notifications = await fx.Db.Notifications.AsNoTracking().OrderBy(n => n.Id).ToListAsync();
+        Assert.Equal(["Company suspended", "Company reactivated"], notifications.Select(n => n.Title).ToArray());
+        Assert.All(notifications, n =>
+        {
+            Assert.Equal(owner.UserId, n.UserId);
+            Assert.Equal(NotificationKinds.CompanyReview, n.Kind);
+        });
+        Assert.Contains("Reason: Fake listings.", notifications[0].Content);
+    }
+
     // ------------------------------------------------------------------ job removal
 
     private sealed record Seed(

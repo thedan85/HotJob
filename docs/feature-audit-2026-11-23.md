@@ -41,7 +41,7 @@ Lưu ý: chưa chạy kiểm thử E2E trên trình duyệt. Kết luận dựa 
 | KHÔNG | Xem chi tiết công ty | Trang admin chỉ có bảng vài cột; không có trang chi tiết. |
 | CÓ | Duyệt công ty | `AdminCompanies.razor`, `CompanyAdminService.ApproveAsync/RejectAsync`; ghi audit log và gửi notification `CompanyReview` cho employer Active (Reject kèm lý do). Employer có inbox `/notifications` + badge NavMenu (2026-11-26). |
 | CÓ | Từ chối công ty + lý do | Lý do bắt buộc khi chọn Rejected. |
-| CÓ | Thu hồi/tạm ngưng công ty đã duyệt | Reject hoặc Deactivate; `JobVisibility.OpenToCandidates` ẩn job của công ty không Approved hoặc bị deactivate khỏi browse/detail/save/apply. Deactivate/Reactivate chưa gửi notification. |
+| CÓ | Thu hồi/tạm ngưng công ty đã duyệt | Reject hoặc Deactivate; `JobVisibility.OpenToCandidates` ẩn job của công ty không Approved hoặc bị deactivate khỏi browse/detail/save/apply. Deactivate/Reactivate cũng báo cho employer Active ("Company suspended" kèm lý do / "Company reactivated"). |
 | CÓ | Đăng nhập admin | Role Admin được seed; tài khoản admin lấy từ cấu hình. |
 | MỘT PHẦN | Danh sách người dùng, tìm theo tên/email/vai trò | Có danh sách và paging; không có ô tìm kiếm hoặc filter vai trò. |
 | KHÔNG | Xem chi tiết người dùng (Profile, CV, applications) | Không có trang hoặc service admin cho user detail. |

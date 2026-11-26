@@ -6,7 +6,7 @@ Chỉ seed lúc startup, không tự register. Không cần Candidate hay Employ
 
 - Tồn tại nhờ seed roles + tài khoản admin cấu hình sẵn. Email đã có thì bỏ qua. Thiếu cấu hình thì warn và chỉ seed roles.
 - Approve hoặc Reject Company. Reject bắt buộc có RejectionReason. Quyết định nào cũng đóng dấu verifier và thời gian, ghi audit log, rồi gửi Notification (Kind `CompanyReview`) cho các Employer membership Active, chưa bị deactivate, của Company. Member Pending không nhận.
-- Duyệt lại Company theo cả hai chiều. Deactivate/Reactivate Company vi phạm.
+- Duyệt lại Company theo cả hai chiều. Deactivate/Reactivate Company vi phạm; employer Active được báo ("Company suspended" kèm lý do nếu có, "Company reactivated").
 - Xem và tìm user kèm role, status, Company. Lock và unlock account.
 - Duyệt (Approve/Reject) tin tuyển dụng đang chờ. Gỡ tin vi phạm (Remove) kèm lý do. Xóa cứng chỉ cho tin chưa có application.
 - Xem nhật ký thao tác admin tại `/admin/audit-logs`.

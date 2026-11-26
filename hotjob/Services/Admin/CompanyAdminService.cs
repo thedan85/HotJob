@@ -220,6 +220,17 @@ public sealed class CompanyAdminService(
             company.IsActive = false;
             company.DeactivatedAt = DateTime.UtcNow;
             company.DeactivatedByAdminId = adminUserId;
+            await CompanyMemberNotifier.StageForActiveMembersAsync(
+                dbContext,
+                company.Id,
+                NotificationKinds.CompanyReview,
+                "Company suspended",
+                trimmed is null
+                    ? $"\"{company.CompanyName}\" was suspended by an administrator. Its jobs are hidden from candidates until it is reactivated."
+                    : $"\"{company.CompanyName}\" was suspended by an administrator. Its jobs are hidden from candidates until it is reactivated. Reason: {trimmed}",
+                relatedJobId: null,
+                company.DeactivatedAt.Value,
+                cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             // CompanyProfile has no reason column; the audit entry is where the reason is kept.
@@ -253,6 +264,15 @@ public sealed class CompanyAdminService(
             company.IsActive = true;
             company.DeactivatedAt = null;
             company.DeactivatedByAdminId = null;
+            await CompanyMemberNotifier.StageForActiveMembersAsync(
+                dbContext,
+                company.Id,
+                NotificationKinds.CompanyReview,
+                "Company reactivated",
+                $"\"{company.CompanyName}\" was reactivated by an administrator. Its published jobs are visible to candidates again.",
+                relatedJobId: null,
+                DateTime.UtcNow,
+                cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             await auditService.LogAsync(

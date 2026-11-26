@@ -45,7 +45,7 @@
 > - **A0.3:** `CompanyAdminService.ApproveAsync/RejectAsync` gửi notification `CompanyReview` cho employer Active (helper `CompanyMemberNotifier`); `/notifications` + badge NavMenu mở cho role Employer.
 > - **A0.4:** `JobAdminService.RemoveAsync` + `POST /api/admin/jobs/{id}/remove` + nút Remove trên `/admin/jobs`; cột mới `JobPostings.ModeratedAt/ModeratedByAdminId/ModerationReason` (migration `AddJobModeration`); `AdminService.DeleteJobAsync` trả Conflict khi job có application; employer không mở lại được job đã gỡ; `JobClosure` dùng chung cho employer đóng job (giờ có notification cho candidate) và admin gỡ tin; ML bỏ cả hai loại auto-reject.
 > - Test: `AdminTests/AdminNotificationAndRemovalTests.cs`, thêm case `Remove` trong `AdminAuthorizationTests.cs`. Toàn bộ 599 test pass.
-> - Chưa làm: notification khi Deactivate/Reactivate công ty (có thể thêm cùng helper).
+> - Bổ sung sau: Deactivate/Reactivate công ty cũng gửi notification `CompanyReview` ("Company suspended" kèm lý do, "Company reactivated").
 
 ### A0.1 Nhật ký thao tác admin (M)
 - Entity mới `AdminAuditLog`: `Id`, `AdminUserId` (FK SetNull), `Action` (string ≤ 60, ví dụ `User.Lock`, `Company.Reject`, `Job.Remove`), `TargetType`, `TargetId`, `Details` (≤ 2000, JSON ngắn: lý do, giá trị cũ/mới), `CreatedAt`. Index `(CreatedAt)`, `(TargetType, TargetId)`.
