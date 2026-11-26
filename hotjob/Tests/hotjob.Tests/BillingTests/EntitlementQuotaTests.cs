@@ -190,7 +190,51 @@ public sealed class EntitlementQuotaTests
         var reopened = await svc.UpdateAsync(
             userId, closedJob.Data.Id, UpdateRequest(skillId, categoryId, JobStatus.Published));
         Assert.True(reopened.Success, string.Join("; ", reopened.Errors));
-        Assert.Equal(JobStatus.Published, reopened.Data!.Status);
+        Assert.Equal(JobStatus.PendingApproval, reopened.Data!.Status);
+    }
+
+    [Theory]
+    [InlineData(JobStatus.PendingApproval)]
+    [InlineData(JobStatus.Approved)]
+    public async Task JobsInTheApprovalPipeline_HoldAQuotaSlot(JobStatus pipelineStatus)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await DatabaseSeeder.SeedAsync(fx.Db, NullLogger.Instance);
+        var (userId, skillId, categoryId, _) = await SeedEmployerAsync(fx);
+        var svc = CreateService(fx);
+
+        var first = await svc.CreateAsync(userId, NewRequest(skillId, categoryId));
+        Assert.True(first.Success, string.Join("; ", first.Errors));
+        Assert.Equal(JobStatus.PendingApproval, first.Data!.Status);
+        if (pipelineStatus == JobStatus.Approved)
+        {
+            await fx.ApproveJobAsync(first.Data.Id);
+        }
+
+        var blocked = await svc.CreateAsync(userId, NewRequest(skillId, categoryId));
+
+        Assert.False(blocked.Success);
+        Assert.Equal(ServiceErrorType.Conflict, blocked.ErrorType);
+    }
+
+    [Fact]
+    public async Task RejectedJob_FreesItsQuotaSlot_AndResubmittingNeedsOneAgain()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await DatabaseSeeder.SeedAsync(fx.Db, NullLogger.Instance);
+        var (userId, skillId, categoryId, _) = await SeedEmployerAsync(fx);
+        var svc = CreateService(fx);
+
+        var first = await svc.CreateAsync(userId, NewRequest(skillId, categoryId));
+        await fx.RejectJobAsync(first.Data!.Id);
+        var second = await svc.CreateAsync(userId, NewRequest(skillId, categoryId));
+
+        Assert.True(second.Success, string.Join("; ", second.Errors));
+
+        var resubmit = await svc.UpdateAsync(
+            userId, first.Data.Id, UpdateRequest(skillId, categoryId, JobStatus.Published));
+        Assert.False(resubmit.Success);
+        Assert.Equal(ServiceErrorType.Conflict, resubmit.ErrorType);
     }
 
     [Fact]

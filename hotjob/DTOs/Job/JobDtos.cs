@@ -83,7 +83,10 @@ public sealed record JobDetailResponse(
     int ApplicationsCount,
     DateTime CreatedAt,
     string? CompanyLocation,
-    DateTime? FeaturedUntil);
+    DateTime? FeaturedUntil,
+    DateTime? SubmittedForApprovalAt,
+    DateTime? ReviewedAt,
+    string? RejectionReason);
 
 public sealed record JobListItemResponse(
     int Id,
@@ -99,7 +102,8 @@ public sealed record JobListItemResponse(
     IReadOnlyList<string> CategoryNames,
     int ApplicationsCount,
     DateTime CreatedAt,
-    DateTime? FeaturedUntil);
+    DateTime? FeaturedUntil,
+    string? RejectionReason = null);
 
 public sealed record JobDeleteResponse(int Id, bool Closed, JobStatus Status);
 

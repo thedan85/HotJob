@@ -77,7 +77,7 @@
             }
             else
             {
-                <section class="workspace-metrics" aria-label="Posting overview">
+                <section class="workspace-metrics is-five" aria-label="Posting overview">
                     <button class="workspace-stat @(statusFilter == JobStatus.Published ? "is-active" : string.Empty)" type="button" aria-pressed="@(statusFilter == JobStatus.Published ? "true" : "false")" @onclick="() => FilterByStatusAsync(JobStatus.Published)">
                         <span class="workspace-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12l4 4L19 6" /></svg></span>
                         <span class="workspace-stat-label">Active</span>
@@ -89,6 +89,12 @@
                         <span class="workspace-stat-label">Drafts</span>
                         <span class="workspace-stat-value">@draftCount</span>
                         <span class="workspace-stat-hint">Editable and safe to remove</span>
+                    </button>
+                    <button class="workspace-stat @(statusFilter is JobStatus.PendingApproval or JobStatus.Approved or JobStatus.Rejected ? "is-active" : string.Empty)" type="button" aria-pressed="@(statusFilter == JobStatus.PendingApproval ? "true" : "false")" @onclick="() => FilterByStatusAsync(JobStatus.PendingApproval)">
+                        <span class="workspace-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></svg></span>
+                        <span class="workspace-stat-label">In review</span>
+                        <span class="workspace-stat-value">@pendingCount</span>
+                        <span class="workspace-stat-hint">@approvedCount approved, ready to publish · @rejectedCount rejected</span>
                     </button>
                     <a class="workspace-stat" href="/employer/interviews">
                         <span class="workspace-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3 19c.8-3 3.1-4.5 6-4.5s5.2 1.5 6 4.5" /><path d="M16 8h5M18.5 5.5v5" /></svg></span>
@@ -108,6 +114,7 @@
                     <summary>Posting rules &amp; guardrails</summary>
                     <div class="workspace-details-body">
                         <p><strong>Validation:</strong> salary min cannot exceed max, expiry must be in the future, and every skill or category id must exist.</p>
+                        <p><strong>Approval:</strong> choosing Published sends a new, rejected or reopened job to an administrator first (status “Pending approval”). Once it is approved, press Publish to put it live. A rejected job shows the reason; edit it and choose Published again to resubmit.</p>
                         <p><strong>Closing:</strong> a published role moves to Closed, mass-rejects open applications, and writes a “Job closed” history entry on each application. Drafts are deleted permanently.</p>
                     </div>
                 </details>
@@ -157,7 +164,7 @@
                         <div class="workspace-section-head">
                             <div>
                                 <h2>@(editingId is null ? "Post a new job" : $"Edit job #{editingId}")</h2>
-                                <p class="workspace-sub">Status may only be Draft or Published. Close a live role from the table.</p>
+                                <p class="workspace-sub">Save as Draft, or choose Published to submit it for admin approval (approved jobs go live straight away). Close a role from the table.</p>
                             </div>
                             <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" @onclick="CloseForm">Close</button>
                         </div>
@@ -209,7 +216,7 @@
                                     <span>Status</span>
                                     <InputSelect @bind-Value="jobForm.Status">
                                         <option value="@JobStatus.Draft">Draft</option>
-                                        <option value="@JobStatus.Published">Published</option>
+                                        <option value="@JobStatus.Published">Published (submit for approval if needed)</option>
                                     </InputSelect>
                                 </label>
                             </fieldset>
@@ -253,6 +260,10 @@
                                         <td data-label="Role">
                                             <button class="ej-title-button" type="button" @onclick="() => ViewDetailAsync(job.Id)">@job.Title</button>
                                             <p class="ej-job-meta">@job.JobType · @job.ExperienceRequired yr exp · posted @job.CreatedAt.ToString("dd MMM")</p>
+                                            @if (job.Status == JobStatus.Rejected && !string.IsNullOrWhiteSpace(job.RejectionReason))
+                                            {
+                                                <p class="ej-job-meta">Rejected: @job.RejectionReason</p>
+                                            }
                                             @if (job.FeaturedUntil is { } featuredUntil && featuredUntil > DateTime.UtcNow)
                                             {
                                                 <span class="workspace-badge is-published">Featured until @featuredUntil.ToString("dd MMM")</span>
@@ -271,7 +282,7 @@
                                                 </div>
                                             }
                                         </td>
-                                        <td data-label="Status"><span class="workspace-badge @StatusClass(job.Status)">@job.Status</span></td>
+                                        <td data-label="Status"><span class="workspace-badge @StatusClass(job.Status)">@StatusLabel(job.Status)</span></td>
                                         <td data-label="Applicants">
                                             <a class="ej-applicant-link" href="/employer/interviews?jobId=@job.Id">
                                                 <strong>@job.ApplicationsCount</strong>
@@ -294,7 +305,15 @@
                                                         @(featuringJobId == job.Id ? "Redirecting…" : "Feature")
                                                     </button>
                                                 }
-                                                @if (job.Status == JobStatus.Draft || job.Status == JobStatus.Published)
+                                                @if (job.Status == JobStatus.Approved)
+                                                {
+                                                    <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button"
+                                                            disabled="@(publishingJobId == job.Id)"
+                                                            @onclick="() => PublishApprovedAsync(job.Id)">
+                                                        @(publishingJobId == job.Id ? "Publishing…" : "Publish")
+                                                    </button>
+                                                }
+                                                @if (job.Status is JobStatus.Draft or JobStatus.Published or JobStatus.PendingApproval or JobStatus.Approved)
                                                 {
                                                     <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" @onclick="() => DeleteOrCloseAsync(job.Id, job.Title, job.Status)">
                                                         @(pendingDeleteId == job.Id ? "Confirm " + (job.Status == JobStatus.Draft ? "delete?" : "close?") : job.Status == JobStatus.Draft ? "Delete" : "Close")
@@ -350,7 +369,19 @@
                             <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" @onclick="() => selected = null">Close</button>
                         </div>
                         <dl class="workspace-meta ej-detail-meta">
-                            <div><dt>Status</dt><dd><span class="workspace-badge @StatusClass(selected.Status)">@selected.Status</span></dd></div>
+                            <div><dt>Status</dt><dd><span class="workspace-badge @StatusClass(selected.Status)">@StatusLabel(selected.Status)</span></dd></div>
+                            @if (selected.SubmittedForApprovalAt is { } submittedAt)
+                            {
+                                <div><dt>Submitted for approval</dt><dd>@submittedAt.ToString("dd MMM yyyy HH:mm")</dd></div>
+                            }
+                            @if (selected.ReviewedAt is { } reviewedAt)
+                            {
+                                <div><dt>Reviewed by admin</dt><dd>@reviewedAt.ToString("dd MMM yyyy HH:mm")</dd></div>
+                            }
+                            @if (selected.Status == JobStatus.Rejected && !string.IsNullOrWhiteSpace(selected.RejectionReason))
+                            {
+                                <div><dt>Rejection reason</dt><dd>@selected.RejectionReason</dd></div>
+                            }
                             <div><dt>Salary</dt><dd>@SalaryDetail(selected)</dd></div>
                             <div><dt>Job type</dt><dd>@selected.JobType</dd></div>
                             <div><dt>Experience</dt><dd>@selected.ExperienceRequired year@(selected.ExperienceRequired == 1 ? string.Empty : "s")</dd></div>
@@ -395,7 +426,8 @@
     private const int PageSize = 10;
     private int totalCount;
     private int totalPages;
-    private int draftCount, publishedCount, closedCount, expiredCount;
+    private int draftCount, publishedCount, closedCount, expiredCount, pendingCount, approvedCount, rejectedCount;
+    private int? publishingJobId;
     private List<JobListItemResponse> jobs = new();
     private JobDetailResponse? selected;
     private bool showForm;
@@ -462,15 +494,15 @@
             totalCount = main.Data.TotalCount;
             totalPages = main.Data.TotalPages;
             // Sequential awaits: never Task.WhenAll calls sharing circuit state.
-            // ponytail: 4 round-trips for status counts; collapse to one GROUP BY query when this gets slow.
-            var draft = await JobService.ListAsync(userId, JobStatus.Draft, null, 1, 1);
-            var published = await JobService.ListAsync(userId, JobStatus.Published, null, 1, 1);
-            var closed = await JobService.ListAsync(userId, JobStatus.Closed, null, 1, 1);
-            var expired = await JobService.ListAsync(userId, JobStatus.Expired, null, 1, 1);
-            draftCount = draft.Data?.TotalCount ?? 0;
-            publishedCount = published.Data?.TotalCount ?? 0;
-            closedCount = closed.Data?.TotalCount ?? 0;
-            expiredCount = expired.Data?.TotalCount ?? 0;
+            var counts = (await JobService.GetStatusCountsAsync(userId)).Data;
+            int Count(JobStatus status) => counts?.GetValueOrDefault(status) ?? 0;
+            draftCount = Count(JobStatus.Draft);
+            publishedCount = Count(JobStatus.Published);
+            closedCount = Count(JobStatus.Closed);
+            expiredCount = Count(JobStatus.Expired);
+            pendingCount = Count(JobStatus.PendingApproval);
+            approvedCount = Count(JobStatus.Approved);
+            rejectedCount = Count(JobStatus.Rejected);
             entitlement = await EntitlementService.GetForUserAsync(userId);
         }
         catch (Exception exception)
@@ -542,7 +574,15 @@
         }
         var d = result.Data;
         editingId = d.Id;
-        jobForm = new UpdateJobRequest
+        jobForm = ToUpdateRequest(d);
+        categoryText = string.Join(", ", jobForm.CategoryIds);
+        skillText = string.Join(", ", jobForm.Skills.Select(s =>
+            s.MinYears > 0 ? $"{s.SkillId}:{s.ImportanceWeight}:{s.MinYears}" : $"{s.SkillId}:{s.ImportanceWeight}"));
+        showForm = true;
+    }
+
+    private static UpdateJobRequest ToUpdateRequest(JobDetailResponse d) =>
+        new()
         {
             Title = d.Title,
             Description = d.Description,
@@ -560,10 +600,34 @@
                 MinYears = s.MinYears
             }).ToList()
         };
-        categoryText = string.Join(", ", jobForm.CategoryIds);
-        skillText = string.Join(", ", jobForm.Skills.Select(s =>
-            s.MinYears > 0 ? $"{s.SkillId}:{s.ImportanceWeight}:{s.MinYears}" : $"{s.SkillId}:{s.ImportanceWeight}"));
-        showForm = true;
+
+    /// <summary>An admin approved the job: publish it as-is.</summary>
+    private async Task PublishApprovedAsync(int id)
+    {
+        actionMessage = actionError = null;
+        publishingJobId = id;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            var current = await JobService.GetAsync(userId, id);
+            if (!current.Success || current.Data is null)
+            {
+                actionError = current.Errors.FirstOrDefault() ?? "Could not load this job.";
+                return;
+            }
+
+            var request = ToUpdateRequest(current.Data);
+            request.Status = JobStatus.Published;
+            var result = await JobService.UpdateAsync(userId, id, request);
+            actionMessage = result.Success ? $"Job \"{result.Data!.Title}\" is now live." : null;
+            actionError = result.Success ? null : result.Errors.FirstOrDefault() ?? "Could not publish this job.";
+        }
+        finally
+        {
+            publishingJobId = null;
+        }
+
+        await LoadAsync();
     }
 
     private void CloseForm()
@@ -694,7 +758,17 @@
         JobStatus.Draft => "is-draft",
         JobStatus.Closed => "is-closed",
         JobStatus.Expired => "is-expired",
+        JobStatus.PendingApproval => "is-pending",
+        JobStatus.Approved => "is-approved",
+        JobStatus.Rejected => "is-rejected",
         _ => "is-muted"
+    };
+
+    private static string StatusLabel(JobStatus status) => status switch
+    {
+        JobStatus.PendingApproval => "Pending approval",
+        JobStatus.Approved => "Approved — ready to publish",
+        _ => status.ToString()
     };
 
     private static string SalaryRange(JobListItemResponse j) =>

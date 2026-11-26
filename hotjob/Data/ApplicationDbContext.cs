@@ -1,4 +1,5 @@
 using hotjob.Models;
+using hotjob.Models.Admin;
 using hotjob.Models.Billing;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
@@ -30,6 +31,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ApplicationStatusHistory> ApplicationStatusHistories => Set<ApplicationStatusHistory>();
     public DbSet<Interview> Interviews => Set<Interview>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<ReviewReport> ReviewReports => Set<ReviewReport>();
     public DbSet<SavedJob> SavedJobs => Set<SavedJob>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<MatchScore> MatchScores => Set<MatchScore>();
@@ -37,6 +39,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
 
     /// <summary>Configures relationships, delete behaviors, indexes and column precision.</summary>
     /// <param name="modelBuilder">Fluent API builder.</param>
@@ -73,6 +76,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<JobPosting>().HasOne(x => x.Company).WithMany(x => x.JobPostings).HasForeignKey(x => x.CompanyProfileId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<JobPosting>().HasOne(x => x.CreatedBy).WithMany(x => x.CreatedJobs).HasForeignKey(x => x.CreatedByEmployerId).OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<JobPosting>().HasOne(x => x.ReviewedBy).WithMany().HasForeignKey(x => x.ReviewedByAdminId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<JobPosting>().Property(x => x.SalaryMin).HasPrecision(18, 2);
         modelBuilder.Entity<JobPosting>().Property(x => x.SalaryMax).HasPrecision(18, 2);
 
@@ -97,7 +101,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<Review>().HasOne(x => x.Company).WithMany(x => x.Reviews).HasForeignKey(x => x.CompanyProfileId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Review>().HasOne(x => x.Candidate).WithMany(x => x.Reviews).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Review>().HasOne(x => x.DeletedBy).WithMany().HasForeignKey(x => x.DeletedByAdminId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<Review>().HasIndex(x => new { x.CompanyProfileId, x.CandidateId }).IsUnique();
+
+        modelBuilder.Entity<ReviewReport>().HasOne(x => x.Review).WithMany(x => x.Reports).HasForeignKey(x => x.ReviewId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReviewReport>().HasOne(x => x.Reporter).WithMany().HasForeignKey(x => x.ReporterUserId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReviewReport>().HasOne(x => x.ResolvedBy).WithMany().HasForeignKey(x => x.ResolvedByAdminId).OnDelete(DeleteBehavior.SetNull);
+        // One report per user per review; the queue is read by status, oldest first.
+        modelBuilder.Entity<ReviewReport>().HasIndex(x => new { x.ReviewId, x.ReporterUserId }).IsUnique();
+        modelBuilder.Entity<ReviewReport>().HasIndex(x => new { x.Status, x.CreatedAt });
 
         modelBuilder.Entity<SavedJob>().HasKey(x => new { x.CandidateId, x.JobPostingId });
         modelBuilder.Entity<SavedJob>().HasOne(x => x.Candidate).WithMany(x => x.SavedJobs).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
@@ -127,6 +139,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<RefreshToken>().HasIndex(x => x.TokenHash).IsUnique();
         modelBuilder.Entity<RefreshToken>().HasIndex(x => new { x.UserId, x.RevokedAtUtc });
 
+        modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.CreatedAt).IsDescending(true);
+        modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.AdminUserId);
+        modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.Action);
+
         ConfigureBilling(modelBuilder);
     }
 
@@ -145,6 +161,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<Candidate>()
             .HasOne(x => x.PremiumPlan).WithMany().HasForeignKey(x => x.PremiumPlanId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<JobPosting>().HasIndex(x => x.FeaturedUntil);
+        // Status-first lookups: expiry sweep (Published, ExpiryDate <= now), admin approval queue
+        // (?status=PendingApproval) and public browse (Published, ExpiryDate > now).
+        modelBuilder.Entity<JobPosting>().HasIndex(x => new { x.Status, x.ExpiryDate });
 
         modelBuilder.Entity<Payment>(payment =>
         {

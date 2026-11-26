@@ -1,0 +1,151 @@
+@page "/my-reviews"
+@implements IDisposable
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Company
+@using hotjob.Services.Common
+@using hotjob.Services.Company
+@inject ICompanyService CompanyService
+@inject CircuitDbGate CircuitDbGate
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AuthSession AuthSession
+
+<PageTitle>My reviews | HotJob</PageTitle>
+
+<AuthorizeView Roles="Candidate">
+    <Authorized>
+        <div class="workspace">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Candidate workspace</p>
+                    <h1>My reviews</h1>
+                    <p class="workspace-lede">Company reviews you have written. You can review each company once.</p>
+                </div>
+                <div class="workspace-actions">
+                    <a class="workspace-btn workspace-btn-primary" href="/companies">Browse companies</a>
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading your reviews">
+                    <p class="workspace-sub" role="status">Loading your reviews…</p>
+                </section>
+            }
+            else if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <div class="workspace-alert" role="alert">@loadError</div>
+            }
+            else if (reviews is null || reviews.Count == 0)
+            {
+                <section class="workspace-card">
+                    <h2>No reviews yet</h2>
+                    <p class="workspace-sub">Open a company page and choose “Write a review” to share your experience.</p>
+                </section>
+            }
+            else
+            {
+                <section class="workspace-card" aria-label="Your reviews">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2>Your reviews</h2>
+                            <p class="workspace-sub">@reviews.Count written</p>
+                        </div>
+                    </div>
+                    <ul class="review-list">
+                        @foreach (var review in reviews)
+                        {
+                            <li class="review-card">
+                                <div class="review-head">
+                                    <div>
+                                        <p class="review-author"><a href="/companies/@review.CompanyId">@review.CompanyName</a></p>
+                                        <p class="review-date">@review.CreatedAt.ToString("MMM dd, yyyy")</p>
+                                    </div>
+                                    <span class="review-stars" aria-label="@review.RatingScore out of 5">@Stars(review.RatingScore)</span>
+                                </div>
+                                @if (review.IsHidden)
+                                {
+                                    <p><span class="workspace-badge is-muted">Hidden by moderator</span>
+                                        <span class="workspace-sub">No longer public and not counted in the company rating.</span></p>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(review.ReviewText))
+                                {
+                                    <p class="review-text">@review.ReviewText</p>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private IReadOnlyList<MyReviewDto>? reviews;
+    private bool isLoading = true;
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        if (AuthSession.IsAuthenticated)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private static string Stars(int score) =>
+        new string('★', Math.Clamp(score, 0, 5)) + new string('☆', 5 - Math.Clamp(score, 0, 5));
+
+    public void Dispose() =>
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            var result = await CircuitDbGate.RunAsync(() => CompanyService.GetMyReviewsAsync(userId));
+            if (!result.Success || result.Data is null)
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "Could not load your reviews.";
+                return;
+            }
+
+            reviews = result.Data;
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

@@ -144,7 +144,8 @@ public sealed class SkillApiValidationTests
         builder.Services.AddAuthentication("Bearer")
             .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>("Bearer", _ => { });
         builder.Services.AddAuthorization();
-        builder.Services.AddSingleton<IAdminService>(new AdminService(fx.Db, fx.UserManager, fx.RoleManager));
+        fx.SignInAdminOnCircuit("user-1", "admin@example.com");
+        builder.Services.AddSingleton<IAdminService>(new AdminService(fx.Db, fx.UserManager, fx.RoleManager, fx.CreateAuditService()));
         builder.Services.AddSingleton<IJobService>(new JobService(
             fx.Db,
             new JobPostingRepository(fx.Db),

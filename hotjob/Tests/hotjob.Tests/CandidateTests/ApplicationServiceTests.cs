@@ -249,6 +249,9 @@ public sealed class ApplicationServiceTests
     [InlineData(JobStatus.Draft)]
     [InlineData(JobStatus.Closed)]
     [InlineData(JobStatus.Expired)]
+    [InlineData(JobStatus.PendingApproval)]
+    [InlineData(JobStatus.Approved)]
+    [InlineData(JobStatus.Rejected)]
     public async Task ApplyAsync_UnpublishedJob_ReturnsConflictWithoutApplication(JobStatus status)
     {
         await using var fx = await TestFixture.CreateAsync();

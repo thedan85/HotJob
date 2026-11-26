@@ -124,15 +124,6 @@ public sealed class AdminSkillsControllerTests
         public Task<ServiceResult<bool>> ToggleUserActiveAsync(string userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<ServiceResult<PagedResponse<AdminCompanyListItemDto>>> GetCompaniesAsync(int page, int pageSize, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<ServiceResult<bool>> UpdateCompanyStatusAsync(int companyId, CompanyStatus status, string? rejectionReason, string? adminUserId = null, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<ServiceResult<PagedResponse<AdminJobListItemDto>>> GetJobsAsync(int page, int pageSize, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
         public Task<ServiceResult<bool>> DeleteJobAsync(int jobId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

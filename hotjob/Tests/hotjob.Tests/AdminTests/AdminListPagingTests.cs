@@ -13,7 +13,7 @@ public sealed class AdminListPagingTests
         {
             await fx.SeedUserAsync($"paged{index}@example.com");
         }
-        var service = new AdminService(fx.Db, fx.UserManager, fx.RoleManager);
+        var service = fx.CreateAdminService();
 
         var first = await service.GetUsersAsync(1, 2);
         var second = await service.GetUsersAsync(2, 2);

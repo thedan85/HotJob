@@ -87,8 +87,13 @@ public sealed class EmployerJobCrudTests
         var updated = await svc.UpdateAsync(userId, created.Data.Id, update);
         Assert.True(updated.Success, string.Join("; ", updated.Errors));
         Assert.Equal("Lead .NET Developer", updated.Data!.Title);
-        Assert.Equal(JobStatus.Published, updated.Data.Status);
+        Assert.Equal(JobStatus.PendingApproval, updated.Data.Status);
         Assert.Equal(3000m, updated.Data.SalaryMax);
+
+        await fx.ApproveJobAsync(created.Data.Id);
+        var published = await svc.UpdateAsync(userId, created.Data.Id, update);
+        Assert.True(published.Success, string.Join("; ", published.Errors));
+        Assert.Equal(JobStatus.Published, published.Data!.Status);
     }
 
     [Fact]

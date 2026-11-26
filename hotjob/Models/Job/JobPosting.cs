@@ -3,12 +3,20 @@ using System.ComponentModel.DataAnnotations;
 namespace hotjob.Models.Job;
 
 /// <summary>Lifecycle state of a job posting.</summary>
+/// <remarks>
+/// Persisted as <c>int</c>. Values are pinned explicitly: Draft..Expired keep the numbers they had
+/// before the admin-approval states were added, so existing rows keep their meaning.
+/// Never reorder or renumber these.
+/// </remarks>
 public enum JobStatus
 {
-    Draft,
-    Published,
-    Closed,
-    Expired
+    Draft = 0,
+    Published = 1,
+    Closed = 2,
+    Expired = 3,
+    PendingApproval = 4,
+    Approved = 5,
+    Rejected = 6
 }
 
 /// <summary>Employment type of a job posting.</summary>
@@ -56,12 +64,28 @@ public class JobPosting
 
     /// <summary>The posting is "featured" (listed first) while this is in the future.</summary>
     public DateTime? FeaturedUntil { get; set; }
+    /// <summary>When this job was submitted for approval.</summary>
+    public DateTime? SubmittedForApprovalAt { get; set; }
+
+    /// <summary>When this job was approved/rejected by admin.</summary>
+    public DateTime? ReviewedAt { get; set; }
+
+    /// <summary>Admin who reviewed this job.</summary>
+    [MaxLength(255)]
+    public string? ReviewedByAdminId { get; set; }
+
+    /// <summary>Rejection reason if status is Rejected.</summary>
+    [MaxLength(1000)]
+    public string? RejectionReason { get; set; }
 
     /// <summary>Company that owns this posting.</summary>
     public Users.CompanyProfile Company { get; set; } = default!;
 
     /// <summary>Employer who created this posting. Null if the author left.</summary>
     public Users.Employer? CreatedBy { get; set; }
+
+    /// <summary>Admin who reviewed this job posting.</summary>
+    public Users.ApplicationUser? ReviewedBy { get; set; }
 
     /// <summary>Required skills with importance weights.</summary>
     public ICollection<JobSkill> JobSkills { get; set; } = new List<JobSkill>();

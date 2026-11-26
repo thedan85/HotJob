@@ -19,8 +19,9 @@ public sealed class ReviewCreateTests
 
     private static async Task<(Candidate Candidate, CompanyProfile Company)> SeedAsync(TestFixture fx)
     {
-        var (candidate, _) = await MatchTestData.CreateCandidateAsync(fx, $"{Guid.NewGuid():N}@example.com");
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(fx, $"{Guid.NewGuid():N}@example.com");
         var company = await MatchTestData.CreateCompanyAsync(fx);
+        await MatchTestData.ApplyToCompanyAsync(fx, candidate, resume, company.Id);
         return (candidate, company);
     }
 

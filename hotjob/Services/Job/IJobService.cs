@@ -34,6 +34,11 @@ public interface IJobService
         AssignSkillsRequest request,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Number of the caller's company jobs in every status (zero for unused statuses).</summary>
+    Task<ServiceResult<IReadOnlyDictionary<JobStatus, int>>> GetStatusCountsAsync(
+        string userId,
+        CancellationToken cancellationToken = default);
+
     Task<ServiceResult<PagedResponse<JobListItemResponse>>> ListAsync(
         string userId,
         JobStatus? status,

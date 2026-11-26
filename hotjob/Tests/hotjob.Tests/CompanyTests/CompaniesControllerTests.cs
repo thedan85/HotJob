@@ -63,6 +63,18 @@ public sealed class CompaniesControllerTests
             string? userId, int companyId, CreateReviewRequest request,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<ServiceResult> ReportReviewAsync(
+            string? userId, int reviewId, ReportReviewRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ServiceResult<ReviewEligibilityDto>> GetReviewEligibilityAsync(
+            string? userId, int companyId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ServiceResult<IReadOnlyList<MyReviewDto>>> GetMyReviewsAsync(
+            string? userId, int? companyId = null, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     [Fact]
