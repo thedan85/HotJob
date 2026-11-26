@@ -57,7 +57,7 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V6a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /><path d="M8 12h8M8 16h5" /></svg>
                         </span>
                         <span class="workspace-stat-label">Applications</span>
-                        <span class="workspace-stat-value">@totalCount</span>
+                        <span class="workspace-stat-value">@TotalApplications</span>
                         <span class="workspace-stat-hint">Jobs you applied to</span>
                     </div>
                     <div class="workspace-stat">
@@ -95,16 +95,16 @@
                     <div class="workspace-alert" role="alert" aria-live="assertive">@actionError</div>
                 }
 
-                @if (totalCount > 0)
+                @if (TotalApplications > 0)
                 {
                     <section class="workspace-toolbar" aria-label="Filter applications">
                         <label class="workspace-field workspace-field-grow">
                             <span>Search</span>
-                            <input type="search" @bind="search" @bind:event="oninput" placeholder="Job title or company" />
+                            <input type="search" value="@query.Search" @oninput="OnSearchInput" placeholder="Job title or company" />
                         </label>
                         <label class="workspace-field">
                             <span>Status</span>
-                            <select @bind="statusGroup">
+                            <select @bind="query.StatusGroup" @bind:after="ApplyFiltersAsync">
                                 <option value="">All applications</option>
                                 <option value="active">In progress</option>
                                 <option value="offers">Offers</option>
@@ -114,24 +114,22 @@
                         @if (HasFilters)
                         {
                             <div class="workspace-toolbar-actions">
-                                <button class="workspace-btn workspace-btn-ghost" type="button" @onclick="ClearFilters">Clear</button>
+                                <button class="workspace-btn workspace-btn-ghost" type="button" @onclick="ClearFiltersAsync">Clear</button>
                             </div>
                         }
                     </section>
                 }
 
-                var visible = VisibleApplications.ToList();
-
                 <div class="ma-layout">
-                    <section class="ma-apps" aria-label="My applications">
+                    <section class="ma-apps" aria-label="My applications" aria-busy="@isPageLoading">
                         <div class="workspace-section-head">
                             <div>
                                 <h2>Applications</h2>
-                                <p class="workspace-sub">@(visible.Count == totalCount ? $"{totalCount} total" : $"{visible.Count} of {totalCount} shown")</p>
+                                <p class="workspace-sub">@Summary@(isPageLoading ? " · Loading…" : string.Empty)</p>
                             </div>
                         </div>
 
-                        @if (applications.Count == 0)
+                        @if (TotalApplications == 0)
                         {
                             <div class="workspace-empty">
                                 <span class="workspace-empty-icon" aria-hidden="true">
@@ -142,17 +140,17 @@
                                 <a class="workspace-btn workspace-btn-primary workspace-btn-small" href="/it-jobs">Browse open jobs</a>
                             </div>
                         }
-                        else if (visible.Count == 0)
+                        else if (TotalCount == 0)
                         {
                             <div class="workspace-empty">
                                 <h3>Nothing matches those filters</h3>
                                 <p>Try a different search term or status.</p>
-                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="ClearFilters">Clear filters</button>
+                                <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button" @onclick="ClearFiltersAsync">Clear filters</button>
                             </div>
                         }
                         else
                         {
-                            @foreach (var application in visible)
+                            @foreach (var application in Applications)
                             {
                                 <article class="ma-app">
                                     <div class="ma-app-head">
@@ -255,6 +253,23 @@
                                 </article>
                             }
                         }
+
+                        @if (TotalCount > 0)
+                        {
+                            <div class="workspace-pagination">
+                                <span>Showing @FirstShown–@LastShown of @TotalCount</span>
+                                <div class="workspace-pagination-actions">
+                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                            disabled="@(isPageLoading || pageResult.Page <= 1)"
+                                            @onclick="() => ChangePageAsync(pageResult.Page - 1)">← Previous</button>
+                                    <span class="ej-page-count">Page @pageResult.Page of @TotalPages</span>
+                                    <button class="workspace-btn workspace-btn-secondary workspace-btn-small" type="button"
+                                            disabled="@(isPageLoading || pageResult.Page >= TotalPages)"
+                                            @onclick="() => ChangePageAsync(pageResult.Page + 1)">Next →</button>
+                                </div>
+                            </div>
+                        }
+                        <p class="visually-hidden" role="status">@(isPageLoading ? "Loading applications…" : string.Empty)</p>
                     </section>
 
                     <aside class="ma-rail" aria-label="Notifications">
@@ -336,6 +351,7 @@
     ];
 
     private bool isLoading = true;
+    private bool isPageLoading;
     private bool hasLoadedOnce;
     private int? markingId;
     private int? withdrawConfirmId;
@@ -343,30 +359,25 @@
     private string? loadError;
     private string? actionMessage;
     private string? actionError;
-    private string search = string.Empty;
-    private string statusGroup = string.Empty;
-    private List<MyApplicationDto> applications = new();
+    private MyApplicationsQuery query = new();
+    private MyApplicationsPageDto pageResult = new();
     private List<MyNotificationDto> notifications = new();
+    private CancellationTokenSource? searchDelay;
 
-    private int totalCount => applications.Count;
     private int unreadCount;
-    private int InProgressCount => applications.Count(a => InProgressStatuses.Contains(a.Status));
-    private int OfferCount => applications.Count(a => a.Status == ApplicationStatus.Offered);
-    private bool HasFilters => !string.IsNullOrWhiteSpace(search) || !string.IsNullOrWhiteSpace(statusGroup);
-
-    private IEnumerable<MyApplicationDto> VisibleApplications =>
-        applications
-            .Where(a => string.IsNullOrWhiteSpace(search)
-                || a.JobTitle.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase)
-                || a.CompanyName.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
-            .Where(a => statusGroup switch
-            {
-                "active" => InProgressStatuses.Contains(a.Status),
-                "offers" => a.Status == ApplicationStatus.Offered,
-                "closed" => a.Status is ApplicationStatus.Rejected or ApplicationStatus.Withdrawn,
-                _ => true
-            })
-            .OrderByDescending(a => a.AppliedAt);
+    private int TotalApplications => pageResult.TotalApplications;
+    private int TotalCount => pageResult.TotalCount;
+    private int InProgressCount => pageResult.InProgressCount;
+    private int OfferCount => pageResult.OfferCount;
+    private IReadOnlyList<MyApplicationDto> Applications => pageResult.Items;
+    private int TotalPages => Math.Max(pageResult.TotalPages, 1);
+    private int FirstShown => TotalCount == 0 ? 0 : (pageResult.Page - 1) * pageResult.PageSize + 1;
+    private int LastShown => Math.Min(pageResult.Page * pageResult.PageSize, TotalCount);
+    private bool HasFilters => !string.IsNullOrWhiteSpace(query.Search)
+        || !string.IsNullOrWhiteSpace(query.StatusGroup);
+    private string Summary => TotalCount == 0
+        ? (HasFilters ? "No matches" : "0 total")
+        : $"Showing {FirstShown}–{LastShown} of {TotalCount}{(HasFilters ? " matching" : string.Empty)}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -390,8 +401,12 @@
         }
     }
 
-    public void Dispose() =>
+    public void Dispose()
+    {
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        searchDelay?.Cancel();
+        searchDelay?.Dispose();
+    }
 
     private static string InterviewStatusClass(InterviewStatus status) => status switch
     {
@@ -412,10 +427,13 @@
         _ => "is-withdrawn"
     };
 
-    private void ClearFilters()
+    private async Task ClearFiltersAsync()
     {
-        search = string.Empty;
-        statusGroup = string.Empty;
+        searchDelay?.Cancel();
+        query.Search = string.Empty;
+        query.StatusGroup = string.Empty;
+        query.Page = 1;
+        await LoadApplicationsAsync();
     }
 
     private async Task<string?> GetUserIdAsync()
@@ -435,29 +453,8 @@
         loadError = null;
         try
         {
-            var userId = await GetUserIdAsync();
-            var apps = await CircuitDbGate.RunAsync(() => CandidateService.GetMyApplicationsAsync(userId));
-            if (!apps.Success || apps.Data is null)
-            {
-                loadError = apps.Errors.FirstOrDefault() ?? "We could not load your applications.";
-                return;
-            }
-            applications = apps.Data.ToList();
-
-            var notes = await NotificationFeed.ListAsync(userId, 1, 20);
-            if (notes.Success && notes.Data is not null)
-            {
-                notifications = notes.Data.Items.ToList();
-                var unread = await NotificationFeed.UnreadCountAsync(userId);
-                if (unread.Success)
-                {
-                    unreadCount = unread.Data;
-                }
-            }
-            else
-            {
-                actionError = notes.Errors.FirstOrDefault() ?? "We could not load your messages.";
-            }
+            await LoadApplicationsAsync();
+            await LoadNotificationsAsync();
         }
         catch (Exception exception)
         {
@@ -467,6 +464,103 @@
         {
             isLoading = false;
         }
+    }
+
+    private async Task LoadApplicationsAsync()
+    {
+        isPageLoading = true;
+        loadError = null;
+        try
+        {
+            var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(
+                () => CandidateService.GetMyApplicationsPageAsync(userId, query));
+            if (!result.Success || result.Data is null)
+            {
+                loadError = result.Errors.FirstOrDefault() ?? "We could not load your applications.";
+                return;
+            }
+
+            pageResult = result.Data;
+            var lastPage = Math.Max(pageResult.TotalPages, 1);
+            if (query.Page > lastPage)
+            {
+                // The last page disappeared (e.g. its only row was withdrawn): step back one page.
+                query.Page = lastPage;
+                result = await CircuitDbGate.RunAsync(
+                    () => CandidateService.GetMyApplicationsPageAsync(userId, query));
+                if (result.Success && result.Data is not null)
+                {
+                    pageResult = result.Data;
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            loadError = exception.Message;
+        }
+        finally
+        {
+            isPageLoading = false;
+        }
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        var userId = await GetUserIdAsync();
+        var notes = await NotificationFeed.ListAsync(userId, 1, 20);
+        if (notes.Success && notes.Data is not null)
+        {
+            notifications = notes.Data.Items.ToList();
+            var unread = await NotificationFeed.UnreadCountAsync(userId);
+            if (unread.Success)
+            {
+                unreadCount = unread.Data;
+            }
+        }
+        else
+        {
+            actionError = notes.Errors.FirstOrDefault() ?? "We could not load your messages.";
+        }
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs args)
+    {
+        query.Search = args.Value?.ToString() ?? string.Empty;
+        searchDelay?.Cancel();
+        searchDelay?.Dispose();
+        searchDelay = new CancellationTokenSource();
+        var token = searchDelay.Token;
+        try
+        {
+            await Task.Delay(300, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (!token.IsCancellationRequested)
+        {
+            await ApplyFiltersAsync();
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        query.Page = 1;
+        await LoadApplicationsAsync();
+    }
+
+    private async Task ChangePageAsync(int next)
+    {
+        if (isPageLoading || next < 1 || next > TotalPages)
+        {
+            return;
+        }
+
+        query.Page = next;
+        await LoadApplicationsAsync();
     }
 
     private async Task MarkReadAsync(int notificationId)
@@ -512,7 +606,7 @@
                 return;
             }
 
-            await ReloadApplicationsAsync();
+            await LoadApplicationsAsync();
             actionMessage = "Application withdrawn.";
         }
         catch (Exception exception)
@@ -525,16 +619,4 @@
         }
     }
 
-    private async Task ReloadApplicationsAsync()
-    {
-        var result = await CircuitDbGate.RunAsync(async () => await CandidateService.GetMyApplicationsAsync(await GetUserIdAsync()));
-        if (result.Success && result.Data is not null)
-        {
-            applications = result.Data.ToList();
-        }
-        else
-        {
-            actionError = result.Errors.FirstOrDefault() ?? "We could not refresh your applications.";
-        }
-    }
 }

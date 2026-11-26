@@ -11,6 +11,12 @@ public interface ICandidateService
         string? userId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>One database-side page of the caller's applications, filtered by search/status.</summary>
+    Task<ServiceResult<MyApplicationsPageDto>> GetMyApplicationsPageAsync(
+        string? userId,
+        MyApplicationsQuery query,
+        CancellationToken cancellationToken = default);
+
     Task<ServiceResult<PagedResponse<MyNotificationDto>>> GetMyNotificationsAsync(
         string? userId,
         int page,

@@ -20,19 +20,11 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
         string? userId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-            return ServiceResult<IReadOnlyList<MyApplicationDto>>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
+        var candidate = await ResolveCandidateIdAsync(userId, cancellationToken);
+        if (!candidate.Success)
+            return ServiceResult<IReadOnlyList<MyApplicationDto>>.Fail(candidate.ErrorType!.Value, candidate.Errors);
 
-        var candidateId = await dbContext.Candidates
-            .Where(candidate => candidate.UserId == userId)
-            .Select(candidate => (int?)candidate.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (candidateId is null)
-            return ServiceResult<IReadOnlyList<MyApplicationDto>>.Fail(ServiceErrorType.NotFound, "Candidate profile not found.");
-
-        var applications = await dbContext.Applications
-            .AsNoTracking()
-            .Where(application => application.CandidateId == candidateId.Value)
+        var applications = await OwnedApplications(candidate.Data)
             .Include(application => application.JobPosting).ThenInclude(job => job.Company)
             .Include(application => application.Resume)
             .Include(application => application.StatusHistory)
@@ -41,31 +33,66 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
             .ThenByDescending(application => application.Id)
             .ToListAsync(cancellationToken);
 
-        return ServiceResult<IReadOnlyList<MyApplicationDto>>.Ok(applications
-            .Select(application => new MyApplicationDto(
-                application.Id,
-                application.JobPosting.Title,
-                application.JobPosting.Company.CompanyName,
-                application.Resume.Title,
-                application.CurrentStatus,
-                application.AppliedAt,
-                application.StatusHistory
-                    .OrderBy(history => history.ChangedAt)
-                    .Select(history => new HistoryDto(
-                        history.Id, history.Status, history.ChangedByUserId, history.Notes, history.ChangedAt))
-                    .ToArray(),
-                application.Interviews
-                    .OrderBy(interview => interview.InterviewDate)
-                    .Select(interview => new InterviewDto(
-                        interview.Id,
-                        interview.ApplicationId,
-                        interview.InterviewDate,
-                        interview.LocationOrLink,
-                        interview.InterviewType,
-                        interview.Notes,
-                        interview.Status))
-                    .ToArray()))
-            .ToArray());
+        return ServiceResult<IReadOnlyList<MyApplicationDto>>.Ok(
+            applications.Select(ToDto).ToArray());
+    }
+
+    public async Task<ServiceResult<MyApplicationsPageDto>> GetMyApplicationsPageAsync(
+        string? userId,
+        MyApplicationsQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        var candidate = await ResolveCandidateIdAsync(userId, cancellationToken);
+        if (!candidate.Success)
+            return ServiceResult<MyApplicationsPageDto>.Fail(candidate.ErrorType!.Value, candidate.Errors);
+
+        var page = Math.Max(query.Page, 1);
+        var pageSize = Math.Clamp(
+            query.PageSize <= 0 ? MyApplicationsQuery.DefaultPageSize : query.PageSize,
+            1,
+            MyApplicationsQuery.MaxPageSize);
+
+        var all = OwnedApplications(candidate.Data);
+        var totalApplications = await all.CountAsync(cancellationToken);
+        var inProgress = await all.CountAsync(
+            application => application.CurrentStatus == ApplicationStatus.Pending
+                || application.CurrentStatus == ApplicationStatus.Viewed
+                || application.CurrentStatus == ApplicationStatus.Shortlisted
+                || application.CurrentStatus == ApplicationStatus.Interviewing,
+            cancellationToken);
+        var offers = await all.CountAsync(
+            application => application.CurrentStatus == ApplicationStatus.Offered, cancellationToken);
+
+        var filtered = ApplyFilters(all, query);
+        var total = await filtered.CountAsync(cancellationToken);
+
+        var offset = (long)(page - 1) * pageSize;
+        var items = offset >= total
+            ? Array.Empty<MyApplicationDto>()
+            : (await filtered
+                .Include(application => application.JobPosting).ThenInclude(job => job.Company)
+                .Include(application => application.Resume)
+                .Include(application => application.StatusHistory)
+                .Include(application => application.Interviews)
+                .OrderByDescending(application => application.AppliedAt)
+                .ThenByDescending(application => application.Id)
+                .Skip((int)offset)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken))
+              .Select(ToDto)
+              .ToArray();
+
+        return ServiceResult<MyApplicationsPageDto>.Ok(new MyApplicationsPageDto
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = total,
+            TotalPages = (int)Math.Ceiling(total / (double)pageSize),
+            TotalApplications = totalApplications,
+            InProgressCount = inProgress,
+            OfferCount = offers
+        });
     }
 
     public async Task<ServiceResult<PagedResponse<MyNotificationDto>>> GetMyNotificationsAsync(
@@ -170,6 +197,78 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
 
         return ServiceResult<int>.Ok(updated);
     }
+
+    private IQueryable<Application> OwnedApplications(int candidateId) =>
+        dbContext.Applications
+            .AsNoTracking()
+            .Where(application => application.CandidateId == candidateId);
+
+    private static IQueryable<Application> ApplyFilters(
+        IQueryable<Application> query, MyApplicationsQuery filter)
+    {
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var pattern = $"%{filter.Search.Trim()}%";
+            query = query.Where(application =>
+                EF.Functions.Like(application.JobPosting.Title, pattern)
+                || EF.Functions.Like(application.JobPosting.Company.CompanyName, pattern));
+        }
+
+        return filter.StatusGroup?.Trim().ToLowerInvariant() switch
+        {
+            "active" => query.Where(application =>
+                application.CurrentStatus == ApplicationStatus.Pending
+                || application.CurrentStatus == ApplicationStatus.Viewed
+                || application.CurrentStatus == ApplicationStatus.Shortlisted
+                || application.CurrentStatus == ApplicationStatus.Interviewing),
+            "offers" => query.Where(application => application.CurrentStatus == ApplicationStatus.Offered),
+            "closed" => query.Where(application =>
+                application.CurrentStatus == ApplicationStatus.Rejected
+                || application.CurrentStatus == ApplicationStatus.Withdrawn),
+            _ => query
+        };
+    }
+
+    private async Task<ServiceResult<int>> ResolveCandidateIdAsync(
+        string? userId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return ServiceResult<int>.Fail(ServiceErrorType.Unauthorized, "Not signed in.");
+
+        var candidateId = await dbContext.Candidates
+            .Where(candidate => candidate.UserId == userId)
+            .Select(candidate => (int?)candidate.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return candidateId is null
+            ? ServiceResult<int>.Fail(ServiceErrorType.NotFound, "Candidate profile not found.")
+            : ServiceResult<int>.Ok(candidateId.Value);
+    }
+
+    private static MyApplicationDto ToDto(Application application) =>
+        new(
+            application.Id,
+            application.JobPosting.Title,
+            application.JobPosting.Company.CompanyName,
+            application.Resume.Title,
+            application.CurrentStatus,
+            application.AppliedAt,
+            application.StatusHistory
+                .OrderBy(history => history.ChangedAt)
+                .Select(history => new HistoryDto(
+                    history.Id, history.Status, history.ChangedByUserId, history.Notes, history.ChangedAt))
+                .ToArray(),
+            application.Interviews
+                .OrderBy(interview => interview.InterviewDate)
+                .Select(interview => new InterviewDto(
+                    interview.Id,
+                    interview.ApplicationId,
+                    interview.InterviewDate,
+                    interview.LocationOrLink,
+                    interview.InterviewType,
+                    interview.Notes,
+                    interview.Status))
+                .ToArray());
 
     private static MyNotificationDto ToDto(Notification notification) =>
         new(notification.Id, notification.Title, notification.Content, notification.IsRead, notification.CreatedAt);

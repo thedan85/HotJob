@@ -1,4 +1,5 @@
 using hotjob.Data;
+using hotjob.DTOs.Candidate;
 using hotjob.Models;
 using hotjob.Models.Application;
 using hotjob.Models.Job;
@@ -90,6 +91,54 @@ public sealed class CandidateServiceTests
         return application.Id;
     }
 
+    private static async Task<int[]> SeedApplicationBatchAsync(
+        TestFixture fx,
+        int candidateId,
+        int count,
+        Func<int, string>? title = null,
+        Func<int, ApplicationStatus>? status = null,
+        Func<int, DateTime>? appliedAt = null)
+    {
+        var company = new CompanyProfile
+        {
+            CompanyName = $"Batch Co {Guid.NewGuid():N}",
+            Status = CompanyStatus.Approved
+        };
+        fx.Db.CompanyProfiles.Add(company);
+        await fx.Db.SaveChangesAsync();
+        var resume = new Resume { CandidateId = candidateId, Title = "CV" };
+        fx.Db.Resumes.Add(resume);
+        await fx.Db.SaveChangesAsync();
+
+        var ids = new int[count];
+        for (var index = 0; index < count; index++)
+        {
+            var job = new JobPosting
+            {
+                CompanyProfileId = company.Id,
+                Title = title?.Invoke(index) ?? $"Job {index}",
+                Description = "d",
+                Status = JobStatus.Published
+            };
+            fx.Db.JobPostings.Add(job);
+            await fx.Db.SaveChangesAsync();
+
+            var application = new Application
+            {
+                JobPostingId = job.Id,
+                ResumeId = resume.Id,
+                CandidateId = candidateId,
+                CurrentStatus = status?.Invoke(index) ?? ApplicationStatus.Pending,
+                AppliedAt = appliedAt?.Invoke(index) ?? DateTime.UtcNow.AddMinutes(index)
+            };
+            fx.Db.Applications.Add(application);
+            await fx.Db.SaveChangesAsync();
+            ids[index] = application.Id;
+        }
+
+        return ids;
+    }
+
     // GetMyApplications ------------------------------------------------------
 
     [Fact]
@@ -152,6 +201,202 @@ public sealed class CandidateServiceTests
 
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.Unauthorized, result.ErrorType);
+    }
+
+    // GetMyApplicationsPage --------------------------------------------------
+
+    [Fact]
+    public async Task GetMyApplicationsPage_SlicesRequestedPageAndReportsTotal()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (me, candidateId) = await SeedCandidateAsync(fx, "paged-apps@example.com");
+        await SeedApplicationBatchAsync(fx, candidateId, 5);
+        Detach(fx);
+
+        var result = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery { Page = 1, PageSize = 2 });
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        var page = result.Data!;
+        Assert.Equal(5, page.TotalCount);
+        Assert.Equal(3, page.TotalPages);
+        Assert.Equal(1, page.Page);
+        Assert.Equal(2, page.PageSize);
+        Assert.Equal(new[] { "Job 4", "Job 3" }, page.Items.Select(item => item.JobTitle));
+        Assert.Equal(5, page.TotalApplications);
+    }
+
+    [Fact]
+    public async Task GetMyApplicationsPage_OrderIsStableAcrossPages()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (me, candidateId) = await SeedCandidateAsync(fx, "stable-pages@example.com");
+        var ids = await SeedApplicationBatchAsync(
+            fx, candidateId, 6,
+            appliedAt: _ => new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc));
+        Detach(fx);
+
+        var first = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery { Page = 1, PageSize = 2 });
+        var second = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery { Page = 2, PageSize = 2 });
+        var third = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery { Page = 3, PageSize = 2 });
+
+        var seen = first.Data!.Items
+            .Concat(second.Data!.Items)
+            .Concat(third.Data!.Items)
+            .Select(item => item.ApplicationId)
+            .ToArray();
+
+        Assert.Equal(6, seen.Distinct().Count());
+        Assert.Equal(ids.OrderByDescending(id => id), seen);
+    }
+
+    [Fact]
+    public async Task GetMyApplicationsPage_BeyondLastPage_ReturnsEmptyPageAndKeepsTotal()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (me, candidateId) = await SeedCandidateAsync(fx, "beyond@example.com");
+        await SeedApplicationBatchAsync(fx, candidateId, 3);
+        Detach(fx);
+
+        var result = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery { Page = 99, PageSize = 2 });
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        var page = result.Data!;
+        Assert.Empty(page.Items);
+        Assert.Equal(3, page.TotalCount);
+        Assert.Equal(2, page.TotalPages);
+        Assert.Equal(99, page.Page);
+    }
+
+    [Fact]
+    public async Task GetMyApplicationsPage_ClampsPageSizeToHardMaximum()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (me, candidateId) = await SeedCandidateAsync(fx, "cap@example.com");
+        await SeedApplicationBatchAsync(fx, candidateId, 3);
+        Detach(fx);
+
+        var result = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery { Page = 1, PageSize = 1000 });
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(MyApplicationsQuery.MaxPageSize, result.Data!.PageSize);
+        Assert.Equal(50, result.Data.PageSize);
+    }
+
+    [Fact]
+    public async Task GetMyApplicationsPage_UsesDefaultPageSizeWhenNotSet()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (me, candidateId) = await SeedCandidateAsync(fx, "default-size@example.com");
+        await SeedApplicationBatchAsync(fx, candidateId, 3);
+        Detach(fx);
+
+        var result = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery { Page = 0, PageSize = 0 });
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Equal(MyApplicationsQuery.DefaultPageSize, result.Data!.PageSize);
+        Assert.Equal(10, result.Data.PageSize);
+        Assert.Equal(1, result.Data.Page);
+    }
+
+    [Fact]
+    public async Task GetMyApplicationsPage_ReturnsOnlyCallersApplications()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (me, myCandidateId) = await SeedCandidateAsync(fx, "mine@example.com");
+        var (_, otherCandidateId) = await SeedCandidateAsync(fx, "theirs@example.com");
+        await SeedApplicationBatchAsync(fx, myCandidateId, 2, title: index => $"Mine {index}");
+        await SeedApplicationBatchAsync(fx, otherCandidateId, 3, title: index => $"Theirs {index}");
+        Detach(fx);
+
+        var result = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery { Page = 1, PageSize = 10 });
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        var page = result.Data!;
+        Assert.Equal(2, page.TotalCount);
+        Assert.Equal(2, page.TotalApplications);
+        Assert.All(page.Items, item => Assert.StartsWith("Mine ", item.JobTitle));
+    }
+
+    [Fact]
+    public async Task GetMyApplicationsPage_FilterAndPagingApplyTogether()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (me, candidateId) = await SeedCandidateAsync(fx, "filter-pages@example.com");
+        await SeedApplicationBatchAsync(
+            fx, candidateId, 5,
+            title: index => index < 3 ? "Backend Engineer" : "Designer",
+            status: index => index switch
+            {
+                0 => ApplicationStatus.Pending,
+                1 => ApplicationStatus.Shortlisted,
+                2 => ApplicationStatus.Offered,
+                3 => ApplicationStatus.Rejected,
+                _ => ApplicationStatus.Pending
+            });
+        Detach(fx);
+
+        var first = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery
+            {
+                Search = "backend",
+                StatusGroup = "active",
+                Page = 1,
+                PageSize = 1
+            });
+        var second = await Service(fx).GetMyApplicationsPageAsync(
+            me, new MyApplicationsQuery
+            {
+                Search = "backend",
+                StatusGroup = "active",
+                Page = 2,
+                PageSize = 1
+            });
+
+        Assert.True(first.Success, string.Join("; ", first.Errors));
+        var page = first.Data!;
+        Assert.Equal(2, page.TotalCount);
+        Assert.Equal(2, page.TotalPages);
+        Assert.Equal(5, page.TotalApplications);
+        Assert.Equal(3, page.InProgressCount);
+        Assert.Equal(1, page.OfferCount);
+        Assert.Single(page.Items);
+        Assert.Single(second.Data!.Items);
+        Assert.NotEqual(page.Items[0].ApplicationId, second.Data.Items[0].ApplicationId);
+        Assert.All(page.Items.Concat(second.Data.Items),
+            item => Assert.Equal("Backend Engineer", item.JobTitle));
+    }
+
+    [Fact]
+    public async Task GetMyApplicationsPage_Anonymous_Unauthorized()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+
+        var result = await Service(fx).GetMyApplicationsPageAsync(
+            null, new MyApplicationsQuery());
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.Unauthorized, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task GetMyApplicationsPage_NoCandidateProfile_NotFound()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var user = await fx.SeedUserAsync("ghost-page@example.com", "Str0ng!Pass", AppRoles.Candidate);
+
+        var result = await Service(fx).GetMyApplicationsPageAsync(
+            user.Id, new MyApplicationsQuery());
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
     }
 
     // GetMyNotifications -----------------------------------------------------
