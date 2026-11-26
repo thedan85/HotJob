@@ -17,8 +17,11 @@ public sealed class AdminService(
     ApplicationDbContext dbContext,
     UserManager<ApplicationUser> userManager,
     RoleManager<IdentityRole> roleManager,
-    IAdminAuditService auditService) : IAdminService
+    IAdminAuditService auditService,
+    TimeProvider? timeProvider = null) : IAdminService
 {
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+
     public async Task<ServiceResult<AdminDashboardDto>> GetDashboardAsync(CancellationToken cancellationToken = default)
     {
         var totalUsers = await dbContext.Users.CountAsync(cancellationToken).ConfigureAwait(false);
@@ -71,6 +74,33 @@ public sealed class AdminService(
         var closedJobs = await dbContext.JobPostings.CountAsync(job => job.Status == JobStatus.Closed, cancellationToken).ConfigureAwait(false);
         var expiredJobs = await dbContext.JobPostings.CountAsync(job => job.Status == JobStatus.Expired, cancellationToken).ConfigureAwait(false);
 
+        var now = clock.GetUtcNow().UtcDateTime;
+        var last30Days = now.AddDays(-30);
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var totalApplications = await dbContext.Applications.CountAsync(cancellationToken).ConfigureAwait(false);
+        var recentApplications = await dbContext.Applications
+            .CountAsync(application => application.AppliedAt >= last30Days, cancellationToken)
+            .ConfigureAwait(false);
+        var statusRows = await dbContext.Applications
+            .GroupBy(application => application.CurrentStatus)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var applicationsByStatus = statusRows
+            .OrderBy(row => row.Status)
+            .Select(row => new AdminStatusCountDto(row.Status.ToString(), row.Count))
+            .ToList();
+
+        // Summed in memory: SQLite cannot aggregate decimal columns, and one month of payments is small.
+        var paidThisMonth = await dbContext.Payments
+            .AsNoTracking()
+            .Where(payment => payment.Status == hotjob.Models.Billing.PaymentStatus.Paid
+                && payment.PaidAt != null && payment.PaidAt >= monthStart)
+            .Select(payment => payment.Amount)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
         return ServiceResult<AdminDashboardDto>.Ok(new AdminDashboardDto(
             totalUsers,
             activeUsers,
@@ -85,7 +115,12 @@ public sealed class AdminService(
             publishedJobs,
             draftJobs,
             closedJobs,
-            expiredJobs));
+            expiredJobs,
+            totalApplications,
+            recentApplications,
+            applicationsByStatus,
+            paidThisMonth.Sum(),
+            paidThisMonth.Count));
     }
 
     public Task<ServiceResult<PagedResponse<AdminUserListItemDto>>> GetUsersAsync(

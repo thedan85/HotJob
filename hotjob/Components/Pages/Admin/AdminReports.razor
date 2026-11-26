@@ -1,0 +1,233 @@
+@page "/admin/reports"
+@rendermode InteractiveServer
+@using System.Globalization
+@using hotjob.DTOs.Admin
+@using hotjob.Models.Billing
+@using hotjob.Services.Admin
+@inject IAdminReportService ReportService
+
+<PageTitle>Admin reports | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow">Administration</p>
+                    <h1>Reports</h1>
+                    <p class="workspace-lede">Applications, sign-ups, new jobs and revenue by month (UTC). Revenue counts paid payments only, by payment date.</p>
+                </div>
+            </section>
+
+            <section class="workspace-toolbar" aria-label="Report range">
+                <label class="workspace-field">
+                    <span>Range</span>
+                    <select @bind="months" @bind:after="LoadAsync">
+                        <option value="3">Last 3 months</option>
+                        <option value="6">Last 6 months</option>
+                        <option value="12">Last 12 months</option>
+                        <option value="24">Last 24 months</option>
+                    </select>
+                </label>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading report">
+                    <p class="workspace-sub">Loading report…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else if (report is not null)
+            {
+                <section class="workspace-metrics" aria-label="Report totals">
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-label">Applications</span>
+                        <span class="workspace-stat-value">@report.TotalApplications.ToString("N0")</span>
+                        <span class="workspace-stat-hint">@RangeLabel</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-label">Revenue</span>
+                        <span class="workspace-stat-value">@Vnd(report.TotalRevenue)</span>
+                        <span class="workspace-stat-hint">@report.Months.Sum(m => m.PaidPayments) paid payments</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-label">New candidates</span>
+                        <span class="workspace-stat-value">@report.Months.Sum(m => m.NewCandidates)</span>
+                        <span class="workspace-stat-hint">@report.Months.Sum(m => m.NewEmployers) new employers</span>
+                    </div>
+                    <div class="workspace-stat">
+                        <span class="workspace-stat-label">New jobs</span>
+                        <span class="workspace-stat-value">@report.Months.Sum(m => m.NewJobs)</span>
+                        <span class="workspace-stat-hint">@RangeLabel</span>
+                    </div>
+                </section>
+
+                <section class="workspace-card" aria-label="Monthly charts">
+                    <div class="admin-chart-grid">
+                        <AdminColumnChart Title="Applications per month" Points="@ApplicationPoints" />
+                        <AdminColumnChart Title="Revenue per month (VND)" Points="@RevenuePoints" Format="@CompactVnd" />
+                    </div>
+                </section>
+
+                <section class="workspace-card" aria-labelledby="report-table-heading">
+                    <div class="workspace-section-head">
+                        <h2 id="report-table-heading">By month</h2>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Applications</th>
+                                    <th>New candidates</th>
+                                    <th>New employers</th>
+                                    <th>New jobs</th>
+                                    <th>Paid payments</th>
+                                    @foreach (var purpose in Purposes)
+                                    {
+                                        <th>@PurposeLabel(purpose)</th>
+                                    }
+                                    <th>Revenue</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in report.Months.Reverse())
+                                {
+                                    <tr>
+                                        <td>@MonthLabel(row, longForm: true)</td>
+                                        <td>@row.Applications</td>
+                                        <td>@row.NewCandidates</td>
+                                        <td>@row.NewEmployers</td>
+                                        <td>@row.NewJobs</td>
+                                        <td>@row.PaidPayments</td>
+                                        @foreach (var purpose in Purposes)
+                                        {
+                                            <td>@Vnd(row.RevenueByPurpose.TryGetValue(purpose, out var amount) ? amount : 0m)</td>
+                                        }
+                                        <td><strong>@Vnd(row.Revenue)</strong></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <div class="admin-grid">
+                    <section class="workspace-card" aria-labelledby="top-companies-heading">
+                        <div class="workspace-section-head">
+                            <h2 id="top-companies-heading">Top companies by applications</h2>
+                        </div>
+                        @if (report.TopCompanies.Count == 0)
+                        {
+                            <p class="workspace-sub">No applications in this range.</p>
+                        }
+                        else
+                        {
+                            <ol class="admin-summary-list">
+                                @foreach (var company in report.TopCompanies)
+                                {
+                                    <li><a href="/admin/companies/@company.Id">@company.Name</a><span>@company.Count</span></li>
+                                }
+                            </ol>
+                        }
+                    </section>
+                    <section class="workspace-card" aria-labelledby="top-jobs-heading">
+                        <div class="workspace-section-head">
+                            <h2 id="top-jobs-heading">Top jobs by applications</h2>
+                        </div>
+                        @if (report.TopJobs.Count == 0)
+                        {
+                            <p class="workspace-sub">No applications in this range.</p>
+                        }
+                        else
+                        {
+                            <ol class="admin-summary-list">
+                                @foreach (var job in report.TopJobs)
+                                {
+                                    <li><span>@job.Name <span class="workspace-sub">· @job.Subtitle</span></span><span>@job.Count</span></li>
+                                }
+                            </ol>
+                        }
+                    </section>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private static readonly string[] Purposes = Enum.GetNames<PaymentPurpose>();
+
+    private AdminReportDto? report;
+    private int months = 12;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    private IReadOnlyList<AdminColumnChart.ChartPoint> ApplicationPoints =>
+        report?.Months.Select(m => new AdminColumnChart.ChartPoint(MonthLabel(m, longForm: false), m.Applications)).ToList() ?? [];
+
+    private IReadOnlyList<AdminColumnChart.ChartPoint> RevenuePoints =>
+        report?.Months.Select(m => new AdminColumnChart.ChartPoint(MonthLabel(m, longForm: false), m.Revenue)).ToList() ?? [];
+
+    private string RangeLabel => report is null
+        ? string.Empty
+        : $"{report.FromUtc:MMM yyyy} – {report.ToUtc.AddDays(-1):MMM yyyy}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        errorMessage = null;
+        try
+        {
+            var result = await ReportService.GetReportAsync(months);
+            if (!result.Success || result.Data is null)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            report = result.Data;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string MonthLabel(AdminMonthlyReportRow row, bool longForm) =>
+        new DateTime(row.Year, row.Month, 1).ToString(longForm ? "MMMM yyyy" : "MMM yy", CultureInfo.InvariantCulture);
+
+    private static string Vnd(decimal amount) => $"{amount.ToString("N0", CultureInfo.InvariantCulture)} VND";
+
+    /// <summary>Short value for the column cap, e.g. 1.2M or 850K.</summary>
+    private static string CompactVnd(decimal amount) => amount switch
+    {
+        >= 1_000_000_000m => (amount / 1_000_000_000m).ToString("0.#", CultureInfo.InvariantCulture) + "B",
+        >= 1_000_000m => (amount / 1_000_000m).ToString("0.#", CultureInfo.InvariantCulture) + "M",
+        >= 1_000m => (amount / 1_000m).ToString("0.#", CultureInfo.InvariantCulture) + "K",
+        _ => amount.ToString("N0", CultureInfo.InvariantCulture)
+    };
+
+    private static string PurposeLabel(string purpose) => purpose switch
+    {
+        nameof(PaymentPurpose.EmployerPlan) => "Employer plans",
+        nameof(PaymentPurpose.EmployerFeatured) => "Featured jobs",
+        nameof(PaymentPurpose.CandidatePremium) => "Candidate premium",
+        _ => purpose
+    };
+}

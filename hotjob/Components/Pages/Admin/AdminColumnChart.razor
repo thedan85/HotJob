@@ -1,0 +1,90 @@
+@* Single-series monthly column chart. One hue, no legend (the heading names the series),
+   value printed on the tallest column only, every column has a hover/focus tooltip.
+   The table on the reports page is the accessible data view. *@
+
+<figure class="admin-chart">
+    <figcaption class="admin-chart-title">@Title</figcaption>
+    @if (Points.Count == 0)
+    {
+        <p class="workspace-sub">No data.</p>
+    }
+    else
+    {
+        <svg width="@Width" height="@Height" viewBox="0 0 @Width @Height" role="img" aria-label="@AriaLabel" preserveAspectRatio="xMidYMid meet">
+            <line class="admin-chart-baseline" x1="0" x2="@Width" y1="@BaselineY" y2="@BaselineY" />
+            @for (var i = 0; i < Points.Count; i++)
+            {
+                var point = Points[i];
+                var slotX = i * SlotWidth;
+                var barHeight = Max <= 0 ? 0 : (double)(point.Value / Max) * PlotHeight;
+                var barX = slotX + (SlotWidth - BarWidth) / 2.0;
+                var barY = BaselineY - barHeight;
+                var tip = $"{point.Label}: {Format(point.Value)}";
+                <g class="admin-chart-slot" tabindex="0" aria-label="@tip">
+                    <title>@tip</title>
+                    @* Hit target: the whole slot, taller and wider than the mark. *@
+                    <rect class="admin-chart-hit" x="@F(slotX)" y="0" width="@SlotWidth" height="@BaselineY" />
+                    @if (barHeight > 0)
+                    {
+                        <path class="admin-chart-bar" d="@BarPath(barX, barY, BarWidth, barHeight)" />
+                    }
+                    @if (i == MaxIndex && Max > 0)
+                    {
+                        <g><text class="admin-chart-value" x="@F(slotX + SlotWidth / 2.0)" y="@F(barY - 6)" text-anchor="middle">@Format(point.Value)</text></g>
+                    }
+                    <text class="admin-chart-label" x="@F(slotX + SlotWidth / 2.0)" y="@F(BaselineY + 16)" text-anchor="middle">@point.Label</text>
+                </g>
+            }
+        </svg>
+    }
+</figure>
+
+@code {
+    private const int SlotWidth = 44;
+    private const int BarWidth = 24;
+    private const int PlotHeight = 120;
+    private const int TopPadding = 22;
+    private const int Height = TopPadding + PlotHeight + 24;
+    private const int BaselineY = TopPadding + PlotHeight;
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ChartPoint> Points { get; set; } = [];
+
+    [Parameter]
+    public Func<decimal, string> Format { get; set; } = value => value.ToString("N0");
+
+    public sealed record ChartPoint(string Label, decimal Value);
+
+    private int Width => Math.Max(Points.Count, 1) * SlotWidth;
+
+    private decimal Max => Points.Count == 0 ? 0 : Points.Max(point => point.Value);
+
+    private int MaxIndex
+    {
+        get
+        {
+            var index = 0;
+            for (var i = 1; i < Points.Count; i++)
+            {
+                if (Points[i].Value > Points[index].Value) index = i;
+            }
+
+            return index;
+        }
+    }
+
+    private string AriaLabel => $"{Title}. " + string.Join(", ", Points.Select(point => $"{point.Label} {Format(point.Value)}"));
+
+    private static string F(double value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Column with a 4px rounded top and a square base on the baseline.</summary>
+    private static string BarPath(double x, double y, double width, double height)
+    {
+        var r = Math.Min(4, Math.Min(height, width / 2));
+        var bottom = y + height;
+        return $"M{F(x)},{F(bottom)} V{F(y + r)} Q{F(x)},{F(y)} {F(x + r)},{F(y)} H{F(x + width - r)} Q{F(x + width)},{F(y)} {F(x + width)},{F(y + r)} V{F(bottom)} Z";
+    }
+}

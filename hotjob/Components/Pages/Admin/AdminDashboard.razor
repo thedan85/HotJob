@@ -92,6 +92,12 @@
                             <li><strong>Published jobs:</strong><span>@dashboard.PublishedJobs</span></li>
                             <li><strong>Draft jobs:</strong><span>@dashboard.DraftJobs</span></li>
                             <li><strong>Closed jobs:</strong><span>@dashboard.ClosedJobs</span></li>
+                            <li><strong>Applications:</strong><span>@dashboard.TotalApplications (@dashboard.ApplicationsLast30Days in the last 30 days)</span></li>
+                            @foreach (var status in dashboard.ApplicationsByStatus ?? [])
+                            {
+                                <li><strong>· @status.Status:</strong><span>@status.Count</span></li>
+                            }
+                            <li><strong>Revenue this month:</strong><span>@dashboard.RevenueThisMonth.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) VND (@dashboard.PaidPaymentsThisMonth paid)</span></li>
                         </ul>
                     </section>
                     <section class="workspace-card" aria-labelledby="admin-actions-heading">
@@ -107,6 +113,7 @@
                             <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/admin/jobs">Job posting management</a>
                             <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/admin/employers">Employer accounts</a>
                             <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/admin/reviews">Review moderation</a>
+                            <a class="workspace-btn workspace-btn-secondary workspace-btn-small" href="/admin/reports">Reports</a>
                         </nav>
                     </section>
                 </div>

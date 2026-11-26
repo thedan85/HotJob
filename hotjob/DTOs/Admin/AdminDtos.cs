@@ -17,7 +17,14 @@ public sealed record AdminDashboardDto(
     int PublishedJobs,
     int DraftJobs,
     int ClosedJobs,
-    int ExpiredJobs);
+    int ExpiredJobs,
+    int TotalApplications = 0,
+    int ApplicationsLast30Days = 0,
+    IReadOnlyList<AdminStatusCountDto>? ApplicationsByStatus = null,
+    decimal RevenueThisMonth = 0m,
+    int PaidPaymentsThisMonth = 0);
+
+public sealed record AdminStatusCountDto(string Status, int Count);
 
 public sealed record AdminUserListItemDto(
     string UserId,
@@ -116,3 +123,28 @@ public sealed record AdminEmployerSummaryDto(
 
 /// <summary>Returned once by a password reset; never stored or logged.</summary>
 public sealed record AdminPasswordResetDto(string TemporaryPassword);
+
+/// <summary>Monthly admin report over a closed-open UTC range [FromUtc, ToUtc).</summary>
+public sealed record AdminReportDto(
+    DateTime FromUtc,
+    DateTime ToUtc,
+    IReadOnlyList<AdminMonthlyReportRow> Months,
+    IReadOnlyList<AdminTopItemDto> TopCompanies,
+    IReadOnlyList<AdminTopItemDto> TopJobs,
+    int TotalApplications,
+    decimal TotalRevenue);
+
+/// <summary>One calendar month (UTC). Months without data are present with zeros.</summary>
+public sealed record AdminMonthlyReportRow(
+    int Year,
+    int Month,
+    int Applications,
+    int NewCandidates,
+    int NewEmployers,
+    int NewJobs,
+    int PaidPayments,
+    decimal Revenue,
+    IReadOnlyDictionary<string, decimal> RevenueByPurpose);
+
+/// <summary>A ranked company or job; Subtitle is the company name for jobs.</summary>
+public sealed record AdminTopItemDto(int Id, string Name, string? Subtitle, int Count);

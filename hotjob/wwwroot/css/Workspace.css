@@ -596,3 +596,21 @@
     .workspace-tabs { flex-wrap: nowrap; overflow-x: auto; }
     .workspace-tab { flex: 0 0 auto; }
 }
+
+/* ---- Admin reports: single-series column charts ---- */
+.admin-chart {
+    /* Brand-adjacent green validated for marks on white (#2E8B62); status greens stay reserved. */
+    --admin-chart-bar: #2E8B62;
+    margin: 0;
+}
+.admin-chart-title { font-weight: 600; color: var(--hj-ink); margin-bottom: 8px; }
+.admin-chart svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+.admin-chart-baseline { stroke: var(--hj-border-strong); stroke-width: 1; }
+.admin-chart-bar { fill: var(--admin-chart-bar); transition: opacity var(--hj-transition); }
+.admin-chart-hit { fill: transparent; }
+.admin-chart-slot { outline: none; cursor: default; }
+.admin-chart-slot:hover .admin-chart-hit,
+.admin-chart-slot:focus-visible .admin-chart-hit { fill: var(--hj-surface-muted); }
+.admin-chart-value { fill: var(--hj-ink); font-size: 11px; font-weight: 600; }
+.admin-chart-label { fill: var(--hj-muted); font-size: 11px; }
+.admin-chart-grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
