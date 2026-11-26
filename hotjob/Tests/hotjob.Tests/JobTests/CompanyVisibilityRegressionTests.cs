@@ -93,7 +93,7 @@ public sealed class CompanyVisibilityRegressionTests
         fx.Db.JobPostings.Add(job);
         await fx.Db.SaveChangesAsync();
 
-        var result = await new AdminService(fx.Db, fx.UserManager, fx.RoleManager).GetJobsAsync(1, 20);
+        var result = await fx.CreateJobAdminService().ListAsync(1, 20);
 
         Assert.True(result.Success, string.Join("; ", result.Errors));
         Assert.Contains(result.Data!.Items, item => item.Id == job.Id && item.Title == "Admin visible");
@@ -465,6 +465,139 @@ public sealed class CompanyVisibilityRegressionTests
         Assert.False(string.IsNullOrWhiteSpace(
             (await fx.Db.Applications.SingleAsync()).SnapshotJson));
         Assert.Equal(jobCount, await fx.Db.JobPostings.CountAsync());
+    }
+
+    [Theory]
+    [InlineData(JobStatus.Draft, false)]
+    [InlineData(JobStatus.Closed, false)]
+    [InlineData(JobStatus.Expired, true)]
+    [InlineData(JobStatus.Published, true)]
+    [InlineData(JobStatus.Published, false)]
+    public async Task CompanyActivity_HidesAndRestoresSavedJobsAndAlertFeed_WithoutFilteringJobState(
+        JobStatus status, bool expired)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, [], status: status);
+        var expiry = expired ? DateTime.UtcNow.AddDays(-1) : DateTime.UtcNow.AddDays(7);
+        job.ExpiryDate = expiry;
+        var (candidate, _) = await MatchTestData.CreateCandidateAsync(fx, "activity-feed@example.com");
+        var savedAt = DateTime.UtcNow.AddDays(-2);
+        fx.Db.SavedJobs.Add(new SavedJob
+        {
+            CandidateId = candidate.Id, JobPostingId = job.Id, SavedAt = savedAt
+        });
+        var alert = new Notification
+        {
+            UserId = candidate.UserId, Kind = NotificationKinds.JobAlert,
+            RelatedJobPostingId = job.Id, Title = "Existing alert", IsRead = false
+        };
+        var legacy = new Notification
+        {
+            UserId = candidate.UserId, Kind = NotificationKinds.JobAlert,
+            RelatedJobPostingId = null, Title = "Legacy alert", IsRead = true
+        };
+        fx.Db.Notifications.AddRange(alert, legacy);
+        await fx.Db.SaveChangesAsync();
+        var jobs = CreateJobService(fx);
+        var alerts = new JobAlertService(
+            fx.Db, new StubMatchScoreService(), Options.Create(new JobAlertsOptions()),
+            TimeProvider.System, NullLogger<JobAlertService>.Instance);
+
+        var before = await jobs.GetSavedJobsAsync(candidate.UserId, 1, 20);
+        Assert.Equal(status, Assert.Single(before.Data!.Items).Status);
+        var feedBefore = await alerts.GetAlertsAsync(candidate.UserId, 1, 20);
+        Assert.Equal(2, feedBefore.Data!.TotalCount);
+        Assert.Equal(1, feedBefore.Data.UnreadCount);
+
+        company.IsActive = false;
+        await fx.Db.SaveChangesAsync();
+
+        var hidden = await jobs.GetSavedJobsAsync(candidate.UserId, 1, 20);
+        Assert.Empty(hidden.Data!.Items);
+        Assert.Equal(0, hidden.Data.TotalCount);
+        var feedHidden = await alerts.GetAlertsAsync(candidate.UserId, 1, 20);
+        Assert.Equal(legacy.Id, Assert.Single(feedHidden.Data!.Alerts).Id);
+        Assert.Equal(1, feedHidden.Data.TotalCount);
+        Assert.Equal(0, feedHidden.Data.UnreadCount);
+
+        company.IsActive = true;
+        await fx.Db.SaveChangesAsync();
+
+        var restored = await jobs.GetSavedJobsAsync(candidate.UserId, 1, 20);
+        var item = Assert.Single(restored.Data!.Items);
+        Assert.Equal(1, restored.Data.TotalCount);
+        Assert.Equal(job.Id, item.JobId);
+        Assert.Equal(status, item.Status);
+        Assert.Equal(expiry, item.ExpiryDate);
+        Assert.Equal(savedAt, item.SavedAt);
+        var feedRestored = await alerts.GetAlertsAsync(candidate.UserId, 1, 20);
+        Assert.Equal(2, feedRestored.Data!.TotalCount);
+        Assert.Equal(1, feedRestored.Data.UnreadCount);
+        Assert.Contains(feedRestored.Data.Alerts, row => row.Id == alert.Id && row.JobPostingId == job.Id);
+        Assert.Equal(1, await fx.Db.SavedJobs.CountAsync());
+        Assert.Equal(2, await fx.Db.Notifications.CountAsync());
+    }
+
+    [Fact]
+    public async Task CompanyActivity_BlocksAlertGeneration_UntilReactivated()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, []);
+        var (candidate, _) = await MatchTestData.CreateCandidateAsync(fx, "activity-alert@example.com");
+        company.IsActive = false;
+        await fx.Db.SaveChangesAsync();
+        var alerts = new JobAlertService(
+            fx.Db, new StubMatchScoreService(),
+            Options.Create(new JobAlertsOptions { MinMatchPercent = 60 }),
+            TimeProvider.System, NullLogger<JobAlertService>.Instance);
+
+        Assert.Equal(0, await alerts.NotifyForPublishedJobAsync(job.Id));
+        Assert.Equal(0, await fx.Db.Notifications.CountAsync());
+
+        company.IsActive = true;
+        await fx.Db.SaveChangesAsync();
+
+        Assert.Equal(1, await alerts.NotifyForPublishedJobAsync(job.Id));
+        var alert = Assert.Single(await fx.Db.Notifications.ToListAsync());
+        Assert.Equal(job.Id, alert.RelatedJobPostingId);
+        Assert.Equal(candidate.UserId, alert.UserId);
+        Assert.Equal(0, await alerts.NotifyForPublishedJobAsync(job.Id));
+        Assert.Equal(1, await fx.Db.Notifications.CountAsync());
+    }
+
+    [Fact]
+    public async Task CompanyActivity_BlocksSaveAndRecommendations_UntilReactivated()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        var (candidate, resume) = await MatchTestData.CreateCandidateAsync(
+            fx, "activity-match@example.com", ("C#", 3));
+        var skill = await MatchTestData.GetOrCreateSkillAsync(fx, "C#");
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, [(skill.Id, 10)]);
+        company.IsActive = false;
+        await fx.Db.SaveChangesAsync();
+        var jobs = CreateJobService(fx);
+
+        var save = await jobs.SaveJobAsync(candidate.UserId, job.Id);
+        Assert.False(save.Success);
+        Assert.Equal(ServiceErrorType.NotFound, save.ErrorType);
+        Assert.Equal(0, await fx.Db.SavedJobs.CountAsync());
+        var hidden = await jobs.GetJobsMatchingResumeAsync(candidate.UserId, resume.Id, null, null, 1, 1, 20);
+        Assert.True(hidden.Success);
+        Assert.Empty(hidden.Data!.Items);
+        Assert.Equal(0, hidden.Data.TotalCount);
+
+        company.IsActive = true;
+        await fx.Db.SaveChangesAsync();
+
+        Assert.True((await jobs.SaveJobAsync(candidate.UserId, job.Id)).Success);
+        var restored = await jobs.GetJobsMatchingResumeAsync(candidate.UserId, resume.Id, null, null, 1, 1, 20);
+        Assert.True(restored.Success);
+        Assert.Equal(job.Id, Assert.Single(restored.Data!.Items).Id);
+        Assert.Equal(1, restored.Data.TotalCount);
+        Assert.Equal(1, await fx.Db.SavedJobs.CountAsync());
     }
 
     private sealed class StubMatchScoreService : IMatchScoreService

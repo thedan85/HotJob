@@ -34,6 +34,7 @@ public sealed class JobAlertService(
             .AsNoTracking()
             .Where(row => row.Id == jobPostingId)
             .WhereCompanyApproved()
+            .Where(row => row.Company.IsActive)
             .Select(row => new
             {
                 row.Id,
@@ -165,6 +166,7 @@ public sealed class JobAlertService(
         IQueryable<int> visibleJobIds = dbContext.JobPostings
             .AsNoTracking()
             .WhereCompanyApproved()
+            .Where(job => job.Company.IsActive)
             .Select(job => job.Id);
 
         var query = dbContext.Notifications
