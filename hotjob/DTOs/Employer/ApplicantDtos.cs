@@ -105,6 +105,7 @@ public sealed record HistoryDto(
 public sealed record InterviewDto(
     int Id,
     int ApplicationId,
+    int Round,
     DateTime InterviewDate,
     string? LocationOrLink,
     InterviewType? InterviewType,
@@ -124,6 +125,10 @@ public sealed class UpdateStatusRequest
 
 public sealed class CreateInterviewRequest
 {
+    /// <summary>1-based round number.</summary>
+    [Range(1, 100)]
+    public int Round { get; set; } = 1;
+
     /// <summary>Must be in the future (UTC). Example: 2026-10-05T09:00:00Z.</summary>
     [Required]
     public DateTime InterviewDate { get; set; }
@@ -140,6 +145,9 @@ public sealed class CreateInterviewRequest
 
 public sealed class UpdateInterviewRequest
 {
+    [Range(1, 100)]
+    public int? Round { get; set; }
+
     public DateTime? InterviewDate { get; set; }
 
     [MaxLength(2048)]
@@ -167,6 +175,7 @@ public sealed class SendNotificationRequest
 public sealed record InterviewResponse(
     int Id,
     int ApplicationId,
+    int Round,
     DateTime InterviewDate,
     string? LocationOrLink,
     InterviewType? InterviewType,

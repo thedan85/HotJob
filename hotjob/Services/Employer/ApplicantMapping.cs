@@ -95,10 +95,10 @@ internal static class ApplicantMapping
     }
 
     public static InterviewDto ToInterviewDto(Interview i) =>
-        new(i.Id, i.ApplicationId, i.InterviewDate, i.LocationOrLink, i.InterviewType, i.Notes, i.Status);
+        new(i.Id, i.ApplicationId, i.Round, i.InterviewDate, i.LocationOrLink, i.InterviewType, i.Notes, i.Status);
 
     public static InterviewResponse ToInterviewResponse(Interview i) =>
-        new(i.Id, i.ApplicationId, i.InterviewDate, i.LocationOrLink, i.InterviewType, i.Notes, i.Status);
+        new(i.Id, i.ApplicationId, i.Round, i.InterviewDate, i.LocationOrLink, i.InterviewType, i.Notes, i.Status);
 
     public static NotificationResponse ToNotificationResponse(Notification n) =>
         new(n.Id, n.UserId, n.Title, n.Content, n.IsRead, n.CreatedAt);

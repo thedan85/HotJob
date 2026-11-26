@@ -27,6 +27,8 @@ public sealed class InterviewService(
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "InterviewDate must be in the future.");
         if (!request.InterviewType.HasValue || !Enum.IsDefined(request.InterviewType.Value))
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "A valid interview type is required.");
+        if (request.Round is < 1 or > 100)
+            return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "Round must be between 1 and 100.");
 
         Interview interview;
         await using var tx = await repo.BeginTransactionAsync(cancellationToken);
@@ -43,6 +45,7 @@ public sealed class InterviewService(
             interview = new Interview
             {
                 ApplicationId = app.Id,
+                Round = request.Round,
                 InterviewDate = request.InterviewDate.ToUniversalTime(),
                 LocationOrLink = string.IsNullOrWhiteSpace(request.LocationOrLink) ? null : request.LocationOrLink.Trim(),
                 InterviewType = request.InterviewType,
@@ -122,8 +125,10 @@ public sealed class InterviewService(
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "Invalid interview status.");
         if (request.InterviewDate.HasValue && request.InterviewDate.Value.ToUniversalTime() <= now)
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "InterviewDate must be in the future.");
+        if (request.Round is < 1 or > 100)
+            return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.Validation, "Round must be between 1 and 100.");
 
-        var hasChanges = request.InterviewDate.HasValue || request.LocationOrLink is not null
+        var hasChanges = request.Round.HasValue || request.InterviewDate.HasValue || request.LocationOrLink is not null
             || request.InterviewType.HasValue || request.Notes is not null || request.Status.HasValue;
 
         var interview = await repo.GetOwnedInterviewForUpdateAsync(
@@ -131,6 +136,8 @@ public sealed class InterviewService(
         if (interview is null)
             return ServiceResult<InterviewResponse>.Fail(ServiceErrorType.NotFound, "Interview not found.");
 
+        if (request.Round.HasValue)
+            interview.Round = request.Round.Value;
         if (request.InterviewDate.HasValue)
             interview.InterviewDate = request.InterviewDate.Value.ToUniversalTime();
         if (request.LocationOrLink is not null)

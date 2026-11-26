@@ -383,7 +383,7 @@
                                                     <strong>@iv.InterviewDate.ToString("dd MMM yyyy")</strong>
                                                     <span class="workspace-badge @InterviewStatusClass(iv.Status)">@iv.Status</span>
                                                 </div>
-                                                <p class="ei-interview-meta">@iv.InterviewDate.ToString("HH:mm") · @(iv.InterviewType?.ToString() ?? "Type not set")</p>
+                                                <p class="ei-interview-meta">Round @iv.Round · @iv.InterviewDate.ToString("HH:mm") · @(iv.InterviewType?.ToString() ?? "Type not set")</p>
                                                 @if (!string.IsNullOrWhiteSpace(iv.LocationOrLink))
                                                 {
                                                     <p class="ei-interview-location">@iv.LocationOrLink</p>
@@ -405,6 +405,10 @@
                                                     <EditForm Model="editInterviewForm" OnValidSubmit="SaveInterviewAsync">
                                                         <DataAnnotationsValidator />
                                                         <div class="workspace-form-grid">
+                                                            <label class="workspace-field workspace-wide">
+                                                                <span>Round</span>
+                                                                <InputNumber @bind-Value="editInterviewForm.Round" />
+                                                            </label>
                                                             <label class="workspace-field workspace-wide">
                                                                 <span>Date &amp; time (UTC, future)</span>
                                                                 <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="editInterviewForm.InterviewDate" />
@@ -447,6 +451,10 @@
                                                 <EditForm Model="interviewForm" OnValidSubmit="ScheduleAsync">
                                                     <DataAnnotationsValidator />
                                                     <div class="workspace-form-grid">
+                                                        <label class="workspace-field workspace-wide">
+                                                            <span>Round</span>
+                                                            <InputNumber @bind-Value="interviewForm.Round" />
+                                                        </label>
                                                         <label class="workspace-field workspace-wide">
                                                             <span>Date &amp; time (UTC, future)</span>
                                                             <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="interviewForm.InterviewDate" />
@@ -530,7 +538,7 @@
     private ApplicantDetailResponse? selected;
     private List<InterviewResponse> interviews = new();
     private readonly UpdateStatusRequest statusForm = new() { Status = ApplicationStatus.Viewed };
-    private readonly CreateInterviewRequest interviewForm = new() { InterviewDate = DateTime.UtcNow.AddDays(1) };
+    private readonly CreateInterviewRequest interviewForm = new() { InterviewDate = DateTime.UtcNow.AddDays(1), Round = 1 };
     private UpdateInterviewRequest editInterviewForm = new();
     private int? editingInterviewId;
     private readonly SendNotificationRequest notifyForm = new();
@@ -743,6 +751,7 @@
         editingInterviewId = interview.Id;
         editInterviewForm = new UpdateInterviewRequest
         {
+            Round = interview.Round,
             InterviewDate = DateTime.SpecifyKind(interview.InterviewDate, DateTimeKind.Utc).ToLocalTime(),
             LocationOrLink = interview.LocationOrLink,
             InterviewType = interview.InterviewType,

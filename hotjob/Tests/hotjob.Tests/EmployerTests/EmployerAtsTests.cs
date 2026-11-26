@@ -422,6 +422,44 @@ public sealed class EmployerAtsTests
     }
 
     [Fact]
+    public async Task InterviewRound_RoundTripsThroughCreateUpdateAndList()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var (owner, companyId) = await SeedEmployerAsync(fx, "rounds@example.com");
+        var (appId, _, _) = await SeedApplicationAsync(fx, companyId);
+        Detach(fx);
+
+        var invalid = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(1),
+            InterviewType = InterviewType.Online,
+            Round = 0
+        });
+        Assert.False(invalid.Success);
+        Assert.Equal(ServiceErrorType.Validation, invalid.ErrorType);
+
+        var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        {
+            InterviewDate = DateTime.UtcNow.AddDays(2),
+            InterviewType = InterviewType.Online,
+            Round = 2
+        });
+        Assert.True(created.Success, string.Join("; ", created.Errors));
+        Assert.Equal(2, created.Data!.Round);
+
+        Detach(fx);
+        var list = await Interviews(fx).ListAsync(owner, appId);
+        Assert.Equal(2, Assert.Single(list.Data!).Round);
+
+        var updated = await Interviews(fx).UpdateAsync(owner, created.Data.Id, new UpdateInterviewRequest
+        {
+            Round = 3
+        });
+        Assert.True(updated.Success, string.Join("; ", updated.Errors));
+        Assert.Equal(3, updated.Data!.Round);
+    }
+
+    [Fact]
     public async Task UpdateInterview_Reschedules_KeepsScheduledStatus()
     {
         await using var fx = await TestFixture.CreateAsync();

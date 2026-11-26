@@ -59,6 +59,7 @@ public sealed class CandidateService(ApplicationDbContext dbContext) : ICandidat
                     .Select(interview => new InterviewDto(
                         interview.Id,
                         interview.ApplicationId,
+                        interview.Round,
                         interview.InterviewDate,
                         interview.LocationOrLink,
                         interview.InterviewType,
