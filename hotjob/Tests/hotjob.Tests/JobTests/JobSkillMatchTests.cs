@@ -195,13 +195,15 @@ public sealed class JobSkillMatchTests
         Assert.Empty(result.Data!.Items);
     }
 
-    [Fact]
-    public async Task GetJobsMatchingResumeAsync_PendingCompanyExcluded()
+    [Theory]
+    [InlineData(CompanyStatus.Pending)]
+    [InlineData(CompanyStatus.Rejected)]
+    public async Task GetJobsMatchingResumeAsync_PendingCompanyExcluded(CompanyStatus companyStatus)
     {
         await using var fx = await TestFixture.CreateAsync();
         var (userId, resumeId) = await SeedCandidateWithSkillsAsync(fx, "C#");
         await SeedJobAsync(
-            fx, "Pending", ["C#"], companyStatus: CompanyStatus.Pending);
+            fx, "Pending", ["C#"], companyStatus: companyStatus);
 
         var result = await CreateService(fx).GetJobsMatchingResumeAsync(
             userId, resumeId, null, null, 1, 1, 20);

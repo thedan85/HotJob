@@ -1,5 +1,6 @@
 using hotjob.Data;
 using hotjob.Models.Job;
+using hotjob.Services.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace hotjob.Repositories.Job;
@@ -31,6 +32,7 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
             .Where(job => job.Id == id
                 && job.Status == JobStatus.Published
                 && (job.ExpiryDate == null || job.ExpiryDate > now))
+            .WhereCompanyApproved()
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -90,7 +92,8 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         var now = DateTime.UtcNow;
         var query = DetailsQuery()
             .Where(job => job.Status == JobStatus.Published
-                && (job.ExpiryDate == null || job.ExpiryDate > now));
+                && (job.ExpiryDate == null || job.ExpiryDate > now))
+            .WhereCompanyApproved();
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {

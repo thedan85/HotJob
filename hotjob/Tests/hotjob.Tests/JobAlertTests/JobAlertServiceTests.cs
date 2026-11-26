@@ -205,6 +205,93 @@ public sealed class JobAlertServiceTests
         Assert.Equal(0, await fx.Db.Notifications.CountAsync());
     }
 
+    [Theory]
+    [InlineData(CompanyStatus.Pending)]
+    [InlineData(CompanyStatus.Rejected)]
+    public async Task NonApprovedCompanyJob_DoesNotNotify(CompanyStatus companyStatus)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        using var temp = new TempModelDirectory();
+        var clock = new FakeTimeProvider(Start);
+        await MatchTestData.CreateCandidateAsync(fx, "hidden@example.com", ("C#", 3));
+        var company = await MatchTestData.CreateCompanyAsync(fx);
+        company.Status = companyStatus;
+        await fx.Db.SaveChangesAsync();
+        var csharp = await MatchTestData.GetOrCreateSkillAsync(fx, "C#");
+        var job = await MatchTestData.CreateJobAsync(fx, company.Id, [(csharp.Id, 10)]);
+
+        var created = await CreateService(fx, temp, clock).NotifyForPublishedJobAsync(job.Id);
+
+        Assert.Equal(0, created);
+        Assert.Equal(0, await fx.Db.Notifications.CountAsync());
+    }
+
+    [Fact]
+    public async Task GetAlerts_ExcludesNonApprovedCompanyJobs_KeepsLegacyNullJobAlerts()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        using var temp = new TempModelDirectory();
+        var clock = new FakeTimeProvider(Start);
+        var me = await MatchTestData.CreateCandidateAsync(fx, "feed-filter@example.com");
+
+        var approvedCompany = await MatchTestData.CreateCompanyAsync(fx);
+        var pendingCompany = await MatchTestData.CreateCompanyAsync(fx);
+        pendingCompany.Status = CompanyStatus.Pending;
+        var rejectedCompany = await MatchTestData.CreateCompanyAsync(fx);
+        rejectedCompany.Status = CompanyStatus.Rejected;
+        await fx.Db.SaveChangesAsync();
+
+        var csharp = await MatchTestData.GetOrCreateSkillAsync(fx, "C#");
+        var approvedJob = await MatchTestData.CreateJobAsync(fx, approvedCompany.Id, [(csharp.Id, 10)], title: "Open job");
+        var pendingJob = await MatchTestData.CreateJobAsync(fx, pendingCompany.Id, [(csharp.Id, 10)], title: "Pending job");
+        var rejectedJob = await MatchTestData.CreateJobAsync(fx, rejectedCompany.Id, [(csharp.Id, 10)], title: "Rejected job");
+
+        fx.Db.Notifications.AddRange(
+            new Notification
+            {
+                UserId = me.Candidate.UserId,
+                Kind = NotificationKinds.JobAlert,
+                RelatedJobPostingId = approvedJob.Id,
+                Title = "Approved alert",
+                CreatedAt = Start.UtcDateTime.AddMinutes(3)
+            },
+            new Notification
+            {
+                UserId = me.Candidate.UserId,
+                Kind = NotificationKinds.JobAlert,
+                RelatedJobPostingId = pendingJob.Id,
+                Title = "Pending alert",
+                CreatedAt = Start.UtcDateTime.AddMinutes(2)
+            },
+            new Notification
+            {
+                UserId = me.Candidate.UserId,
+                Kind = NotificationKinds.JobAlert,
+                RelatedJobPostingId = rejectedJob.Id,
+                Title = "Rejected alert",
+                CreatedAt = Start.UtcDateTime.AddMinutes(1)
+            },
+            new Notification
+            {
+                UserId = me.Candidate.UserId,
+                Kind = NotificationKinds.JobAlert,
+                Title = "Legacy alert",
+                CreatedAt = Start.UtcDateTime
+            });
+        await fx.Db.SaveChangesAsync();
+
+        var service = CreateService(fx, temp, clock);
+        var first = await service.GetAlertsAsync(me.Candidate.UserId, 1, 1);
+        var second = await service.GetAlertsAsync(me.Candidate.UserId, 2, 1);
+
+        Assert.True(first.Success, string.Join("; ", first.Errors));
+        Assert.Equal(2, first.Data!.TotalCount);
+        Assert.Equal(2, first.Data.UnreadCount);
+        Assert.Equal("Approved alert", Assert.Single(first.Data.Alerts).Title);
+        Assert.True(second.Success, string.Join("; ", second.Errors));
+        Assert.Equal("Legacy alert", Assert.Single(second.Data!.Alerts).Title);
+    }
+
     [Fact]
     public async Task GetAlerts_ReturnsOnlyCallersJobAlertNotifications_NewestFirst()
     {

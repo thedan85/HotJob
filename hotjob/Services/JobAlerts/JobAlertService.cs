@@ -33,6 +33,7 @@ public sealed class JobAlertService(
         var job = await dbContext.JobPostings
             .AsNoTracking()
             .Where(row => row.Id == jobPostingId)
+            .WhereCompanyApproved()
             .Select(row => new
             {
                 row.Id,
@@ -161,10 +162,18 @@ public sealed class JobAlertService(
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
+        IQueryable<int> visibleJobIds = dbContext.JobPostings
+            .AsNoTracking()
+            .WhereCompanyApproved()
+            .Select(job => job.Id);
+
         var query = dbContext.Notifications
             .AsNoTracking()
             .Where(notification => notification.UserId == userId
-                && notification.Kind == NotificationKinds.JobAlert);
+                && notification.Kind == NotificationKinds.JobAlert
+                && (notification.RelatedJobPostingId == null
+                    || (notification.RelatedJobPostingId.HasValue
+                        && visibleJobIds.Contains(notification.RelatedJobPostingId.Value))));
 
         var total = await query.CountAsync(cancellationToken);
         var unread = await query.CountAsync(notification => !notification.IsRead, cancellationToken);

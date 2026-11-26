@@ -24,12 +24,15 @@ public sealed class SavedJobTests
     private static async Task<Candidate> SeedCandidateAsync(TestFixture fx) =>
         (await MatchTestData.CreateCandidateAsync(fx, $"{Guid.NewGuid():N}@example.com")).Candidate;
 
-    private static async Task<int> SeedJobAsync(TestFixture fx, JobStatus status = JobStatus.Published)
+    private static async Task<int> SeedJobAsync(
+        TestFixture fx,
+        JobStatus status = JobStatus.Published,
+        CompanyStatus companyStatus = CompanyStatus.Approved)
     {
         var company = new CompanyProfile
         {
             CompanyName = $"Saved Co {Guid.NewGuid():N}",
-            Status = CompanyStatus.Approved
+            Status = companyStatus
         };
         fx.Db.CompanyProfiles.Add(company);
         await fx.Db.SaveChangesAsync();
@@ -85,6 +88,51 @@ public sealed class SavedJobTests
 
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
+    }
+
+    [Theory]
+    [InlineData(CompanyStatus.Pending)]
+    [InlineData(CompanyStatus.Rejected)]
+    public async Task GetSavedJobs_ExcludesJobsFromNonApprovedCompanies(CompanyStatus companyStatus)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var candidate = await SeedCandidateAsync(fx);
+        var openId = await SeedJobAsync(fx);
+        var hiddenId = await SeedJobAsync(fx, JobStatus.Published, companyStatus);
+        var service = CreateService(fx);
+
+        Assert.True((await service.SaveJobAsync(candidate.UserId, openId)).Success);
+        // SaveJobAsync correctly rejects a hidden company; insert the legacy bookmark directly.
+        fx.Db.SavedJobs.Add(new SavedJob
+        {
+            CandidateId = candidate.Id,
+            JobPostingId = hiddenId,
+            SavedAt = DateTime.UtcNow
+        });
+        await fx.Db.SaveChangesAsync();
+
+        var list = await service.GetSavedJobsAsync(candidate.UserId, 1, 20);
+
+        Assert.True(list.Success, string.Join("; ", list.Errors));
+        var item = Assert.Single(list.Data!.Items);
+        Assert.Equal(openId, item.JobId);
+        Assert.Equal(1, list.Data.TotalCount);
+    }
+
+    [Theory]
+    [InlineData(CompanyStatus.Pending)]
+    [InlineData(CompanyStatus.Rejected)]
+    public async Task SaveJobAsync_ForNonApprovedCompany_ReturnsNotFound(CompanyStatus companyStatus)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var candidate = await SeedCandidateAsync(fx);
+        var jobId = await SeedJobAsync(fx, JobStatus.Published, companyStatus);
+
+        var result = await CreateService(fx).SaveJobAsync(candidate.UserId, jobId);
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
+        Assert.Equal(0, await fx.Db.SavedJobs.CountAsync());
     }
 
     [Fact]

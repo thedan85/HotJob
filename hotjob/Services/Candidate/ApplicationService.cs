@@ -76,6 +76,7 @@ public sealed class ApplicationService(
         var job = await dbContext.JobPostings
             .AsNoTracking()
             .Where(row => row.Id == jobId)
+            .WhereCompanyApproved()
             .Select(row => new
             {
                 row.Id,

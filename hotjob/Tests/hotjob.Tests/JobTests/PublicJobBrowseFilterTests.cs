@@ -30,12 +30,17 @@ public sealed class PublicJobBrowseFilterTests
     }
 
     private static async Task<int> SeedJobAsync(
-        TestFixture fx, string title, int? categoryId, decimal? salaryMin, decimal? salaryMax)
+        TestFixture fx,
+        string title,
+        int? categoryId,
+        decimal? salaryMin,
+        decimal? salaryMax,
+        CompanyStatus companyStatus = CompanyStatus.Approved)
     {
         var company = new CompanyProfile
         {
             CompanyName = $"Co {Guid.NewGuid():N}",
-            Status = CompanyStatus.Approved
+            Status = companyStatus
         };
         fx.Db.CompanyProfiles.Add(company);
         await fx.Db.SaveChangesAsync();
@@ -110,6 +115,41 @@ public sealed class PublicJobBrowseFilterTests
 
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.Validation, result.ErrorType);
+    }
+
+    [Theory]
+    [InlineData(CompanyStatus.Pending)]
+    [InlineData(CompanyStatus.Rejected)]
+    public async Task Browse_ExcludesJobsFromNonApprovedCompanies(CompanyStatus companyStatus)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        await SeedJobAsync(fx, "Open role", null, null, null);
+        await SeedJobAsync(fx, "Hidden role", null, null, null, companyStatus);
+
+        var result = await CreateService(fx).BrowsePublishedAsync(
+            null, null, null, null, null, null, null, null, 1, 20);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        var item = Assert.Single(result.Data!.Items);
+        Assert.Equal("Open role", item.Title);
+        Assert.Equal(1, result.Data.TotalCount);
+    }
+
+    [Theory]
+    [InlineData(CompanyStatus.Pending)]
+    [InlineData(CompanyStatus.Rejected)]
+    public async Task Browse_CompanyIdFilter_ExcludesNonApprovedCompany(CompanyStatus companyStatus)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var jobId = await SeedJobAsync(fx, "Hidden role", null, null, null, companyStatus);
+        var companyId = fx.Db.JobPostings.Single(job => job.Id == jobId).CompanyProfileId;
+
+        var result = await CreateService(fx).BrowsePublishedAsync(
+            null, null, null, companyId, null, null, null, null, 1, 20);
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+        Assert.Empty(result.Data!.Items);
+        Assert.Equal(0, result.Data.TotalCount);
     }
 
     [Fact]

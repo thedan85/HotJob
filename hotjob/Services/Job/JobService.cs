@@ -428,9 +428,14 @@ public sealed class JobService(
                 ServiceErrorType.Unauthorized, "Candidate profile not found.");
         }
 
+        IQueryable<int> visibleJobIds = dbContext.JobPostings
+            .AsNoTracking()
+            .WhereCompanyApproved()
+            .Select(job => job.Id);
+
         var baseQuery = dbContext.SavedJobs
             .AsNoTracking()
-            .Where(saved => saved.CandidateId == candidateId);
+            .Where(saved => saved.CandidateId == candidateId && visibleJobIds.Contains(saved.JobPostingId));
 
         var total = await baseQuery.CountAsync(cancellationToken);
         var items = await baseQuery
@@ -494,11 +499,11 @@ public sealed class JobService(
         var now = DateTime.UtcNow;
         var isOpen = await dbContext.JobPostings
             .AsNoTracking()
+            .WhereCompanyApproved()
             .AnyAsync(
                 job => job.Id == jobId
                     && job.Status == JobStatus.Published
-                    && (job.ExpiryDate == null || job.ExpiryDate > now)
-                    && job.Company.Status == CompanyStatus.Approved,
+                    && (job.ExpiryDate == null || job.ExpiryDate > now),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -907,8 +912,8 @@ public sealed class JobService(
             .AsNoTracking()
             .Where(job => job.Status == JobStatus.Published
                 && (job.ExpiryDate == null || job.ExpiryDate > now)
-                && job.Company.Status == CompanyStatus.Approved
-                && job.JobSkills.Any(jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)));
+                && job.JobSkills.Any(jobSkill => resumeSkillIds.Contains(jobSkill.SkillId)))
+            .WhereCompanyApproved();
 
         if (!string.IsNullOrWhiteSpace(city))
         {

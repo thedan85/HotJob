@@ -13,13 +13,17 @@ namespace hotjob.Tests.JobTests;
 public sealed class PublicJobDetailTests
 {
     private static async Task<int> SeedJobAsync(
-        TestFixture fx, JobStatus status, DateTime? expiryDate, string title = "Senior .NET Developer")
+        TestFixture fx,
+        JobStatus status,
+        DateTime? expiryDate,
+        string title = "Senior .NET Developer",
+        CompanyStatus companyStatus = CompanyStatus.Approved)
     {
         var company = new CompanyProfile
         {
             CompanyName = $"Co {Guid.NewGuid():N}",
             Location = "Ho Chi Minh",
-            Status = CompanyStatus.Approved
+            Status = companyStatus
         };
         fx.Db.CompanyProfiles.Add(company);
         var skill = new Skill { Name = $"C# {Guid.NewGuid():N}" };
@@ -95,6 +99,34 @@ public sealed class PublicJobDetailTests
         await using var fx = await TestFixture.CreateAsync();
 
         var result = await CreateService(fx).GetPublishedAsync(int.MaxValue);
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_ReturnsNotFound_ForPendingCompany()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var jobId = await SeedJobAsync(
+            fx, JobStatus.Published, DateTime.UtcNow.AddDays(7),
+            companyStatus: CompanyStatus.Pending);
+
+        var result = await CreateService(fx).GetPublishedAsync(jobId);
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task GetPublishedAsync_ReturnsNotFound_ForRejectedCompany()
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var jobId = await SeedJobAsync(
+            fx, JobStatus.Published, DateTime.UtcNow.AddDays(7),
+            companyStatus: CompanyStatus.Rejected);
+
+        var result = await CreateService(fx).GetPublishedAsync(jobId);
 
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);

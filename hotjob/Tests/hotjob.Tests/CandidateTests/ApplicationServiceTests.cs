@@ -36,13 +36,14 @@ public sealed class ApplicationServiceTests
         TestFixture fx,
         JobStatus status = JobStatus.Published,
         DateTime? expiry = null,
-        string title = "Backend Engineer")
+        string title = "Backend Engineer",
+        CompanyStatus companyStatus = CompanyStatus.Approved)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var company = new CompanyProfile
         {
             CompanyName = $"Co {suffix}",
-            Status = CompanyStatus.Approved
+            Status = companyStatus
         };
         fx.Db.CompanyProfiles.Add(company);
         await fx.Db.SaveChangesAsync();
@@ -74,7 +75,7 @@ public sealed class ApplicationServiceTests
         var otherCompany = new CompanyProfile
         {
             CompanyName = $"Other {suffix}",
-            Status = CompanyStatus.Approved
+            Status = companyStatus
         };
         fx.Db.CompanyProfiles.Add(otherCompany);
         var otherUser = await fx.SeedUserAsync($"other-{suffix}@example.com", "Str0ng!Pass", AppRoles.Employer);
@@ -375,6 +376,28 @@ public sealed class ApplicationServiceTests
         Assert.False(result.Success);
         Assert.Equal(ServiceErrorType.Validation, result.ErrorType);
         Assert.Equal(0, await fx.Db.Applications.CountAsync());
+    }
+
+    [Theory]
+    [InlineData(CompanyStatus.Pending)]
+    [InlineData(CompanyStatus.Rejected)]
+    public async Task ApplyAsync_NonApprovedCompany_ReturnsNotFoundWithoutSideEffects(CompanyStatus companyStatus)
+    {
+        await using var fx = await TestFixture.CreateAsync();
+        var clock = new FakeTimeProvider(Start);
+        var (userId, candidateId) = await SeedCandidateAsync(fx);
+        var resumeId = await SeedResumeAsync(fx, candidateId);
+        var job = await SeedJobAsync(fx, companyStatus: companyStatus);
+
+        var result = await NewService(fx, clock).ApplyAsync(
+            userId, job.JobId, resumeId, "  I would love to join.  ");
+
+        Assert.False(result.Success);
+        Assert.Equal(ServiceErrorType.NotFound, result.ErrorType);
+        Assert.Contains("Job not found.", string.Join(" ", result.Errors));
+        Assert.Equal(0, await fx.Db.Applications.CountAsync());
+        Assert.Equal(0, await fx.Db.ApplicationStatusHistories.CountAsync());
+        Assert.Equal(0, await fx.Db.Notifications.CountAsync());
     }
 
     [Fact]
