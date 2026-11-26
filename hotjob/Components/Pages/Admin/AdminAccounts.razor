@@ -37,6 +37,10 @@
                             <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
                         </div>
                     </div>
+                    @if (actionError is not null)
+                    {
+                        <div class="workspace-alert" role="alert">@actionError</div>
+                    }
                     <div style="overflow-x:auto">
                         <table class="admin-table">
                             <thead>
@@ -65,9 +69,20 @@
                                             </span>
                                         </td>
                                         <td>
-                                            <button class="workspace-btn workspace-btn-small @(user.IsActive ? "workspace-btn-danger" : "workspace-btn-secondary")" type="button" @onclick="() => ToggleUserAsync(user.UserId)">
-                                                @(user.IsActive ? "Disable" : "Enable")
-                                            </button>
+                                            @if (user.IsActive && user.UserId == currentUserId)
+                                            {
+                                                <span class="workspace-sub" title="You cannot disable your own account.">You</span>
+                                            }
+                                            else if (user.IsActive && user.Roles.Contains(hotjob.Data.AppRoles.Admin))
+                                            {
+                                                <span class="workspace-sub" title="Administrator accounts cannot be disabled.">Protected</span>
+                                            }
+                                            else
+                                            {
+                                                <button class="workspace-btn workspace-btn-small @(user.IsActive ? "workspace-btn-danger" : "workspace-btn-secondary")" type="button" @onclick="() => ToggleUserAsync(user.UserId)">
+                                                    @(user.IsActive ? "Disable" : "Enable")
+                                                </button>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -99,9 +114,20 @@
     private PagedResponse<AdminUserListItemDto>? paged;
     private bool isLoading = true;
     private string? errorMessage;
+    private string? actionError;
+    private string? currentUserId;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            currentUserId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        }
+
         await LoadAsyncAsync(1);
     }
 
@@ -134,12 +160,14 @@
 
     private async Task ToggleUserAsync(string userId)
     {
+        actionError = null;
         try
         {
             var result = await AdminService.ToggleUserActiveAsync(userId);
             if (!result.Success)
             {
-                errorMessage = string.Join("; ", result.Errors);
+                // Keep the table on screen; a refused toggle is not a page-level failure.
+                actionError = string.Join("; ", result.Errors);
                 return;
             }
 

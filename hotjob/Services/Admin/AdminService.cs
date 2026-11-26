@@ -141,9 +141,27 @@ public sealed class AdminService(
         if (string.IsNullOrWhiteSpace(userId))
             return ServiceResult<bool>.Fail(ServiceErrorType.Validation, "User id is required.");
 
+        // Throws for non-admins, same as the audit write would.
+        var actingAdminId = await auditService.GetRequiredAdminIdAsync().ConfigureAwait(false);
+
         var user = await dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken).ConfigureAwait(false);
         if (user is null)
             return ServiceResult<bool>.Fail(ServiceErrorType.NotFound, "User not found.");
+
+        if (user.IsActive)
+        {
+            // Locking: an admin can never lock themselves out, nor lock another administrator
+            // (which would let two admins lock each other and leave the system without one).
+            if (user.Id == actingAdminId)
+                return ServiceResult<bool>.Fail(ServiceErrorType.Conflict, "You cannot disable your own account.");
+
+            var targetIsAdmin = await dbContext.UserRoles
+                .AnyAsync(userRole => userRole.UserId == user.Id
+                    && dbContext.Roles.Any(role => role.Id == userRole.RoleId && role.Name == AppRoles.Admin), cancellationToken)
+                .ConfigureAwait(false);
+            if (targetIsAdmin)
+                return ServiceResult<bool>.Fail(ServiceErrorType.Conflict, "Administrator accounts cannot be disabled.");
+        }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var committed = false;
@@ -151,6 +169,19 @@ public sealed class AdminService(
         {
         user.IsActive = !user.IsActive;
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        if (!user.IsActive)
+        {
+            // End every session. Refresh/restore already reject disabled users; revoking also
+            // means re-enabling the account does not revive the old sessions.
+            var now = DateTime.UtcNow;
+            await dbContext.RefreshTokens
+                .Where(token => token.UserId == user.Id && token.RevokedAtUtc == null)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(token => token.RevokedAtUtc, now)
+                    .SetProperty(token => token.RevokedReason, "AccountDisabled"), cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         await auditService.LogAsync(
             user.IsActive ? AuditActions.UserUnlock : AuditActions.UserLock,

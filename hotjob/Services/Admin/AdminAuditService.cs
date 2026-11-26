@@ -20,12 +20,20 @@ public sealed class AdminAuditService(
     AuthenticationStateProvider authenticationStateProvider) : IAdminAuditService
 {
     private const int MaxDetailLength = 500;
+    private const string MissingAdminMessage =
+        "An authenticated administrator (Admin role, ID and email) is required for auditing.";
+
+    public async Task<string> GetRequiredAdminIdAsync()
+    {
+        var admin = await ResolveAdminAsync().ConfigureAwait(false);
+        return admin?.UserId ?? throw new InvalidOperationException(MissingAdminMessage);
+    }
 
     public async Task LogAsync(string action, string targetType, string targetId, string? detail = null)
     {
         var admin = await ResolveAdminAsync().ConfigureAwait(false);
         if (admin is null)
-            throw new InvalidOperationException("An authenticated administrator (Admin role, ID and email) is required for auditing.");
+            throw new InvalidOperationException(MissingAdminMessage);
 
         dbContext.AdminAuditLogs.Add(new AdminAuditLog
         {

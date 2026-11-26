@@ -12,6 +12,11 @@ public interface IAdminAuditService
     /// </summary>
     Task LogAsync(string action, string targetType, string targetId, string? detail = null);
 
+    /// <summary>
+    /// The signed-in admin's user id; throws (like <see cref="LogAsync"/>) when no administrator is signed in.
+    /// </summary>
+    Task<string> GetRequiredAdminIdAsync();
+
     /// <summary>Returns audit entries newest first, with optional exact and date filters.</summary>
     Task<ServiceResult<PagedResponse<AdminAuditLogDto>>> GetLogsAsync(
         int page,

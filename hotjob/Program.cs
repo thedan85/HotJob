@@ -165,6 +165,10 @@ builder.Services.AddAuthentication(options =>
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1)
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = hotjob.Services.Authentication.ActiveAccountTokenValidation.RejectInactiveAccountAsync
+        };
     });
 
 // Optional: password/JWT auth still works when Google credentials are absent.
@@ -223,6 +227,8 @@ builder.Services.AddScoped<AuthSession>();
 builder.Services.AddScoped<HotJobAuthStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(services =>
     services.GetRequiredService<HotJobAuthStateProvider>());
+builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler,
+    AccountStatusCircuitHandler>();
 builder.Services.AddScoped<hotjob.Services.Employer.ICompanyService, hotjob.Services.Employer.CompanyService>();
 builder.Services.AddScoped<hotjob.Services.Employer.ICandidateSearchService, hotjob.Services.Employer.CandidateSearchService>();
 builder.Services.AddScoped<hotjob.Services.Admin.IAdminService, hotjob.Services.Admin.AdminService>();
