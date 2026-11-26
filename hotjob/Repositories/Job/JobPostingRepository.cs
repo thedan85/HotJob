@@ -1,4 +1,5 @@
 using hotjob.Data;
+using hotjob.DTOs.Job;
 using hotjob.Models.Job;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,7 +34,7 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<(IReadOnlyList<JobPosting> Items, int TotalCount)> ListOwnedAsync(
+    public async Task<(IReadOnlyList<JobListItemResponse> Items, int TotalCount)> ListOwnedAsync(
         int companyId,
         JobStatus? status,
         string? search,
@@ -44,7 +45,9 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var query = DetailsQuery().Where(job => job.CompanyProfileId == companyId);
+        var query = dbContext.JobPostings
+            .AsNoTracking()
+            .Where(job => job.CompanyProfileId == companyId);
 
         if (status.HasValue)
         {
@@ -60,17 +63,35 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         }
 
         var total = await query.CountAsync(cancellationToken);
+        // Projection: only list columns (no Description), counts as subqueries, and a single
+        // collection (category names) so the page loads in one round trip without a cartesian join.
         var items = await query
             .OrderByDescending(job => job.CreatedAt)
             .ThenByDescending(job => job.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(job => new JobListItemResponse(
+                job.Id,
+                job.Title,
+                job.SalaryMin,
+                job.SalaryMax,
+                job.ExperienceRequired,
+                job.JobType,
+                job.ExpiryDate,
+                job.Status,
+                job.Company.CompanyName,
+                job.JobSkills.Count,
+                job.CategoryMappings.Select(mapping => mapping.Category.Name).ToList(),
+                job.Applications.Count,
+                job.CreatedAt,
+                job.FeaturedUntil,
+                job.Status == JobStatus.Rejected ? job.RejectionReason : null))
             .ToListAsync(cancellationToken);
 
         return (items, total);
     }
 
-    public async Task<(IReadOnlyList<JobPosting> Items, int TotalCount)> BrowsePublishedAsync(
+    public async Task<(IReadOnlyList<PublicJobListItemResponse> Items, int TotalCount)> BrowsePublishedAsync(
         string? keyword,
         string? city,
         string? skill,
@@ -87,7 +108,8 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var now = DateTime.UtcNow;
-        var query = DetailsQuery()
+        var query = dbContext.JobPostings
+            .AsNoTracking()
             .Where(JobVisibility.OpenToCandidates(now));
 
         if (!string.IsNullOrWhiteSpace(keyword))
@@ -149,6 +171,22 @@ public sealed class JobPostingRepository(ApplicationDbContext dbContext) : IJobP
             .ThenByDescending(job => job.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            // Only the card's columns plus skill names; categories and Description are not loaded.
+            .Select(job => new PublicJobListItemResponse(
+                job.Id,
+                job.Title,
+                job.Company.CompanyName,
+                job.Company.Location,
+                job.SalaryMin,
+                job.SalaryMax,
+                job.JobType,
+                job.ExpiryDate,
+                job.CreatedAt,
+                job.JobSkills
+                    .Where(jobSkill => jobSkill.Skill.Name != "")
+                    .Select(jobSkill => jobSkill.Skill.Name)
+                    .ToList(),
+                job.FeaturedUntil))
             .ToListAsync(cancellationToken);
 
         return (items, total);

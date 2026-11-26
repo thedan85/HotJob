@@ -161,6 +161,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<Candidate>()
             .HasOne(x => x.PremiumPlan).WithMany().HasForeignKey(x => x.PremiumPlanId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<JobPosting>().HasIndex(x => x.FeaturedUntil);
+        // Status-first lookups: expiry sweep (Published, ExpiryDate <= now), admin approval queue
+        // (?status=PendingApproval) and public browse (Published, ExpiryDate > now).
+        modelBuilder.Entity<JobPosting>().HasIndex(x => new { x.Status, x.ExpiryDate });
 
         modelBuilder.Entity<Payment>(payment =>
         {

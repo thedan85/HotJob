@@ -360,11 +360,10 @@ public sealed class JobService(
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var (items, total) = await jobRepository.ListOwnedAsync(employer.CompanyProfileId, status, search, page, pageSize, cancellationToken);
-        var counts = await ApplicationCountsAsync(items.Select(job => job.Id).ToList(), cancellationToken);
 
         return ServiceResult<PagedResponse<JobListItemResponse>>.Ok(new PagedResponse<JobListItemResponse>
         {
-            Items = items.Select(job => ToListItem(job, counts.GetValueOrDefault(job.Id))).ToList(),
+            Items = items,
             TotalCount = total,
             Page = page,
             PageSize = pageSize
@@ -417,7 +416,7 @@ public sealed class JobService(
 
         return ServiceResult<PagedResponse<PublicJobListItemResponse>>.Ok(new PagedResponse<PublicJobListItemResponse>
         {
-            Items = items.Select(ToPublicListItem).ToList(),
+            Items = items,
             TotalCount = total,
             Page = page,
             PageSize = pageSize
@@ -831,20 +830,6 @@ public sealed class JobService(
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    private async Task<Dictionary<int, int>> ApplicationCountsAsync(List<int> jobIds, CancellationToken cancellationToken)
-    {
-        if (jobIds.Count == 0)
-        {
-            return new Dictionary<int, int>();
-        }
-
-        return await dbContext.Applications
-            .Where(application => jobIds.Contains(application.JobPostingId))
-            .GroupBy(application => application.JobPostingId)
-            .Select(group => new { JobId = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(row => row.JobId, row => row.Count, cancellationToken);
-    }
-
     private static string JobSlotLimitMessage(EmployerEntitlement entitlement) =>
         $"You have used all {entitlement.ActiveJobCount}/{entitlement.JobQuota} job slots on your plan. Upgrade to post more.";
 
@@ -874,20 +859,6 @@ public sealed class JobService(
             job.SubmittedForApprovalAt,
             job.ReviewedAt,
             job.RejectionReason);
-
-    private static PublicJobListItemResponse ToPublicListItem(JobPosting job) =>
-        new(
-            job.Id,
-            job.Title,
-            job.Company?.CompanyName ?? string.Empty,
-            job.Company?.Location,
-            job.SalaryMin,
-            job.SalaryMax,
-            job.JobType,
-            job.ExpiryDate,
-            job.CreatedAt,
-            job.JobSkills.Select(jobSkill => jobSkill.Skill?.Name ?? string.Empty).Where(name => name.Length > 0).ToList(),
-            job.FeaturedUntil);
 
     public async Task<ServiceResult<PagedResponse<SkillMatchJobListItemDto>>> GetJobsMatchingResumeAsync(
         string userId,
@@ -1062,22 +1033,4 @@ public sealed class JobService(
                 PageSize = pageSize
             });
     }
-
-    private static JobListItemResponse ToListItem(JobPosting job, int applicationsCount) =>
-        new(
-            job.Id,
-            job.Title,
-            job.SalaryMin,
-            job.SalaryMax,
-            job.ExperienceRequired,
-            job.JobType,
-            job.ExpiryDate,
-            job.Status,
-            job.Company?.CompanyName ?? string.Empty,
-            job.JobSkills.Count,
-            job.CategoryMappings.Select(mapping => mapping.Category?.Name ?? string.Empty).ToList(),
-            applicationsCount,
-            job.CreatedAt,
-            job.FeaturedUntil,
-            job.Status == JobStatus.Rejected ? job.RejectionReason : null);
 }

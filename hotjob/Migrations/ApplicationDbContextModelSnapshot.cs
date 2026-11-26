@@ -571,6 +571,8 @@ namespace hotjob.Migrations
 
                     b.HasIndex("ReviewedByAdminId");
 
+                    b.HasIndex("Status", "ExpiryDate");
+
                     b.ToTable("JobPostings");
                 });
 

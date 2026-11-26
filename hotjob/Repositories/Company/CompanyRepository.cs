@@ -54,6 +54,7 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
             .Where(CompanyVisibility.IsPublic)
             .Where(company => company.Industry != null)
             .Select(company => company.Industry!)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
         var locations = await dbContext.CompanyProfiles
@@ -61,8 +62,10 @@ public sealed class CompanyRepository(ApplicationDbContext dbContext) : ICompany
             .Where(CompanyVisibility.IsPublic)
             .Where(company => company.Location != null)
             .Select(company => company.Location!)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
+        // DB Distinct trims the payload; Dedupe still folds case/whitespace variants.
         return (Dedupe(industries), Dedupe(locations));
     }
 
