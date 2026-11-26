@@ -104,7 +104,7 @@
                                                 }
                                                 @if (company.IsActive)
                                                 {
-                                                    <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => DeactivateCompanyAsync(company.Id)">Deactivate</button>
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => DeactivateCompanyAsync(company.Id)">Deactivate</button>
                                                 }
                                                 else
                                                 {

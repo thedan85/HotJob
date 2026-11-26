@@ -105,7 +105,7 @@
                                                 }
                                                 @if (employer.IsActive)
                                                 {
-                                                    <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginReason(employer.Id, ReasonMode.Deactivate)">Deactivate</button>
+                                                    <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="() => BeginReason(employer.Id, ReasonMode.Deactivate)">Deactivate</button>
                                                 }
                                                 else
                                                 {
