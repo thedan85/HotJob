@@ -53,6 +53,8 @@ public sealed partial class ProfilePremiumBadgeTests
             candidate.UserId, "badge@example.test", ["Candidate"]));
         var collection = new ServiceCollection();
         collection.AddLogging();
+        collection.AddAuthorizationCore();
+        collection.AddCascadingAuthenticationState();
         collection.AddSingleton(session);
         collection.AddSingleton<HotJobAuthStateProvider>();
         collection.AddSingleton<AuthenticationStateProvider>(

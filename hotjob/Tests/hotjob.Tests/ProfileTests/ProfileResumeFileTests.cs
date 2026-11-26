@@ -157,6 +157,8 @@ public sealed partial class ProfilePremiumBadgeTests
             var activator = new CapturingProfileActivator();
             var collection = new ServiceCollection();
             collection.AddLogging();
+            collection.AddAuthorizationCore();
+            collection.AddCascadingAuthenticationState();
             collection.AddSingleton<IComponentActivator>(activator);
             collection.AddSingleton(session);
             collection.AddSingleton<HotJobAuthStateProvider>();

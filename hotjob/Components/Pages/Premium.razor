@@ -2,14 +2,17 @@
 @implements IDisposable
 @rendermode InteractiveServer
 @using System.Security.Claims
+@using System.Globalization
 @using hotjob.Models.Billing
 @using hotjob.Services.Billing
+@using hotjob.Services.Common
 @using Microsoft.AspNetCore.Components.Authorization
 @inject ICandidatePremiumService PremiumService
 @inject IBillingService BillingService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject AuthSession AuthSession
 @inject NavigationManager Navigation
+@inject CircuitDbGate CircuitDbGate
 
 <PageTitle>Candidate Premium | HotJob</PageTitle>
 
@@ -25,14 +28,20 @@
                 </p>
                 <h1 id="premium-title">Candidate <span class="premium-title-accent">Premium</span> plan</h1>
                 <p class="premium-lede">
-                    Advanced match scoring, a premium profile badge and a profile boost —
-                    30 days for 99.000đ, paid by VNPay sandbox.
+                    Advanced match scoring, a premium profile badge and a profile boost.
+                    @if (plan is not null)
+                    {
+                        <span>@plan.DurationDays days for @PlanPrice, paid by VNPay sandbox.</span>
+                    }
                 </p>
-                <ul class="premium-hero-meta" aria-label="Plan summary">
-                    <li><span>Term</span><strong>30 days</strong></li>
-                    <li><span>Price</span><strong>99.000đ</strong></li>
-                    <li><span>Payment</span><strong>VNPay sandbox</strong></li>
-                </ul>
+                @if (plan is not null)
+                {
+                    <ul class="premium-hero-meta" aria-label="Plan summary">
+                        <li><span>Term</span><strong>@plan.DurationDays days</strong></li>
+                        <li><span>Price</span><strong>@PlanPrice</strong></li>
+                        <li><span>Payment</span><strong>VNPay sandbox</strong></li>
+                    </ul>
+                }
             </section>
 
             @if (isLoading)
@@ -68,17 +77,17 @@
                         @if (status.IsPremium)
                         {
                             <button class="workspace-btn workspace-btn-primary" type="button"
-                                    disabled="@isBuying"
+                                    disabled="@(!CanBuy)"
                                     @onclick="BuyAsync">
-                                @(isBuying ? "Renewing…" : "Renew Premium")
+                                @(isBuying ? "Renewing…" : $"Renew {plan?.Name ?? "Premium"}")
                             </button>
                         }
                         else
                         {
                             <button class="workspace-btn workspace-btn-primary" type="button"
-                                    disabled="@isBuying"
+                                    disabled="@(!CanBuy)"
                                     @onclick="BuyAsync">
-                                @(isBuying ? "Subscribing…" : "Subscribe to Premium — 99.000đ")
+                                @(isBuying ? "Subscribing…" : plan is null ? "Subscribe to Premium" : $"Subscribe to {plan.Name} — {PlanPrice}")
                             </button>
                         }
                     </div>
@@ -90,11 +99,18 @@
                 }
             }
 
-            <section class="workspace-card premium-plan-card" aria-label="Premium Monthly plan">
+            @if (!isLoading && string.IsNullOrWhiteSpace(loadError) && plan is null)
+            {
+                <div class="workspace-notice" role="status">Premium is temporarily unavailable. Please try again later.</div>
+            }
+
+            @if (plan is not null)
+            {
+            <section class="workspace-card premium-plan-card" aria-label="@($"{plan.Name} plan")">
                 <div class="workspace-section-head">
                     <div>
-                        <h2>Premium Monthly</h2>
-                        <p class="workspace-sub">99.000đ per 30 days. Your benefits run until the end of the period you paid for.</p>
+                        <h2>@plan.Name</h2>
+                        <p class="workspace-sub">@PlanPrice per @plan.DurationDays days. Your benefits run until the end of the period you paid for.</p>
                     </div>
                 </div>
                 <ul class="premium-plan-features">
@@ -103,10 +119,11 @@
                     <li><span><strong>Profile boost:</strong> your profile is shown to employers first while boosted.</span></li>
                 </ul>
                 <div class="premium-plain-price">
-                    <strong>99.000đ</strong> <span>/ 30 days</span>
+                    <strong>@PlanPrice</strong> <span>/ @plan.DurationDays days</span>
                     <p class="workspace-hint">Paid by VNPay sandbox. Your entitlement is active as soon as the gateway confirms the payment.</p>
                 </div>
             </section>
+            }
 
             @if (!string.IsNullOrWhiteSpace(actionMessage))
             {
@@ -133,6 +150,7 @@
 </AuthorizeView>
 
 @code {
+    private Plan? plan;
     private CandidatePremiumStatus? status;
     private bool isLoading = true;
     private bool hasLoadedOnce;
@@ -140,6 +158,9 @@
     private string? loadError;
     private string? actionMessage;
     private string? actionError;
+
+    private bool CanBuy => plan is not null && !isLoading && !isBuying && string.IsNullOrWhiteSpace(loadError);
+    private string PlanPrice => plan is null ? string.Empty : $"{plan.Price.ToString("N0", CultureInfo.InvariantCulture)} VND";
 
     protected override async Task OnInitializedAsync()
     {
@@ -182,10 +203,12 @@
         isLoading = true;
         hasLoadedOnce = true;
         loadError = null;
+        plan = null;
         try
         {
             var userId = await GetUserIdAsync();
-            status = await PremiumService.GetStatusAsync(userId);
+            status = await CircuitDbGate.RunAsync(() => PremiumService.GetStatusAsync(userId));
+            plan = await CircuitDbGate.RunAsync(() => PremiumService.GetPurchasablePlanAsync());
         }
         catch (Exception exception)
         {
@@ -199,13 +222,19 @@
 
     private async Task BuyAsync()
     {
+        if (!CanBuy)
+        {
+            return;
+        }
+
         actionMessage = null;
         actionError = null;
         isBuying = true;
         try
         {
-            var result = await BillingService.CreateCandidatePremiumCheckoutAsync(
-                await GetUserIdAsync(), Plan.PremiumMonthlyCode, "127.0.0.1");
+            var userId = await GetUserIdAsync();
+            var result = await CircuitDbGate.RunAsync(() => BillingService.CreateCandidatePremiumCheckoutAsync(
+                userId, Plan.PremiumMonthlyCode, "127.0.0.1"));
             if (!result.Success || result.Data is null)
             {
                 actionError = result.Errors.FirstOrDefault() ?? "Could not start the payment.";

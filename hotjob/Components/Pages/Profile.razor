@@ -24,6 +24,8 @@
 
 <PageTitle>Your profile | HotJob</PageTitle>
 
+<AuthorizeView Roles="Candidate">
+    <Authorized Context="auth">
 @if (isLoading)
 {
     <div class="profile-loading" role="status">Loading your profile...</div>
@@ -448,6 +450,11 @@ else
         </main>
     </div>
 }
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     private const long MaxCvBytes = 5 * 1024 * 1024;

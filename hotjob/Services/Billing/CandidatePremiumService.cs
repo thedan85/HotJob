@@ -1,4 +1,5 @@
 using hotjob.Data;
+using hotjob.Models.Billing;
 using Microsoft.EntityFrameworkCore;
 
 namespace hotjob.Services.Billing;
@@ -13,6 +14,9 @@ public sealed record CandidatePremiumStatus(
 /// <summary>Reads the candidate Premium gate used by premium-only features.</summary>
 public interface ICandidatePremiumService
 {
+    /// <summary>The current purchasable candidate Premium offer, or null when unavailable.</summary>
+    Task<Plan?> GetPurchasablePlanAsync(CancellationToken cancellationToken = default);
+
     /// <summary>True while <c>PremiumUntil</c> is in the future. False for guests and unknown users.</summary>
     Task<bool> IsPremiumAsync(string? userId, CancellationToken cancellationToken = default);
 
@@ -26,6 +30,14 @@ public interface ICandidatePremiumService
 public sealed class CandidatePremiumService(ApplicationDbContext dbContext, TimeProvider timeProvider)
     : ICandidatePremiumService
 {
+    public Task<Plan?> GetPurchasablePlanAsync(CancellationToken cancellationToken = default) =>
+        dbContext.Plans.AsNoTracking().FirstOrDefaultAsync(
+            plan => plan.Code == Plan.PremiumMonthlyCode
+                && plan.Audience == PlanAudience.Candidate
+                && plan.IsActive
+                && plan.Price > 0,
+            cancellationToken);
+
     public async Task<bool> IsPremiumAsync(string? userId, CancellationToken cancellationToken = default) =>
         (await GetStatusAsync(userId, cancellationToken))?.IsPremium == true;
 
