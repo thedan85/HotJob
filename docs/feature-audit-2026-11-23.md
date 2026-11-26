@@ -2,7 +2,8 @@
 
 - Ngày lập: 2026-11-23.
 - Cập nhật sau khi đối chiếu lại mã nguồn: 2026-11-25.
-- Revision được kiểm tra: `71823ad2aa9c76f79df0bdf67702e1f6bcae8158` (working tree sạch trước khi sửa tài liệu).
+- Cập nhật sau merge `phuong-admin` vào `dev`: 2026-11-26.
+- Revision được kiểm tra: `fe2d208b3f708501636786e0d023c533de5d2ec4` (merge commit; working tree sạch).
 
 ## Phạm vi và cách đọc
 
@@ -12,11 +13,11 @@
 - **MỘT PHẦN:** có backend nhưng thiếu UI, thiếu một phần luồng, hoặc còn giới hạn làm thay đổi kết quả sử dụng.
 - **KHÔNG:** chưa tìm thấy triển khai trong các luồng liên quan đã kiểm tra.
 - **CHƯA KIỂM CHỨNG:** mức xác nhận runtime, không đồng nghĩa thiếu tính năng. Browser E2E, OAuth Google thật, MySQL migration và VNPay sandbox đều chưa được chạy trong lần rà soát này.
-- Đường dẫn mã nguồn bên dưới tính từ repository root. Lần cập nhật này chỉ sửa tài liệu, không sửa các khoảng trống tìm thấy.
+- Đường dẫn mã nguồn bên dưới tính từ repository root. Lần cập nhật 2026-11-26 chỉ điều chỉnh các kết luận lỗi thời sau merge, không sửa product code.
 
 ## Kết luận
 
-Dự án **chưa phủ đủ các mục được liệt kê trong audit này**. Luồng Job Board + ATS chính đã có backend và UI, nhưng không nên kết luận “toàn bộ employer đã hoàn thiện” hoặc “451 test pass nghĩa là mọi luồng đều chạy đúng trên trình duyệt”.
+Dự án **chưa phủ đủ các mục được liệt kê trong audit này**. Luồng Job Board + ATS chính đã có backend và UI, nhưng không nên kết luận “toàn bộ employer đã hoàn thiện” hoặc “614 test pass nghĩa là mọi luồng đều chạy đúng trên trình duyệt”.
 
 Phần lõi đã hoàn thiện tương đối tốt:
 
@@ -34,7 +35,7 @@ Các khoảng trống lớn:
 - File CV upload có URL tương đối nhưng nút mở snapshot của employer chỉ nhận URL HTTP(S) tuyệt đối; dữ liệu snapshot đã có nhưng luồng mở file còn thiếu.
 - Quy tắc công ty bị Rejected chưa nhất quán giữa public jobs, save/recommend và ATS.
 
-Kiểm chứng mới ngày 2026-11-25: **451 passed, 0 failed, 0 skipped**. Có cảnh báo dependency và compiler; chi tiết, lịch sử kết quả và giới hạn kiểm chứng ở mục VII.
+Kiểm chứng sau merge ngày 2026-11-26: **614 passed, 0 failed, 0 skipped**. Có cảnh báo dependency và compiler; chi tiết, lịch sử kết quả và giới hạn kiểm chứng ở mục VII.
 
 ---
 
@@ -68,7 +69,7 @@ Kiểm chứng mới ngày 2026-11-25: **451 passed, 0 failed, 0 skipped**. Có 
 | KHÔNG | Danh sách thanh toán, đánh dấu đã trả/hoàn tiền | Payment do VNPay callback tự cập nhật; admin không có màn hình quản lý. |
 | KHÔNG | Báo cáo doanh thu theo tháng | Không có query hoặc UI. |
 | MỘT PHẦN | Dashboard | Có users, companies, jobs. Thiếu số hồ sơ ứng tuyển và doanh thu. |
-| KHÔNG | Nhật ký thao tác admin | Không có audit log tổng quát. ATS history, dấu xác minh công ty và training log chỉ ghi từng nghiệp vụ, không thay thế nhật ký quản trị. |
+| MỘT PHẦN | Nhật ký thao tác admin | Có `AdminAuditLog`, `AdminAuditService`, trang `AdminAuditLogs.razor` và migration `AddAdminAuditLog`; ghi thao tác quản trị kèm actor, lọc theo action/type/email/thời gian. Chưa production-ready: `Detail` là text tự do, không lọc secret. Các thao tác admin đã kiểm tra ghi audit trong cùng transaction với thao tác gốc. Chi tiết: `docs/admin/admin-audit-log-phase-0.md`. |
 | KHÔNG | Gửi thông báo cho người dùng (tất cả/nhóm) | Không có broadcast admin; notification hiện sinh từ application/interview, tin nhắn employer và job alert. |
 | CÓ | Xem lịch sử huấn luyện ML | `AdminModel.razor`, `GetTrainingLogsAsync`: số bản ghi, accuracy, người train, thời gian, model path và cờ active. |
 | CÓ | Retrain ML thủ công | `AdminModel.razor` gọi `MatchScoreService.TrainAsync`. Thiếu dữ liệu trả kết quả chưa train, không tạo log giả; model train không quyết định điểm hiển thị. |
@@ -87,7 +88,7 @@ Kiểm chứng mới ngày 2026-11-25: **451 passed, 0 failed, 0 skipped**. Có 
 - `hotjob/Services/ML/MatchScoreService.cs`
 - `hotjob/Services/Authentication/AuthService.cs`
 - `hotjob/Data/ApplicationDbContext.cs`
-- Test trong `hotjob/Tests/hotjob.Tests/AdminTests/`: `AdminListPagingTests.cs`, `AdminTrainingLogTests.cs`, `AdminSkillServiceTests.cs`, `AdminSkillsControllerTests.cs`.
+- Test trong `hotjob/Tests/hotjob.Tests/AdminTests/`: `AdminListPagingTests.cs`, `AdminTrainingLogTests.cs`, `AdminSkillServiceTests.cs`, `AdminSkillsControllerTests.cs`, `AdminAuditServiceTests.cs`, `AdminAuditHooksTests.cs`, `AdminModerationTests.cs`.
 
 ---
 
@@ -99,7 +100,7 @@ Kiểm chứng mới ngày 2026-11-25: **451 passed, 0 failed, 0 skipped**. Có 
 | CÓ | Đăng nhập Google | Có controller/service và nút đăng nhập; chỉ bật provider khi có ClientId/ClientSecret. Chưa kiểm chứng OAuth thật. |
 | CÓ | Đăng ký tài khoản Candidate | UI `/register` cố định Candidate. **API còn cho đăng ký Employer trực tiếp**, khác quy tắc “chỉ đăng ký Candidate” trong tài liệu ý tưởng. |
 | CÓ | Cập nhật thông tin cá nhân | `AccountService.UpdateProfileAsync`, `PUT /api/account/profile`; không có endpoint PATCH. Có headline/summary, tùy chọn việc làm, avatar và social links. |
-| MỘT PHẦN | Đổi mật khẩu của chính mình | Có `POST /api/account/change-password`, yêu cầu mật khẩu cũ và thu hồi refresh session; chưa có form tương ứng trong các trang Blazor. Không phải forgot-password/reset qua email. |
+| CÓ | Đổi mật khẩu của chính mình | Có `POST /api/account/change-password`, yêu cầu mật khẩu cũ và thu hồi refresh session. Form `ChangePasswordSection` được render trong `Profile.razor`; sau đổi mật khẩu UI đăng xuất và dọn cookie. Không phải forgot-password/reset qua email. |
 | KHÔNG | Quên mật khẩu/reset qua email | Link “Forgot password?” ở `LoginPage.razor` chỉ trỏ về `/`; chưa có luồng gửi email/token và đặt mật khẩu mới. |
 | CÓ | Tạo CV thủ công và chọn CV primary | Education, Skills, Experience; tối đa 5 resume/candidate, CV đầu tiên tự là primary. |
 | CÓ | Upload file CV | PDF/DOC/DOCX, tối đa 5 MiB, kiểm tra extension/header, lưu bằng tên sinh tự động. Đây là lưu file, không phải CV parsing. |
@@ -308,7 +309,7 @@ Thứ tự dưới đây là đề xuất xử lý, không phải cam kết bổ
    - Job filter và quản lý featured.
    - Category CRUD, Skills UI, quản trị role nếu thuộc scope.
    - Plan/payment/revenue.
-   - Audit log.
+   - Audit log: chính sách lọc secret trong `Detail`.
    - Broadcast notification.
    - Xử lý tranh chấp ứng tuyển và xóa/ẩn danh dữ liệu theo yêu cầu.
 
@@ -321,7 +322,7 @@ Thứ tự dưới đây là đề xuất xử lý, không phải cam kết bổ
    - Đồng bộ badge và danh sách khi có dữ liệu mới/đánh dấu đã đọc.
 
 5. **Các phần còn một phần hoặc cần chốt yêu cầu**
-   - Gỡ file CV riêng, badge Premium trên profile, form đổi mật khẩu.
+   - Gỡ file CV riêng, badge Premium trên profile.
    - Phân biệt weighted score với model inference; xác nhận có thực sự yêu cầu “free lần đầu” hay basic free không giới hạn.
    - Đồng bộ quy tắc đăng ký Candidate-only giữa UI/API nếu giữ yêu cầu này.
 
@@ -335,15 +336,15 @@ Thứ tự dưới đây là đề xuất xử lý, không phải cam kết bổ
 
 ## VII. Ghi chú kiểm chứng
 
-### Lần chạy mới ngày 2026-11-25
+### Lần chạy sau merge ngày 2026-11-26
 
-Chạy từ repository root:
+Chạy từ repository root (`hotjob/`):
 
-```powershell
-dotnet test .\hotjob.slnx --nologo -v q
+```bash
+dotnet test hotjob.slnx --nologo -v q
 ```
 
-Kết quả: **451 passed, 0 failed, 0 skipped, total 451**, exit code 0. Lệnh có build và chạy test project `hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj` trên `net10.0`.
+Kết quả: **614 passed, 0 failed, 0 skipped, total 614**, exit code 0. Lệnh có build và chạy test project `hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj` trên `net10.0`.
 
 Cảnh báo xuất hiện trong output:
 
@@ -367,7 +368,8 @@ Cảnh báo xuất hiện trong output:
 
 - Kiểm toán ban đầu ngày 2026-11-23 ghi nhận **443/443 test pass**.
 - Bản cập nhật employer ngày 2026-11-25 ghi nhận **451/451 test pass**.
-- Lần đối chiếu lại này chạy mới được **451/451**, không chỉ sao chép kết quả lịch sử.
+- Lần đối chiếu lại ngày 2026-11-25 chạy mới được **451/451**, không chỉ sao chép kết quả lịch sử.
+- Sau merge `phuong-admin` vào `dev` ngày 2026-11-26: **614/614**, không phải kết quả lịch sử.
 
 ---
 
@@ -376,3 +378,4 @@ Cảnh báo xuất hiện trong output:
 - **2026-11-23 — Bản ban đầu:** kiểm kê Admin/Candidate/Employer, ghi nhận thiếu back-office, CV parsing, realtime và các khoảng trống employer; lưu kết quả 443 test pass.
 - **2026-11-25 — Bản cập nhật employer trước lần rà soát này:** đánh dấu đã bổ sung snapshot CV, actor history, notification sửa/hủy lịch; ghi nhận 451 test pass và từng kết luận toàn bộ employer hoàn thiện.
 - **2026-11-25 — Đối chiếu lại toàn dự án:** thay kết luận hoàn thiện tuyệt đối bằng độ phủ có giới hạn; bổ sung ML/billing/alerts/discovery, thiếu notification duyệt công ty/inbox employer, lỗi guard URL snapshot và sai khác liên luồng. Làm rõ weighted-rule, Candidate-only UI so với API, tác động hard delete và mức kiểm chứng; chạy lại 451 test, ghi cả cảnh báo và giới hạn. Không sửa product code.
+- **2026-11-26 — Cập nhật sau merge `phuong-admin`:** giữ report audit riêng tại `docs/admin/admin-audit-log-phase-0.md`; đánh dấu audit log và form đổi mật khẩu đã có, cập nhật kết quả test 614/614. Không sửa product code.
