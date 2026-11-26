@@ -118,6 +118,9 @@ public sealed class AdminSkillsControllerTests
         public Task<ServiceResult<AdminDashboardDto>> GetDashboardAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<ServiceResult<PagedResponse<AdminUserListItemDto>>> GetUsersAsync(AdminUserQuery query, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ServiceResult<PagedResponse<AdminUserListItemDto>>> GetUsersAsync(int page, int pageSize, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

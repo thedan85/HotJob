@@ -88,19 +88,49 @@ public sealed class AdminService(
             expiredJobs));
     }
 
-    public async Task<ServiceResult<PagedResponse<AdminUserListItemDto>>> GetUsersAsync(
+    public Task<ServiceResult<PagedResponse<AdminUserListItemDto>>> GetUsersAsync(
         int page,
         int pageSize,
+        CancellationToken cancellationToken = default) =>
+        GetUsersAsync(new AdminUserQuery { Page = page, PageSize = pageSize }, cancellationToken);
+
+    public async Task<ServiceResult<PagedResponse<AdminUserListItemDto>>> GetUsersAsync(
+        AdminUserQuery query,
         CancellationToken cancellationToken = default)
     {
-        (page, pageSize) = NormalizePage(page, pageSize);
+        ArgumentNullException.ThrowIfNull(query);
+        var (page, pageSize) = NormalizePage(query.Page, query.PageSize);
 
-        var query = dbContext.Users
-            .AsNoTracking()
+        var roleFilter = string.IsNullOrWhiteSpace(query.Role) ? null : query.Role.Trim();
+        if (roleFilter is not null && roleFilter is not (AppRoles.Admin or AppRoles.Candidate or AppRoles.Employer))
+            return ServiceResult<PagedResponse<AdminUserListItemDto>>.Fail(ServiceErrorType.Validation, "Unknown role filter.");
+
+        var users = dbContext.Users.AsNoTracking();
+        if (roleFilter is not null)
+        {
+            users = users.Where(user => dbContext.UserRoles.Any(userRole => userRole.UserId == user.Id
+                && dbContext.Roles.Any(r => r.Id == userRole.RoleId && r.Name == roleFilter)));
+        }
+
+        if (query.IsActive is { } isActive)
+        {
+            users = users.Where(user => user.IsActive == isActive);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var pattern = LikePattern(query.Search);
+            users = users.Where(user =>
+                EF.Functions.Like(user.Email!, pattern, LikeEscape)
+                || (user.Candidate != null && EF.Functions.Like(user.Candidate.FullName, pattern, LikeEscape))
+                || (user.Employer != null && EF.Functions.Like(user.Employer.FullName, pattern, LikeEscape)));
+        }
+
+        var ordered = users
             .OrderByDescending(user => user.CreatedAt)
             .ThenByDescending(user => user.Id);
 
-        var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        var total = await ordered.CountAsync(cancellationToken).ConfigureAwait(false);
         var offset = (long)(page - 1) * pageSize;
         if (offset >= total)
         {
@@ -108,7 +138,7 @@ public sealed class AdminService(
                 new PagedResponse<AdminUserListItemDto> { TotalCount = total, Page = page, PageSize = pageSize });
         }
 
-        var users = await query
+        var items = await ordered
             .Skip((int)offset)
             .Take(pageSize)
             .Select(user => new AdminUserListItemDto(
@@ -128,11 +158,23 @@ public sealed class AdminService(
 
         return ServiceResult<PagedResponse<AdminUserListItemDto>>.Ok(new PagedResponse<AdminUserListItemDto>
         {
-            Items = users,
+            Items = items,
             TotalCount = total,
             Page = page,
             PageSize = pageSize
         });
+    }
+
+    private const string LikeEscape = "\\";
+
+    /// <summary>Substring LIKE pattern with the user's %, _ and \ taken literally.</summary>
+    private static string LikePattern(string term)
+    {
+        var escaped = term.Trim()
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
+        return $"%{escaped}%";
     }
 
     public async Task<ServiceResult<bool>> ToggleUserActiveAsync(string userId, CancellationToken cancellationToken = default)

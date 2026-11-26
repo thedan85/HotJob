@@ -1,9 +1,11 @@
 @page "/admin/accounts"
 @rendermode InteractiveServer
+@using hotjob.Data
 @using hotjob.DTOs.Admin
 @using hotjob.DTOs.Job
 @using hotjob.Services.Admin
 @inject IAdminService AdminService
+@inject NavigationManager Navigation
 
 <PageTitle>Admin accounts | HotJob</PageTitle>
 
@@ -14,8 +16,32 @@
                 <div class="workspace-header-copy">
                     <p class="workspace-eyebrow">Administration</p>
                     <h1>Account management</h1>
-                    <p class="workspace-lede">Search for users, view their roles, and temporarily disable or reactivate accounts.</p>
+                    <p class="workspace-lede">Search for users, view their roles and details, and temporarily disable or reactivate accounts.</p>
                 </div>
+            </section>
+
+            <nav class="workspace-tabs" aria-label="Account type">
+                @foreach (var (value, label) in RoleTabs)
+                {
+                    <button class="workspace-tab" type="button" aria-pressed="@(Role == value ? "true" : "false")"
+                            @onclick="() => NavigateAsync(value, Q, Status, 1)">@label</button>
+                }
+            </nav>
+
+            <section class="workspace-toolbar" aria-label="Filter accounts">
+                <label class="workspace-field">
+                    <span>Search</span>
+                    <input type="search" value="@Q" placeholder="Email or name"
+                           @onchange="e => NavigateAsync(Role, e.Value?.ToString(), Status, 1)" />
+                </label>
+                <label class="workspace-field">
+                    <span>Status</span>
+                    <select value="@(Status ?? string.Empty)" @onchange="e => NavigateAsync(Role, Q, e.Value?.ToString(), 1)">
+                        <option value="">All statuses</option>
+                        <option value="active">Active</option>
+                        <option value="disabled">Disabled</option>
+                    </select>
+                </label>
             </section>
 
             @if (isLoading)
@@ -33,7 +59,7 @@
                 <section class="workspace-card" aria-labelledby="admin-accounts-heading">
                     <div class="workspace-section-head">
                         <div>
-                            <h2 id="admin-accounts-heading">All accounts</h2>
+                            <h2 id="admin-accounts-heading">@HeadingFor(Role)</h2>
                             <p class="workspace-sub">@paged.TotalCount total · page @paged.Page of @Math.Max(paged.TotalPages, 1)</p>
                         </div>
                     </div>
@@ -41,62 +67,69 @@
                     {
                         <div class="workspace-alert" role="alert">@actionError</div>
                     }
-                    <div style="overflow-x:auto">
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Email</th>
-                                    <th>Name</th>
-                                    <th>Type</th>
-                                    <th>Roles</th>
-                                    <th>Created</th>
-                                    <th>Status</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var user in paged.Items)
-                                {
+                    @if (paged.TotalCount == 0)
+                    {
+                        <p class="workspace-sub">No accounts match these filters.</p>
+                    }
+                    else
+                    {
+                        <div style="overflow-x:auto">
+                            <table class="admin-table">
+                                <thead>
                                     <tr>
-                                        <td>@user.Email</td>
-                                        <td>@(string.IsNullOrWhiteSpace(user.FullName) ? "-" : user.FullName)</td>
-                                        <td>@user.AccountType</td>
-                                        <td>@string.Join(", ", user.Roles)</td>
-                                        <td>@user.CreatedAt.ToString("dd MMM yyyy")</td>
-                                        <td>
-                                            <span class="workspace-badge @(user.IsActive ? "is-success" : "is-danger")">
-                                                @(user.IsActive ? "Active" : "Disabled")
-                                            </span>
-                                        </td>
-                                        <td>
-                                            @if (user.IsActive && user.UserId == currentUserId)
-                                            {
-                                                <span class="workspace-sub" title="You cannot disable your own account.">You</span>
-                                            }
-                                            else if (user.IsActive && user.Roles.Contains(hotjob.Data.AppRoles.Admin))
-                                            {
-                                                <span class="workspace-sub" title="Administrator accounts cannot be disabled.">Protected</span>
-                                            }
-                                            else
-                                            {
-                                                <button class="workspace-btn workspace-btn-small @(user.IsActive ? "workspace-btn-danger" : "workspace-btn-secondary")" type="button" @onclick="() => ToggleUserAsync(user.UserId)">
-                                                    @(user.IsActive ? "Disable" : "Enable")
-                                                </button>
-                                            }
-                                        </td>
+                                        <th>Email</th>
+                                        <th>Name</th>
+                                        <th>Type</th>
+                                        <th>Roles</th>
+                                        <th>Created</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
                                     </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody>
+                                    @foreach (var user in paged.Items)
+                                    {
+                                        <tr>
+                                            <td><a href="/admin/accounts/@Uri.EscapeDataString(user.UserId)">@user.Email</a></td>
+                                            <td>@(string.IsNullOrWhiteSpace(user.FullName) ? "-" : user.FullName)</td>
+                                            <td>@user.AccountType</td>
+                                            <td>@string.Join(", ", user.Roles)</td>
+                                            <td>@user.CreatedAt.ToString("dd MMM yyyy")</td>
+                                            <td>
+                                                <span class="workspace-badge @(user.IsActive ? "is-success" : "is-danger")">
+                                                    @(user.IsActive ? "Active" : "Disabled")
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @if (user.IsActive && user.UserId == currentUserId)
+                                                {
+                                                    <span class="workspace-sub" title="You cannot disable your own account.">You</span>
+                                                }
+                                                else if (user.IsActive && user.Roles.Contains(AppRoles.Admin))
+                                                {
+                                                    <span class="workspace-sub" title="Administrator accounts cannot be disabled.">Protected</span>
+                                                }
+                                                else
+                                                {
+                                                    <button class="workspace-btn workspace-btn-small @(user.IsActive ? "workspace-btn-danger" : "workspace-btn-secondary")" type="button" @onclick="() => ToggleUserAsync(user.UserId)">
+                                                        @(user.IsActive ? "Disable" : "Enable")
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
                     @if (paged.TotalPages > 1)
                     {
                         <nav class="jobs-pager" aria-label="Account pages">
                             <button type="button" class="page-btn" disabled="@(paged.Page <= 1)"
-                                    @onclick="() => LoadAsyncAsync(paged.Page - 1)">← Prev</button>
+                                    @onclick="() => NavigateAsync(Role, Q, Status, paged.Page - 1)">← Prev</button>
                             <span class="page-info">Page @paged.Page of @paged.TotalPages · @paged.TotalCount accounts</span>
                             <button type="button" class="page-btn" disabled="@(paged.Page >= paged.TotalPages)"
-                                    @onclick="() => LoadAsyncAsync(paged.Page + 1)">Next →</button>
+                                    @onclick="() => NavigateAsync(Role, Q, Status, paged.Page + 1)">Next →</button>
                         </nav>
                     }
                 </section>
@@ -111,22 +144,38 @@
 @code {
     private const int PageSize = 20;
 
+    private static readonly (string? Value, string Label)[] RoleTabs =
+    [
+        (null, "All"),
+        (AppRoles.Candidate, "Candidates"),
+        (AppRoles.Employer, "Employers"),
+        (AppRoles.Admin, "Admins")
+    ];
+
+    [SupplyParameterFromQuery(Name = "role")]
+    public string? Role { get; set; }
+
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? Q { get; set; }
+
+    /// <summary>"active", "disabled" or empty.</summary>
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? Status { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")]
+    public int? PageNumber { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
     private PagedResponse<AdminUserListItemDto>? paged;
     private bool isLoading = true;
     private string? errorMessage;
     private string? actionError;
     private string? currentUserId;
+    private string? loadedKey;
 
-    [CascadingParameter]
-    private Task<AuthenticationState>? AuthState { get; set; }
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAsyncAsync(1);
-    }
-
-    // The circuit session is restored via JS after the first render, so the signed-in user
-    // arrives as a later cascading-parameter update, not in OnInitialized.
+    // Runs on first load, on every URL (filter) change, and when the restored auth state arrives.
     protected override async Task OnParametersSetAsync()
     {
         if (AuthState is not null)
@@ -134,13 +183,42 @@
             var state = await AuthState;
             currentUserId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         }
+
+        var key = $"{Role}|{Q}|{Status}|{PageNumber}";
+        if (key != loadedKey)
+        {
+            loadedKey = key;
+            await LoadAsync();
+        }
     }
 
-    private async Task LoadAsyncAsync(int page)
+    private Task NavigateAsync(string? role, string? search, string? status, int page)
     {
+        var url = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["role"] = string.IsNullOrWhiteSpace(role) ? null : role,
+            ["q"] = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+            ["status"] = string.IsNullOrWhiteSpace(status) ? null : status,
+            ["page"] = page > 1 ? page : null
+        });
+        Navigation.NavigateTo(url);
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadAsync()
+    {
+        errorMessage = null;
         try
         {
-            var result = await AdminService.GetUsersAsync(page, PageSize);
+            var page = Math.Max(PageNumber ?? 1, 1);
+            var result = await AdminService.GetUsersAsync(new AdminUserQuery
+            {
+                Role = string.IsNullOrWhiteSpace(Role) ? null : Role,
+                Search = Q,
+                IsActive = Status switch { "active" => true, "disabled" => false, _ => null },
+                Page = page,
+                PageSize = PageSize
+            });
             if (!result.Success || result.Data is null)
             {
                 errorMessage = string.Join("; ", result.Errors);
@@ -150,7 +228,7 @@
             paged = result.Data;
             if (paged.TotalCount > 0 && page > paged.TotalPages)
             {
-                await LoadAsyncAsync(paged.TotalPages);
+                await NavigateAsync(Role, Q, Status, paged.TotalPages);
             }
         }
         catch (Exception ex)
@@ -176,11 +254,19 @@
                 return;
             }
 
-            await LoadAsyncAsync(paged?.Page ?? 1);
+            await LoadAsync();
         }
         catch (Exception ex)
         {
             errorMessage = ex.Message;
         }
     }
+
+    private static string HeadingFor(string? role) => role switch
+    {
+        AppRoles.Candidate => "Candidate accounts",
+        AppRoles.Employer => "Employer accounts",
+        AppRoles.Admin => "Administrator accounts",
+        _ => "All accounts"
+    };
 }

@@ -1,0 +1,305 @@
+@page "/admin/accounts/{UserId}"
+@rendermode InteractiveServer
+@using hotjob.Data
+@using hotjob.DTOs.Admin
+@using hotjob.Services.Admin
+@using hotjob.Services.Common
+@inject IAdminUserService AdminUserService
+@inject IAdminService AdminService
+
+<PageTitle>Account detail | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow"><a href="/admin/accounts">← Accounts</a></p>
+                    <h1>@(detail?.FullName ?? detail?.Email ?? "Account")</h1>
+                    @if (detail is not null)
+                    {
+                        <p class="workspace-lede">@detail.Email · joined @detail.CreatedAt.ToString("dd MMM yyyy")</p>
+                    }
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading account">
+                    <p class="workspace-sub">Loading account…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else if (detail is not null)
+            {
+                @if (actionMessage is not null)
+                {
+                    <div class="@(actionSucceeded ? "workspace-notice" : "workspace-alert")" role="@(actionSucceeded ? "status" : "alert")">@actionMessage</div>
+                }
+                @if (temporaryPassword is not null)
+                {
+                    <div class="workspace-notice" role="status">
+                        <p><strong>Temporary password:</strong> <code>@temporaryPassword</code></p>
+                        <p class="workspace-sub">Shown only once. Give it to the user through a trusted channel and ask them to change it after signing in. All their sessions were ended.</p>
+                    </div>
+                }
+
+                <section class="workspace-card" aria-labelledby="account-heading">
+                    <div class="workspace-section-head">
+                        <h2 id="account-heading">Account</h2>
+                    </div>
+                    <dl class="workspace-meta">
+                        <div><dt>Status</dt><dd><span class="workspace-badge @(detail.IsActive ? "is-success" : "is-danger")">@(detail.IsActive ? "Active" : "Disabled")</span></dd></div>
+                        <div><dt>Roles</dt><dd>@(detail.Roles.Count == 0 ? "-" : string.Join(", ", detail.Roles))</dd></div>
+                        <div><dt>Email confirmed</dt><dd>@(detail.EmailConfirmed ? "Yes" : "No")</dd></div>
+                        <div><dt>Created</dt><dd>@detail.CreatedAt.ToString("dd MMM yyyy HH:mm")</dd></div>
+                    </dl>
+                    @if (IsProtected)
+                    {
+                        <p class="workspace-sub">@(detail.UserId == currentUserId ? "This is your account. Use your profile to change your password." : "Administrator accounts cannot be disabled or reset here.")</p>
+                    }
+                    else
+                    {
+                        <div class="workspace-toolbar-actions">
+                            <button class="workspace-btn workspace-btn-small @(detail.IsActive ? "workspace-btn-danger" : "workspace-btn-secondary")" type="button"
+                                    disabled="@busy" @onclick="ToggleAsync">@(detail.IsActive ? "Disable account" : "Enable account")</button>
+                            <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button"
+                                    disabled="@busy" @onclick="ResetPasswordAsync">@(confirmReset ? "Confirm password reset?" : "Reset password")</button>
+                        </div>
+                    }
+                </section>
+
+                @if (detail.Candidate is { } candidate)
+                {
+                    <section class="workspace-card" aria-labelledby="candidate-heading">
+                        <div class="workspace-section-head">
+                            <h2 id="candidate-heading">Candidate profile</h2>
+                        </div>
+                        <dl class="workspace-meta">
+                            <div><dt>Name</dt><dd>@candidate.FullName</dd></div>
+                            <div><dt>Position</dt><dd>@(candidate.Position ?? "-")</dd></div>
+                            <div><dt>Preferred location</dt><dd>@(candidate.PreferredLocation ?? "-")</dd></div>
+                            <div><dt>Job seeking</dt><dd>@(candidate.JobSeekingStatus ?? "-")</dd></div>
+                            <div><dt>Premium</dt><dd>@(candidate.IsPremium ? $"Active until {candidate.PremiumUntil:dd MMM yyyy}" : "No")</dd></div>
+                            <div><dt>Discoverable by employers</dt><dd>@(candidate.IsDiscoverable ? "Yes" : "No")</dd></div>
+                        </dl>
+
+                        <h3>Resumes (@candidate.Resumes.Count)</h3>
+                        @if (candidate.Resumes.Count == 0)
+                        {
+                            <p class="workspace-sub">No resumes.</p>
+                        }
+                        else
+                        {
+                            <ul class="admin-summary-list">
+                                @foreach (var resume in candidate.Resumes)
+                                {
+                                    <li>
+                                        @resume.Title
+                                        @if (resume.IsPrimary) { <span class="workspace-badge is-published">Primary</span> }
+                                        <span class="workspace-sub">@(resume.HasFile ? "file attached" : "no file") · @resume.CreatedAt.ToString("dd MMM yyyy")</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+
+                        <h3>Applications (@candidate.ApplicationCount)</h3>
+                        @if (candidate.RecentApplications.Count == 0)
+                        {
+                            <p class="workspace-sub">No applications.</p>
+                        }
+                        else
+                        {
+                            @if (candidate.ApplicationCount > candidate.RecentApplications.Count)
+                            {
+                                <p class="workspace-sub">Latest @candidate.RecentApplications.Count shown.</p>
+                            }
+                            <div style="overflow-x:auto">
+                                <table class="admin-table">
+                                    <thead>
+                                        <tr><th>Job</th><th>Company</th><th>Status</th><th>Applied</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var application in candidate.RecentApplications)
+                                        {
+                                            <tr>
+                                                <td>@application.JobTitle</td>
+                                                <td>@application.CompanyName</td>
+                                                <td><span class="workspace-badge is-muted">@application.Status</span></td>
+                                                <td>@application.AppliedAt.ToString("dd MMM yyyy")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </section>
+                }
+
+                @if (detail.Employer is { } employer)
+                {
+                    <section class="workspace-card" aria-labelledby="employer-heading">
+                        <div class="workspace-section-head">
+                            <h2 id="employer-heading">Employer membership</h2>
+                        </div>
+                        <dl class="workspace-meta">
+                            <div><dt>Name</dt><dd>@employer.FullName</dd></div>
+                            <div><dt>Position</dt><dd>@(employer.Position ?? "-")</dd></div>
+                            <div><dt>Company</dt><dd>@employer.CompanyName</dd></div>
+                            <div><dt>Membership</dt><dd>@employer.MembershipStatus@(employer.IsOwner ? " · owner" : string.Empty)@(employer.IsActive ? string.Empty : " · deactivated")</dd></div>
+                            <div><dt>Jobs created</dt><dd>@employer.JobsCreated</dd></div>
+                        </dl>
+                    </section>
+                }
+
+                <section class="workspace-card" aria-labelledby="audit-heading">
+                    <div class="workspace-section-head">
+                        <h2 id="audit-heading">Admin actions on this account</h2>
+                    </div>
+                    @if (detail.RecentAudit.Count == 0)
+                    {
+                        <p class="workspace-sub">None yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="admin-summary-list">
+                            @foreach (var log in detail.RecentAudit)
+                            {
+                                <li>
+                                    <span class="workspace-badge is-muted">@log.Action</span>
+                                    @log.CreatedAt.ToString("dd MMM yyyy HH:mm") · @log.AdminEmail
+                                    @if (!string.IsNullOrWhiteSpace(log.Detail)) { <span class="workspace-sub"> · @log.Detail</span> }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public string UserId { get; set; } = string.Empty;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private AdminUserDetailDto? detail;
+    private bool isLoading = true;
+    private bool busy;
+    private bool confirmReset;
+    private string? errorMessage;
+    private string? actionMessage;
+    private bool actionSucceeded;
+    private string? temporaryPassword;
+    private string? currentUserId;
+    private string? loadedUserId;
+
+    private bool IsProtected => detail is not null
+        && (detail.UserId == currentUserId || detail.Roles.Contains(AppRoles.Admin));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            currentUserId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        }
+
+        if (loadedUserId != UserId)
+        {
+            loadedUserId = UserId;
+            temporaryPassword = null;
+            actionMessage = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var result = await AdminUserService.GetDetailAsync(UserId);
+            if (!result.Success || result.Data is null)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                detail = null;
+                return;
+            }
+
+            errorMessage = null;
+            detail = result.Data;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        confirmReset = false;
+        var wasActive = detail?.IsActive == true;
+        await RunAsync(
+            async () => await AdminService.ToggleUserActiveAsync(UserId),
+            wasActive ? "Account disabled and its sessions ended." : "Account enabled.");
+    }
+
+    private async Task ResetPasswordAsync()
+    {
+        if (!confirmReset)
+        {
+            confirmReset = true;
+            return;
+        }
+
+        confirmReset = false;
+        temporaryPassword = null;
+        await RunAsync(async () =>
+        {
+            var result = await AdminUserService.ResetPasswordAsync(UserId);
+            temporaryPassword = result.Data?.TemporaryPassword;
+            return result;
+        }, "Password reset.");
+    }
+
+    private async Task RunAsync(Func<Task<ServiceResult>> write, string successMessage)
+    {
+        busy = true;
+        actionMessage = null;
+        actionSucceeded = false;
+        try
+        {
+            var result = await write();
+            if (!result.Success)
+            {
+                actionMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            actionSucceeded = true;
+            actionMessage = successMessage;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            actionMessage = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

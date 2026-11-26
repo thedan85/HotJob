@@ -20,6 +20,7 @@ public static class AuditActions
     public const string ReviewReportsDismiss = "Review.ReportsDismiss";
     public const string UserLock = "User.Lock";
     public const string UserUnlock = "User.Unlock";
+    public const string UserResetPassword = "User.ResetPassword";
     public const string JobDelete = "Job.Delete";
     public const string SkillCreate = "Skill.Create";
     public const string SkillUpdate = "Skill.Update";
@@ -43,6 +44,7 @@ public static class AuditActions
         ReviewReportsDismiss,
         UserLock,
         UserUnlock,
+        UserResetPassword,
         JobDelete,
         SkillCreate,
         SkillUpdate,

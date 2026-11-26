@@ -248,6 +248,7 @@ builder.Services.AddScoped<hotjob.Services.Employer.IReviewService, hotjob.Servi
 builder.Services.AddScoped<hotjob.Services.Admin.IEmployerAdminService, hotjob.Services.Admin.EmployerAdminService>();
 builder.Services.AddScoped<hotjob.Services.Admin.ICompanyAdminService, hotjob.Services.Admin.CompanyAdminService>();
 builder.Services.AddScoped<hotjob.Services.Admin.IJobAdminService, hotjob.Services.Admin.JobAdminService>();
+builder.Services.AddScoped<hotjob.Services.Admin.IAdminUserService, hotjob.Services.Admin.AdminUserService>();
 builder.Services.AddScoped<hotjob.Services.Admin.IReviewAdminService, hotjob.Services.Admin.ReviewAdminService>();
 
 var app = builder.Build();
