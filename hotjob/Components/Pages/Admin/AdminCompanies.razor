@@ -80,7 +80,7 @@
                                 @foreach (var company in paged.Items)
                                 {
                                     <tr>
-                                        <td>@company.CompanyName</td>
+                                        <td><a href="/admin/companies/@company.Id">@company.CompanyName</a></td>
                                         <td>
                                             <span class="workspace-badge is-@(company.Status.ToLowerInvariant())">@company.Status</span>
                                             @if (!company.IsActive)
@@ -178,8 +178,17 @@
     private string? rejectionReason;
     private string? rejectError;
 
+    /// <summary>Optional initial status filter, e.g. /admin/companies?status=Pending from the dashboard.</summary>
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? StatusQuery { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        if (Enum.TryParse<CompanyStatus>(StatusQuery, ignoreCase: true, out var initial))
+        {
+            statusFilter = initial;
+        }
+
         await LoadAsync();
     }
 

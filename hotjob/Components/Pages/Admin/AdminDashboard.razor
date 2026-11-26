@@ -46,7 +46,16 @@
                         </span>
                         <span class="workspace-stat-label">Companies</span>
                         <span class="workspace-stat-value">@dashboard.TotalCompanies</span>
-                        <span class="workspace-stat-hint">@dashboard.PendingCompanies pending</span>
+                        <span class="workspace-stat-hint">
+                            @if (dashboard.PendingCompanies > 0)
+                            {
+                                <a href="/admin/companies?status=Pending">@dashboard.PendingCompanies pending review →</a>
+                            }
+                            else
+                            {
+                                <span>No companies waiting</span>
+                            }
+                        </span>
                     </div>
                     <div class="workspace-stat">
                         <span class="workspace-stat-icon" aria-hidden="true">

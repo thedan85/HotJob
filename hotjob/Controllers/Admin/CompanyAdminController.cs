@@ -36,6 +36,13 @@ public sealed class CompanyAdminController(ICompanyAdminService companyAdminServ
     public async Task<IActionResult> GetDetail(int id, CancellationToken cancellationToken) =>
         OkOrFailure(await companyAdminService.GetDetailAsync(id, cancellationToken));
 
+    /// <summary>Profile plus plan, members, job counts, latest jobs, review stats and admin review history.</summary>
+    [HttpGet("{id:int}/overview")]
+    [ProducesResponseType(typeof(AdminCompanyOverviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetOverview(int id, CancellationToken cancellationToken) =>
+        OkOrFailure(await companyAdminService.GetOverviewAsync(id, cancellationToken));
+
     [HttpPost("{id:int}/approve")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -15,6 +15,10 @@ public interface ICompanyAdminService
     Task<ServiceResult<PagedResponse<CompanyListItemDto>>> ListPendingAsync(
         int page = 1, int pageSize = 20, string? search = null, CancellationToken cancellationToken = default);
 
+    /// <summary>Profile plus plan, members, job counts, latest jobs, review stats and admin review history.</summary>
+    Task<ServiceResult<AdminCompanyOverviewDto>> GetOverviewAsync(
+        int companyId, CancellationToken cancellationToken = default);
+
     Task<ServiceResult<CompanyDetailDto>> GetDetailAsync(
         int companyId, CancellationToken cancellationToken = default);
 

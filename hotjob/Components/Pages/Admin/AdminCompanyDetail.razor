@@ -1,0 +1,363 @@
+@page "/admin/companies/{CompanyId:int}"
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using hotjob.DTOs.Admin
+@using hotjob.Models.Users
+@using hotjob.Services.Admin
+@using hotjob.Services.Common
+@inject ICompanyAdminService CompanyAdminService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Company detail | HotJob</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="workspace admin-page">
+            <section class="workspace-header">
+                <div class="workspace-header-copy">
+                    <p class="workspace-eyebrow"><a href="/admin/companies">← Companies</a></p>
+                    <h1>@(overview?.Profile.CompanyName ?? "Company")</h1>
+                    @if (overview is not null)
+                    {
+                        <p class="workspace-lede">@(overview.Profile.Industry ?? "No industry") · @(overview.Profile.Location ?? "No location")</p>
+                    }
+                </div>
+            </section>
+
+            @if (isLoading)
+            {
+                <section class="workspace-card" aria-busy="true" aria-label="Loading company">
+                    <p class="workspace-sub">Loading company…</p>
+                </section>
+            }
+            else if (errorMessage is not null)
+            {
+                <div class="workspace-alert" role="alert">@errorMessage</div>
+            }
+            else if (overview is not null)
+            {
+                var profile = overview.Profile;
+                @if (actionMessage is not null)
+                {
+                    <div class="@(actionSucceeded ? "workspace-notice" : "workspace-alert")" role="@(actionSucceeded ? "status" : "alert")">@actionMessage</div>
+                }
+
+                <section class="workspace-card" aria-labelledby="company-status-heading">
+                    <div class="workspace-section-head">
+                        <h2 id="company-status-heading">Review</h2>
+                    </div>
+                    <dl class="workspace-meta">
+                        <div>
+                            <dt>Status</dt>
+                            <dd>
+                                <span class="workspace-badge is-@(profile.Status.ToLowerInvariant())">@profile.Status</span>
+                                @if (!profile.IsActive)
+                                {
+                                    <span class="workspace-badge is-muted">Deactivated @profile.DeactivatedAt?.ToString("dd MMM yyyy")</span>
+                                }
+                            </dd>
+                        </div>
+                        <div><dt>Verified</dt><dd>@(profile.VerifiedAt?.ToString("dd MMM yyyy HH:mm") ?? "Never")</dd></div>
+                        @if (!string.IsNullOrWhiteSpace(profile.RejectionReason))
+                        {
+                            <div><dt>Rejection reason</dt><dd>@profile.RejectionReason</dd></div>
+                        }
+                    </dl>
+                    <div class="workspace-toolbar-actions">
+                        @if (profile.Status != nameof(CompanyStatus.Approved))
+                        {
+                            <button class="workspace-btn workspace-btn-primary workspace-btn-small" type="button" disabled="@busy" @onclick="ApproveAsync">Approve</button>
+                        }
+                        @if (profile.Status != nameof(CompanyStatus.Rejected))
+                        {
+                            <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick='() => BeginReason("reject")'>Reject</button>
+                        }
+                        @if (profile.IsActive)
+                        {
+                            <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick='() => BeginReason("deactivate")'>Deactivate</button>
+                        }
+                        else
+                        {
+                            <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="ReactivateAsync">Reactivate</button>
+                        }
+                    </div>
+                    @if (reasonAction is not null)
+                    {
+                        <div class="admin-reject-form">
+                            <label class="workspace-field">
+                                <span>@(reasonAction == "reject" ? "Rejection reason (required)" : "Deactivation reason (optional)")</span>
+                                <textarea @bind="reason" maxlength="500" rows="2"
+                                          placeholder="Shown to the company's members."></textarea>
+                            </label>
+                            <div class="workspace-toolbar-actions">
+                                <button class="workspace-btn workspace-btn-danger workspace-btn-small" type="button" disabled="@busy" @onclick="ConfirmReasonAsync">
+                                    @(reasonAction == "reject" ? "Confirm rejection" : "Confirm deactivation")
+                                </button>
+                                <button class="workspace-btn workspace-btn-ghost workspace-btn-small" type="button" disabled="@busy" @onclick="CancelReason">Cancel</button>
+                            </div>
+                        </div>
+                    }
+                </section>
+
+                <section class="workspace-card" aria-labelledby="company-profile-heading">
+                    <div class="workspace-section-head">
+                        <h2 id="company-profile-heading">Profile</h2>
+                    </div>
+                    <dl class="workspace-meta">
+                        <div><dt>Website</dt><dd>@(profile.Website ?? "-")</dd></div>
+                        <div><dt>Industry</dt><dd>@(profile.Industry ?? "-")</dd></div>
+                        <div><dt>Location</dt><dd>@(profile.Location ?? "-")</dd></div>
+                        <div><dt>Scale</dt><dd>@(profile.Scale?.ToString() ?? "-")</dd></div>
+                        @if (overview.Plan is { } plan)
+                        {
+                            <div><dt>Plan</dt><dd>@plan.PlanName (@plan.ActiveJobCount / @plan.JobQuota active jobs)@(plan.PlanExpiresAt is { } expires ? $" · until {expires:dd MMM yyyy}" : string.Empty)</dd></div>
+                        }
+                        <div><dt>Reviews</dt><dd>@(overview.ReviewCount == 0 ? "None" : $"{overview.ReviewCount} · average {overview.AverageRating:0.##}/5")</dd></div>
+                    </dl>
+                    @if (!string.IsNullOrWhiteSpace(profile.Description))
+                    {
+                        <p class="workspace-sub">@profile.Description</p>
+                    }
+                </section>
+
+                <section class="workspace-card" aria-labelledby="company-members-heading">
+                    <div class="workspace-section-head">
+                        <h2 id="company-members-heading">Members (@overview.Members.Count)</h2>
+                    </div>
+                    @if (overview.Members.Count == 0)
+                    {
+                        <p class="workspace-sub">No members.</p>
+                    }
+                    else
+                    {
+                        <div style="overflow-x:auto">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr><th>Name</th><th>Email</th><th>Position</th><th>Membership</th><th>Joined</th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var member in overview.Members)
+                                    {
+                                        <tr>
+                                            <td><a href="/admin/accounts/@Uri.EscapeDataString(member.UserId)">@member.FullName</a>@(member.IsOwner ? " (owner)" : string.Empty)</td>
+                                            <td>@member.Email</td>
+                                            <td>@(member.Position ?? "-")</td>
+                                            <td>
+                                                <span class="workspace-badge is-@(member.MembershipStatus.ToLowerInvariant())">@member.MembershipStatus</span>
+                                                @if (!member.IsActive) { <span class="workspace-badge is-muted">Deactivated</span> }
+                                            </td>
+                                            <td>@member.JoinedAt.ToString("dd MMM yyyy")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </section>
+
+                <section class="workspace-card" aria-labelledby="company-jobs-heading">
+                    <div class="workspace-section-head">
+                        <div>
+                            <h2 id="company-jobs-heading">Jobs</h2>
+                            <p class="workspace-sub">
+                                @if (overview.JobCounts.Count == 0)
+                                {
+                                    <span>No jobs posted.</span>
+                                }
+                                else
+                                {
+                                    @string.Join(" · ", overview.JobCounts.Select(c => $"{c.Status}: {c.Count}"))
+                                }
+                            </p>
+                        </div>
+                    </div>
+                    @if (overview.RecentJobs.Count > 0)
+                    {
+                        <div style="overflow-x:auto">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr><th>Title</th><th>Status</th><th>Created</th><th>Applications</th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var job in overview.RecentJobs)
+                                    {
+                                        <tr>
+                                            <td>@job.Title</td>
+                                            <td>
+                                                @if (job.IsRemoved)
+                                                {
+                                                    <span class="workspace-badge is-rejected">Removed</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="workspace-badge is-@(job.Status.ToLowerInvariant())">@job.Status</span>
+                                                }
+                                            </td>
+                                            <td>@job.CreatedAt.ToString("dd MMM yyyy")</td>
+                                            <td>@job.ApplicationCount</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </section>
+
+                <section class="workspace-card" aria-labelledby="company-history-heading">
+                    <div class="workspace-section-head">
+                        <h2 id="company-history-heading">Review history</h2>
+                    </div>
+                    @if (overview.History.Count == 0)
+                    {
+                        <p class="workspace-sub">No admin decisions yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="admin-summary-list">
+                            @foreach (var log in overview.History)
+                            {
+                                <li>
+                                    <span class="workspace-badge is-muted">@log.Action</span>
+                                    @log.CreatedAt.ToString("dd MMM yyyy HH:mm") · @log.AdminEmail
+                                    @if (!string.IsNullOrWhiteSpace(log.Detail)) { <span class="workspace-sub"> · @log.Detail</span> }
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public int CompanyId { get; set; }
+
+    private AdminCompanyOverviewDto? overview;
+    private bool isLoading = true;
+    private bool busy;
+    private string? errorMessage;
+    private string? actionMessage;
+    private bool actionSucceeded;
+    private string? reasonAction;
+    private string? reason;
+    private int? loadedId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loadedId != CompanyId)
+        {
+            loadedId = CompanyId;
+            actionMessage = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var result = await CompanyAdminService.GetOverviewAsync(CompanyId);
+            if (!result.Success || result.Data is null)
+            {
+                errorMessage = string.Join("; ", result.Errors);
+                overview = null;
+                return;
+            }
+
+            errorMessage = null;
+            overview = result.Data;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private Task ApproveAsync() =>
+        RunAsync(adminId => CompanyAdminService.ApproveAsync(CompanyId, adminId), "Company approved. Its members were notified.");
+
+    private Task ReactivateAsync() =>
+        RunAsync(adminId => CompanyAdminService.ReactivateAsync(CompanyId, adminId), "Company reactivated. Its members were notified.");
+
+    private void BeginReason(string action)
+    {
+        reasonAction = action;
+        reason = null;
+    }
+
+    private void CancelReason()
+    {
+        reasonAction = null;
+        reason = null;
+    }
+
+    private async Task ConfirmReasonAsync()
+    {
+        var trimmed = reason?.Trim();
+        if (reasonAction == "reject")
+        {
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                actionSucceeded = false;
+                actionMessage = "Enter a rejection reason.";
+                return;
+            }
+
+            await RunAsync(adminId => CompanyAdminService.RejectAsync(CompanyId, adminId, trimmed), "Company rejected. Its members were notified.");
+        }
+        else
+        {
+            await RunAsync(adminId => CompanyAdminService.DeactivateAsync(CompanyId, adminId, trimmed), "Company deactivated. Its jobs are hidden and its members were notified.");
+        }
+
+        if (actionSucceeded)
+        {
+            CancelReason();
+        }
+    }
+
+    private async Task RunAsync(Func<string, Task<ServiceResult>> write, string successMessage)
+    {
+        busy = true;
+        actionMessage = null;
+        actionSucceeded = false;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var adminId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
+            if (adminId is null)
+            {
+                actionMessage = "Sign in as an administrator to manage companies.";
+                return;
+            }
+
+            var result = await write(adminId);
+            if (!result.Success)
+            {
+                actionMessage = string.Join("; ", result.Errors);
+                return;
+            }
+
+            actionSucceeded = true;
+            actionMessage = successMessage;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            actionMessage = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

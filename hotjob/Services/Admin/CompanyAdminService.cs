@@ -4,6 +4,7 @@ using hotjob.DTOs.Common;
 using hotjob.Models;
 using hotjob.Models.Admin;
 using hotjob.Models.Users;
+using hotjob.Services.Billing;
 using hotjob.Services.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -13,8 +14,15 @@ namespace hotjob.Services.Admin;
 public sealed class CompanyAdminService(
     ApplicationDbContext dbContext,
     IAdminAuditService auditService,
-    ILogger<CompanyAdminService> logger) : ICompanyAdminService
+    ILogger<CompanyAdminService> logger,
+    IEntitlementService? entitlementService = null) : ICompanyAdminService
 {
+    private const int RecentJobCount = 20;
+    private const int HistoryCount = 20;
+
+    private readonly IEntitlementService entitlements =
+        entitlementService ?? new EntitlementService(dbContext, TimeProvider.System);
+
     private const int MaxReasonLength = 500;
 
     public async Task<ServiceResult<PagedResponse<CompanyListItemDto>>> ListAsync(
@@ -79,6 +87,93 @@ public sealed class CompanyAdminService(
         string? search = null,
         CancellationToken cancellationToken = default) =>
         ListAsync(page, pageSize, search, CompanyStatus.Pending, cancellationToken);
+
+    public async Task<ServiceResult<AdminCompanyOverviewDto>> GetOverviewAsync(
+        int companyId,
+        CancellationToken cancellationToken = default)
+    {
+        var detail = await GetDetailAsync(companyId, cancellationToken);
+        if (!detail.Success || detail.Data is null)
+            return ServiceResult<AdminCompanyOverviewDto>.Fail(detail.ErrorType ?? ServiceErrorType.NotFound, detail.Errors);
+
+        var entitlement = await entitlements.GetForCompanyAsync(companyId, isOwner: true, cancellationToken);
+        var plan = entitlement is null
+            ? null
+            : new AdminCompanyPlanDto(
+                entitlement.PlanCode,
+                entitlement.PlanName,
+                entitlement.JobQuota,
+                entitlement.ActiveJobCount,
+                entitlement.PlanExpiresAt);
+
+        var members = await dbContext.Employers
+            .AsNoTracking()
+            .Where(employer => employer.CompanyProfileId == companyId)
+            .OrderByDescending(employer => employer.IsOwner)
+            .ThenBy(employer => employer.JoinedAt)
+            .Select(employer => new AdminCompanyMemberDto(
+                employer.Id,
+                employer.UserId,
+                employer.FullName,
+                employer.User.Email ?? string.Empty,
+                employer.Position,
+                employer.MembershipStatus.ToString(),
+                employer.IsOwner,
+                employer.IsActive,
+                employer.JoinedAt))
+            .ToListAsync(cancellationToken);
+
+        var jobs = dbContext.JobPostings.AsNoTracking().Where(job => job.CompanyProfileId == companyId);
+        var statusCounts = await jobs
+            .GroupBy(job => job.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+        var jobCounts = statusCounts
+            .OrderBy(row => row.Status)
+            .Select(row => new AdminJobStatusCountDto(row.Status.ToString(), row.Count))
+            .ToList();
+
+        var recentJobs = await jobs
+            .OrderByDescending(job => job.CreatedAt)
+            .ThenByDescending(job => job.Id)
+            .Take(RecentJobCount)
+            .Select(job => new AdminCompanyJobDto(
+                job.Id,
+                job.Title,
+                job.Status.ToString(),
+                job.CreatedAt,
+                job.Applications.Count,
+                job.ModeratedAt != null))
+            .ToListAsync(cancellationToken);
+
+        var reviews = dbContext.Reviews.AsNoTracking()
+            .Where(review => review.CompanyProfileId == companyId && !review.IsDeleted);
+        var reviewCount = await reviews.CountAsync(cancellationToken);
+        double? averageRating = reviewCount == 0
+            ? null
+            : Math.Round(await reviews.AverageAsync(review => (double)review.RatingScore, cancellationToken), 2);
+
+        var target = companyId.ToString();
+        var history = await dbContext.AdminAuditLogs
+            .AsNoTracking()
+            .Where(log => log.TargetType == AuditTargetTypes.Company && log.TargetId == target)
+            .OrderByDescending(log => log.CreatedAt)
+            .ThenByDescending(log => log.Id)
+            .Take(HistoryCount)
+            .Select(log => new AdminAuditLogDto(
+                log.Id, log.CreatedAt, log.AdminUserId, log.AdminEmail, log.Action, log.TargetType, log.TargetId, log.Detail))
+            .ToListAsync(cancellationToken);
+
+        return ServiceResult<AdminCompanyOverviewDto>.Ok(new AdminCompanyOverviewDto(
+            detail.Data,
+            plan,
+            members,
+            jobCounts,
+            recentJobs,
+            reviewCount,
+            averageRating,
+            history));
+    }
 
     public async Task<ServiceResult<CompanyDetailDto>> GetDetailAsync(
         int companyId,
