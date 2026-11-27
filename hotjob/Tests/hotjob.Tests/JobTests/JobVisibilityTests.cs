@@ -48,7 +48,8 @@ public sealed class JobVisibilityTests
 
         Assert.Equal(new[] { visible.Id }, browse.Data!.Items.Select(item => item.Id));
         Assert.Equal(ServiceErrorType.NotFound, detail.ErrorType);
-        Assert.Equal(ServiceErrorType.Conflict, apply.ErrorType);
+        // Non-approved companies are hidden at lookup; approved-but-inactive companies reach the conflict check.
+        Assert.Equal(companyState == "rejected" ? ServiceErrorType.NotFound : ServiceErrorType.Conflict, apply.ErrorType);
     }
 
     [Fact]

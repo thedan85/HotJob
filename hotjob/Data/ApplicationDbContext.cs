@@ -55,6 +55,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<Employer>().HasOne(x => x.User).WithOne(x => x.Employer).HasForeignKey<Employer>(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Employer>().HasIndex(x => x.UserId).IsUnique();
+        modelBuilder.Entity<Employer>().Property(x => x.IsActive).HasDefaultValue(true);
         // ponytail: Restrict (not Cascade) so deleting a company never deletes Identity users.
         modelBuilder.Entity<Employer>().HasOne(x => x.Company).WithMany(x => x.Employers).HasForeignKey(x => x.CompanyProfileId).OnDelete(DeleteBehavior.Restrict);
 
@@ -62,6 +63,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(x => x.VerifiedBy).WithMany().HasForeignKey(x => x.VerifiedByAdminId).OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<CompanyProfile>()
             .HasIndex(x => x.CompanyName).IsUnique();
+        modelBuilder.Entity<CompanyProfile>().Property(x => x.IsActive).HasDefaultValue(true);
 
         modelBuilder.Entity<Resume>().HasOne(x => x.Candidate).WithMany(x => x.Resumes).HasForeignKey(x => x.CandidateId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Education>().HasOne(x => x.Resume).WithMany(x => x.Educations).HasForeignKey(x => x.ResumeId).OnDelete(DeleteBehavior.Cascade);

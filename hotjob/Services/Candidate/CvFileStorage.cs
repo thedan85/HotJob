@@ -11,12 +11,11 @@ namespace hotjob.Services.Candidate;
 public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger) : ICvFileStorage
 {
     /// <summary>Largest CV accepted, in bytes (5 MB).</summary>
-    public const long MaxFileSizeBytes = 5 * 1024 * 1024;
+    public const long MaxFileSizeBytes = CvFileValidation.MaxFileSizeBytes;
 
     /// <summary>Public URL prefix for every stored CV.</summary>
     public const string PublicPrefix = "/uploads/cv/";
 
-    private static readonly string[] AllowedExtensions = [".pdf", ".doc", ".docx"];
     private readonly string fullRoot = Path.GetFullPath(rootPath);
 
     public async Task<ServiceResult<string>> SaveAsync(
@@ -35,31 +34,17 @@ public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger
         if (length > MaxFileSizeBytes)
             return ServiceResult<string>.Fail(ServiceErrorType.Validation, "CV files must be 5 MB or smaller.");
 
-        var validation = ValidateFileName(fileName);
+        var validation = CvFileValidation.ValidateMetadata(fileName, length);
         if (!validation.Success)
             return ServiceResult<string>.Fail(validation.ErrorType!.Value, validation.Errors);
 
-        var extension = Path.GetExtension(fileName!.Trim()).ToLowerInvariant();
+        var extension = validation.Data!;
 
-        var header = new byte[8];
-        var headerLength = 0;
-        while (headerLength < header.Length)
-        {
-            var read = await content.ReadAsync(
-                header.AsMemory(headerLength, header.Length - headerLength), cancellationToken);
-            if (read == 0)
-                break;
-            headerLength += read;
-        }
-
-        if (headerLength == 0)
-            return ServiceResult<string>.Fail(ServiceErrorType.Validation, "The selected file is empty.");
-        if (!HasValidSignature(extension, header.AsSpan(0, headerLength)))
-        {
-            return ServiceResult<string>.Fail(
-                ServiceErrorType.Validation,
-                "The selected file is not a valid PDF, DOC or DOCX file.");
-        }
+        var header = await CvFileValidation.ReadHeaderAsync(content, cancellationToken);
+        var headerLength = header.Length;
+        var signature = CvFileValidation.ValidateHeader(extension, header);
+        if (!signature.Success)
+            return ServiceResult<string>.Fail(signature.ErrorType!.Value, signature.Errors);
 
         var directory = Path.Combine(fullRoot, candidateId.ToString(CultureInfo.InvariantCulture));
         Directory.CreateDirectory(directory);
@@ -140,38 +125,4 @@ public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger
         return Task.CompletedTask;
     }
 
-    private static readonly byte[] PdfSignature = "%PDF-"u8.ToArray();
-    private static readonly byte[] DocxSignature = [0x50, 0x4B, 0x03, 0x04];
-    private static readonly byte[] DocxEmptySignature = [0x50, 0x4B, 0x05, 0x06];
-    private static readonly byte[] DocSignature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
-
-    private static bool HasValidSignature(string extension, ReadOnlySpan<byte> header) =>
-        extension switch
-        {
-            ".pdf" => header.StartsWith(PdfSignature),
-            ".docx" => header.StartsWith(DocxSignature) || header.StartsWith(DocxEmptySignature),
-            ".doc" => header.StartsWith(DocSignature),
-            _ => false
-        };
-
-    private static ServiceResult ValidateFileName(string? fileName)
-    {
-        if (string.IsNullOrWhiteSpace(fileName))
-            return ServiceResult.Fail(ServiceErrorType.Validation, "Choose a file to upload.");
-
-        var trimmed = fileName.Trim();
-        // ponytail: reject rather than sanitise a traversing name — safer and gives the user a clear error.
-        if (trimmed.Contains("..", StringComparison.Ordinal)
-            || trimmed.IndexOfAny(['/', '\\']) >= 0
-            || !string.Equals(trimmed, Path.GetFileName(trimmed), StringComparison.Ordinal))
-        {
-            return ServiceResult.Fail(ServiceErrorType.Validation, "The file name is invalid.");
-        }
-
-        var extension = Path.GetExtension(trimmed).ToLowerInvariant();
-        if (!AllowedExtensions.Contains(extension, StringComparer.Ordinal))
-            return ServiceResult.Fail(ServiceErrorType.Validation, "Only PDF, DOC and DOCX files are supported.");
-
-        return ServiceResult.Ok();
-    }
 }

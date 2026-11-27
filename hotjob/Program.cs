@@ -202,6 +202,7 @@ builder.Services.AddScoped<hotjob.Services.Common.CircuitDbGate>();
 builder.Services.AddScoped<hotjob.Services.Candidate.ICandidateService, hotjob.Services.Candidate.CandidateService>();
 builder.Services.AddScoped<hotjob.Services.Candidate.NotificationFeed>();
 builder.Services.AddScoped<hotjob.Services.Candidate.IResumeService, hotjob.Services.Candidate.ResumeService>();
+builder.Services.AddResumeParsing(builder.Configuration);
 builder.Services.AddScoped<hotjob.Services.Candidate.IApplicationService, hotjob.Services.Candidate.ApplicationService>();
 builder.Services.AddSingleton<hotjob.Services.Candidate.ICvFileStorage>(services =>
     new hotjob.Services.Candidate.CvFileStorage(
