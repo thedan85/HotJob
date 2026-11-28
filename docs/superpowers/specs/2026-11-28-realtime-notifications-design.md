@@ -2,7 +2,7 @@
 
 Date: 2026-11-28
 
-Status: Draft for user approval. This document authorizes no implementation.
+Status: Approved for implementation planning on 2026-11-28. Product implementation still requires approval of the written implementation plan.
 
 ## 1. Confirmed intent and scope
 
@@ -29,9 +29,9 @@ Excluded:
 - Changes to ATS transition rules, interview eligibility, company approval rules, or membership permissions.
 - Redesigning the existing JobAlert feature, which remains separate.
 
-### Proposed policy details for approval
+### Approved policy details
 
-The following details make the confirmed scope implementable; they are design choices, not additional user-confirmed requirements:
+The user approved the reviewed written specification, including these policy details:
 
 1. Company decisions reach the owner and active members, not pending or rejected join applicants.
 2. A membership rejection remains readable even when the Employer profile becomes inactive.
@@ -398,8 +398,8 @@ Documentation checklist:
 - [x] Draft the specification and distinguish proposed policies from confirmed intent.
 - [x] Have `opencode/hy4-flash-free#high` review this specification using review skills.
 - [x] Independently verify reviewer findings against source, fix supported issues, and check document consistency.
-- [ ] Obtain user approval of the reviewed written specification.
-- [ ] Write the implementation plan with `writing-plans`; request plan review before any product implementation.
+- [x] Obtain user approval of the reviewed written specification.
+- [x] Write the implementation plan with `writing-plans`; request plan review before any product implementation.
 
 The user requested Hy4 flash at its highest effort as the reviewer. The available model is Hy4 flash Free, with `high` as its highest listed effort.
 
@@ -413,4 +413,6 @@ The main session additionally found the 2,048-character interview-location versu
 
 Existing notification-registry baseline: `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~NotificationTests" --nologo --verbosity minimal` passed 5 tests, failed 0, skipped 0. This does not verify any of the proposed feature behavior. Restore/build reported existing MySqlConnector moderate-severity and SQLitePCLRaw.lib.e_sqlite3 high-severity vulnerability advisories, plus compiler warnings; dependency remediation is outside this documentation change.
 
-No blocking product-intent question remains. The policies explicitly listed in section 1 and the rest of this draft are subject to written-spec approval. New feature runtime, browser behavior, MySQL migration/concurrency, and the full regression suite have not been verified during this documentation task.
+No blocking product-intent question remains. The user approved this specification before implementation planning began. New feature runtime, browser behavior, MySQL migration/concurrency, and the full regression suite have not been verified during this documentation task.
+
+Implementation plan: `docs/superpowers/plans/2026-11-28-realtime-notifications.md`. Hy4 Flash reviewed the plan; the main session verified the findings and corrected the plan. Product implementation remains gated on user plan approval and execution-method selection.
