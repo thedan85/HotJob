@@ -1,8 +1,7 @@
-using System.Globalization;
-using System.Net;
 using System.Text;
 using hotjob.Models.Users;
 using hotjob.Services.Email;
+using hotjob.Services.Email.Templates;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
@@ -25,21 +24,10 @@ public sealed class PasswordResetDelivery(
 
             var rawToken = await userManager.GeneratePasswordResetTokenAsync(user);
             var token = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(rawToken));
-            var url = WebUtility.HtmlEncode(PasswordResetLink.Build(job.BaseUrl, user.Email!, token));
-            var lifetime = options.Value.TokenLifetime;
-            var duration = lifetime == TimeSpan.FromHours(1)
-                ? "1 hour"
-                : $"{lifetime.TotalMinutes.ToString("0.##", CultureInfo.InvariantCulture)} minutes";
-            var body = $"""
-                <!doctype html><html lang="en"><body>
-                <h1>Reset your HotJob password</h1>
-                <p>We received a request to reset your password. This link expires in {WebUtility.HtmlEncode(duration)}.</p>
-                <p><a href="{url}">Reset password</a></p>
-                <p>You can also copy this link into your browser:</p><p>{url}</p>
-                <p>If you did not request this, ignore this email. Your password will not change.</p>
-                </body></html>
-                """;
-            await sender.SendAsync(user.Email!, "Reset your HotJob password", body, ct);
+            var url = PasswordResetLink.Build(job.BaseUrl, user.Email!, token);
+            var email = PasswordResetTemplate.Render(
+                new PasswordResetEmailModel(url, options.Value.TokenLifetime));
+            await sender.SendAsync(user.Email!, email.Subject, email.Html, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         catch (Exception exception)
