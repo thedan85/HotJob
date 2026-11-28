@@ -24,6 +24,7 @@
 - Broadcast audiences are exactly `All`, `Candidate`, or `Employer`; maximum 10,000 recipients, inserts in batches of 500.
 - Reconcile connected authenticated circuits every 30 seconds using PeriodicTimer and TimeProvider.
 - Keep existing INotificationRealtime and INotificationBroadcaster contracts; signals are invalidations, not counters.
+- Every inbox operation creates/disposes its own async DI scope and DbContext; background refresh never uses the circuit's business DbContext.
 - Keep domain changes and their notifications atomic, publish only after commit, and use TimeProvider in touched notification paths.
 - Preserve current ATS/interview/company/membership permissions and state-machine rules.
 - Keep JobAlert excluded from the unified badge, inbox, and read actions; its dedicated page/service stays unchanged.
@@ -35,7 +36,7 @@
 ## Review Focus
 
 1. A mark-all request races with a newly inserted notification: the later row remains unread. Pin in Task 1.
-2. A fake clock changes UTC time but never fires timers: reconciliation tests must exercise CreateTimer, not sleep or GetUtcNow alone. Pin in Task 3.
+2. A real producer runs without CircuitDbGate while a timer refreshes: use distinct contexts/connections, not an assumed global gate. Pin in Tasks 1 and 3.
 3. Maximum-length or Unicode job/interview fields exceed notification limits: preserve essential appointment details and a safe, visibly shortened preview. Pin in Task 5.
 4. A recipient disappears between broadcast selection and insertion: all submission/notification/audit writes roll back; no partial send. Pin in Task 12.
 5. Commit succeeds but its acknowledgement is lost: retry resolves the same RequestId without duplicate recipients or audit. Pin in Task 12.
@@ -46,7 +47,7 @@
 
 **Plan/checklist location:** This file is the single task ledger, following the repository's existing `docs/superpowers/plans/` convention. Do not create duplicate `tasks/plan.md` or `tasks/todo.md`.
 
-**Dependency order:** `1 -> 2 -> 3 -> 4`; `5 -> 6 -> 7 -> 8 -> 11 -> 12 -> 13 -> 14`; `5 -> 9 -> 10`. Task 14 also consumes Task 4; Task 15 follows all chains. Execute in numerical order by default because shared Program.cs, fixtures, and DbContext changes make parallel file ownership costly.
+**Dependency order:** `1 -> 2 -> 3 -> 4`; `5 -> 6 -> 7 -> 8 -> 11 -> 12 -> 13 -> 14`; `5 -> 9 -> 10`. Task 6 also consumes Task 3; Task 14 also consumes Task 4; Task 15 follows all chains. Execute in numerical order by default because shared Program.cs, fixtures, and DbContext changes make parallel file ownership costly.
 
 **Existing reusable test tools:**
 
@@ -69,7 +70,7 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 
 | Task | Owned deliverable |
 | --- | --- |
-| 1–2 | `DTOs/Notifications/NotificationDtos.cs`, `Services/Notifications/INotificationInboxService.cs`, `NotificationInboxService.cs`, personal controller, Candidate compatibility delegates, and registrations. |
+| 1–2 | `DTOs/Notifications/NotificationDtos.cs`, `Services/Notifications/INotificationInboxService.cs`, `NotificationInboxService.cs`, named-connection fixture mode, personal controller, Candidate compatibility delegates, and registrations. |
 | 3–4 | `Services/Notifications/NotificationCircuitState.cs`, `NotificationCircuitHandler.cs`, navbar/inbox/MyApplications consumers, and renderer registrations. |
 | 5–8 | Kind constants, `NotificationText.cs`, existing recruiting services/repository, Interview.Revision, and its migration. |
 | 9–10 | Existing company and owner/admin membership decision producers. |
@@ -84,11 +85,13 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 - Create `hotjob/DTOs/Notifications/NotificationDtos.cs`.
 - Create `hotjob/Services/Notifications/INotificationInboxService.cs` and `NotificationInboxService.cs`.
 - Create `hotjob/Tests/hotjob.Tests/NotificationTests/NotificationInboxTests.cs`.
+- Modify `hotjob/Tests/hotjob.Tests/Support/TestFixture.cs` to support an anchored named SQLite database with separate per-context connections.
 
 **Interfaces:**
-- Consumes `ApplicationDbContext` and `INotificationBroadcaster.NotifyAsync(string userId, string title, CancellationToken cancellationToken = default)`.
+- Consumes `IServiceScopeFactory` and `INotificationBroadcaster.NotifyAsync(string userId, string title, CancellationToken cancellationToken = default)`.
 - Produces `NotificationDto(int Id, string Title, string? Content, bool IsRead, DateTime CreatedAt, string? Kind)`.
-- Produces `INotificationInboxService` with the four exact signatures in spec section 6: ListAsync, UnreadCountAsync, MarkReadAsync, MarkAllReadAsync. Implementation constructor takes `(ApplicationDbContext db, INotificationBroadcaster broadcaster)`.
+- Produces `INotificationInboxService` with the four exact signatures in spec section 6: ListAsync, UnreadCountAsync, MarkReadAsync, MarkAllReadAsync. Implementation constructor takes `(IServiceScopeFactory scopes, INotificationBroadcaster broadcaster)`. Each operation creates/disposes a fresh async scope and resolves only its own ApplicationDbContext; it never resolves the circuit's context or shares EF entities with callers.
+- Extend TestFixture's factory to `Task<TestFixture> CreateAsync(Action<IServiceCollection>? configure = null, string? sqliteConnectionString = null)`. In the optional string mode, keep an open anchor but register DbContext with UseSqlite(the connection string), not the anchor object. Existing callers retain their original isolated in-memory behavior. Concurrent/multi-scope tests share one `$"Data Source=notification-test-{Guid.NewGuid():N};Mode=Memory;Cache=Shared"` string per test and open distinct connections.
 
 - [ ] **Step 1: Write failing ownership, paging, and read-action tests.**
 
@@ -99,9 +102,10 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 | `Read_IsOwnedIdempotentAndExcludesJobAlert` | Read the same own row twice; try foreign/missing/JobAlert IDs. `Assert.True(second.Data!.IsRead); Assert.Equal(ServiceErrorType.NotFound, foreign.ErrorType); Assert.False(alert.IsRead);` Assert only the first mutation invalidates. |
 | `AllOperations_RejectDisabledOrMissingUser` | For each operation, disable/delete the user after initial access. `Assert.Equal(ServiceErrorType.Unauthorized, result.ErrorType); Assert.Empty(push.UserIds);` |
 | `MarkAll_LaterInsertRemainsUnread` | Mark all, then insert an own non-alert row after that UPDATE has completed. `Assert.Equal(1, unread.Data); Assert.False(later.IsRead); Assert.False(jobAlert.IsRead);` A repeat with no newly unread rows returns 0. |
+| `InboxOperations_UseFreshDisposedScopes` | Capture context/connection IDs through a test interceptor; assert each list/count/read operation uses its own scope/context, never the caller's business context. Record scope disposal through a delegating test scope-factory observer and require every completed operation to dispose its scope. |
 
 - [ ] **Step 2: Run RED.** `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~NotificationInboxTests"`; expect missing shared-inbox types.
-- [ ] **Step 3: Implement the shared service.** Validate active user on all operations, apply the same non-JobAlert predicate everywhere, use stable descending order and long offsets, and use a conditional unread UPDATE for read actions. Publish after persistence only when affected rows > 0. Re-read mark-read's owned result without returning foreign data. Keep side-effect signaling outside database failure/rollback handling.
+- [ ] **Step 3: Implement the shared service and fixture mode.** Use CreateAsyncScope/GetRequiredService<ApplicationDbContext> within each operation, following AccountStatusCircuitHandler's existing context-isolation pattern. Never inject a circuit-owned DbContext into this service. Validate active user, apply the same non-JobAlert predicate everywhere, use stable descending order and long offsets, and use a conditional unread UPDATE for read actions. Publish after persistence only when affected rows > 0. Re-read mark-read's owned result without returning foreign data. Dispose the operation scope on success/failure and keep signaling outside database failure/rollback handling. The optional fixture mode registers its connection string and holds its anchor until fixture disposal.
 - [ ] **Step 4: Run GREEN.** Repeat Step 2; expect all new tests to pass. Also run `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~NotificationRealtimeTests"`; expect the existing five registry tests to pass.
 - [ ] **Step 5: Commit.** `git commit -m "feat: add a shared user-owned notification inbox"`
 
@@ -113,7 +117,7 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 - Create `hotjob/Controllers/NotificationsController.cs`.
 - Modify `hotjob/Services/Candidate/CandidateService.cs:98-199`, `NotificationFeed.cs:11-27`, and `hotjob/Program.cs`.
 - Create `hotjob/Tests/hotjob.Tests/NotificationTests/NotificationApiTests.cs`.
-- Modify `hotjob/Tests/hotjob.Tests/CandidateTests/CandidateServiceTests.cs`, `MyApplicationsPageTests.cs`, `hotjob/Tests/hotjob.Tests/JobTests/CompanyVisibilityRegressionTests.cs`, and `hotjob/Tests/hotjob.Tests/Support/AuthUiTestContext.cs` only for constructor/DI changes.
+- Modify `hotjob/Tests/hotjob.Tests/CandidateTests/CandidateServiceTests.cs`, `MyApplicationsPageTests.cs`, `hotjob/Tests/hotjob.Tests/JobTests/CompanyVisibilityRegressionTests.cs`, `hotjob/Tests/hotjob.Tests/JobAlertTests/JobAlertServiceTests.cs:491`, and `hotjob/Tests/hotjob.Tests/Support/AuthUiTestContext.cs` only for constructor/DI changes.
 
 **Interfaces:**
 - Consumes Task 1's inbox interface and DTO.
@@ -123,8 +127,8 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 
 - [ ] **Step 1: Add route-level and delegate tests.** Host real controllers on `http://127.0.0.1:0` with the existing Bearer test-scheme pattern and per-test role/ID controls. `PersonalRoutes_RequireBearerButNotCandidateRole` asserts unauthenticated 401 and Employer-only 200 for both GETs and both PUTs. `PersonalRoutes_ReturnOwnedEnvelopes` asserts `success == true`, the intended item/count payloads, and 404 for foreign/JobAlert items. `CandidateDelegates_PreserveFiveFieldDtos` asserts ID/title/content/read/time unchanged and applications still load. `DelegateMarkAll_DoesNotMarkAlerts` asserts JobAlert.IsRead remains false.
 - [ ] **Step 2: Run RED.** `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~NotificationApiTests|FullyQualifiedName~CandidateServiceTests"`; new URLs must return 404 before implementation.
-- [ ] **Step 3: Implement routes/delegates/DI.** Apply explicit ApiController, route, and JWT Authorize attributes; extract UserId from the validated principal only. Return through ApiControllerBase. Move no application-query logic. Map shared DTOs to the existing five-field DTO in the compatibility layer; remove duplicate inbox database logic. Register the shared inbox scoped and fix every listed constructor caller.
-- [ ] **Step 4: Run GREEN.** Repeat Step 2 and run `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~MyApplicationsPageTests|FullyQualifiedName~CompanyVisibilityRegressionTests|FullyQualifiedName~AuthTests"`; expect no delegate/DI regressions.
+- [ ] **Step 3: Implement routes/delegates/DI.** Apply explicit ApiController, route, and JWT Authorize attributes; extract UserId from the validated principal only. Return through ApiControllerBase. Move no application-query logic. Map shared DTOs to the existing five-field DTO in the compatibility layer; remove duplicate inbox database logic. Register the shared inbox scoped with its scope-factory constructor and fix every listed caller. API/renderer test registrations must supply a scope factory backed by their fixture's database, not an unconfigured host container.
+- [ ] **Step 4: Run GREEN.** Repeat Step 2 and run `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~MyApplicationsPageTests|FullyQualifiedName~CompanyVisibilityRegressionTests|FullyQualifiedName~JobAlertServiceTests|FullyQualifiedName~AuthTests"`; expect no delegate/DI regressions.
 - [ ] **Step 5: Commit.** `git commit -m "feat: expose notifications to every authenticated user"`
 
 ### Task 3: Circuit reconciliation and lifecycle
@@ -143,8 +147,9 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 - Produces `NotificationCircuitHandler(NotificationCircuitState state)` mapping OnConnectionUpAsync/OnConnectionDownAsync/OnCircuitClosedAsync to connected state/refresh/disposal. Existing account-status handler remains registered too.
 
 - [ ] **Step 1: Write deterministic failure-mode tests.** `Signals_RequeryCountWithoutIncrementing` seeds unread=2, sends two hints, asserts `Assert.Equal(2, state.UnreadCount);`. `DroppedHint_ReconcilesAtThirtySeconds` advances ManualTimeProvider by 29 then 1 seconds, asserting unchanged count before the tick and correct DB count afterward. `Disconnect_PausesUntilReconnect` asserts no timer read while disconnected and immediate read on reconnect. `SignalDuringRead_DrainsAgain` uses a barrier and asserts the final count, not the first read, wins. `GateHeldByWriter_DoesNotDeadlock` asserts publish completes before releasing CircuitDbGate and the refresh completes after release. `IdentitySwitch_DiscardsOldRead`, `DisabledAccount_ClearsAndSignsOut`, `TransientFailure_PreservesStaleCount`, and `Dispose_UnsubscribesAndStopsTimer` assert their named states and zero post-disposal callbacks. `Broadcaster_DoesNotLogPayloads` captures logs and asserts `Assert.DoesNotContain(secretTitle, string.Join("\\n", logs.Messages));`. `Broadcaster_ContainsCancelledRealtime` injects an INotificationRealtime whose PublishAsync throws OperationCanceledException and asserts `Assert.Null(await Record.ExceptionAsync(() => broadcaster.NotifyAsync(userId, secretTitle)));`.
+- [ ] **Step 1a: Add the real-producer overlap regression.** `RealApplyAndRefresh_UseDistinctContextsWithoutEfConcurrencyFailure` uses Task 1's named-database mode, the real ApplicationService.ApplyAsync, and real inbox service/state. Deliberately do not acquire CircuitDbGate for ApplyAsync, matching JobDetail. Hold its first read inside a command interceptor before provider execution, request/await a refresh, then release ApplyAsync. Assert `Assert.True(applyResult.Success); Assert.False(state.IsStale);` and distinct producer/inbox ContextId and connection objects. Require refresh to complete while that business operation is pending, with no “second operation” exception. This pause precedes the producer's write transaction, so SQLite writer locking cannot be mistaken for context isolation.
 - [ ] **Step 2: Run RED.** `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~NotificationCircuitTests"`; expect missing circuit types and the existing title log to fail its assertion.
-- [ ] **Step 3: Implement the scoped state/handler.** Subscribe before reading, handle auth-generation changes, gate all reads, maintain a dirty drain flag, and observe callback/timer errors. Pause/cancel the 30-second PeriodicTimer with circuit lifecycle; do not start it in prerender. Treat Unauthorized as clear/sign-out and transient errors as stale. Remove the broadcaster title log and explicitly contain OperationCanceledException from realtime publishing as a best-effort transport cancellation, not a failed committed write. Keep the registry's existing callback-isolation/nonwaiting behavior.
+- [ ] **Step 3: Implement the scoped state/handler.** Subscribe before reading, handle auth-generation changes, serialize facade reads while letting the inbox service create an independent context per operation, maintain a dirty drain flag, and observe callback/timer errors. Do not resolve the circuit's ApplicationDbContext for refresh, and do not add gates to unrelated producer pages to compensate. Pause/cancel the 30-second PeriodicTimer with circuit lifecycle; do not start it in prerender. Treat Unauthorized as clear/sign-out and transient errors as stale. Remove the broadcaster title log and explicitly contain OperationCanceledException from realtime publishing as a best-effort transport cancellation, not a failed committed write. Keep the registry's existing callback-isolation/nonwaiting behavior.
 - [ ] **Step 4: Run GREEN.** Repeat Step 2 plus `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~NotificationRealtimeTests|FullyQualifiedName~NotificationInboxTests"`; expect counts, lifecycle, privacy, and old registry tests to pass.
 - [ ] **Step 5: Commit.** `git commit -m "feat: reconcile notification state across circuit lifecycles"`
 
@@ -197,7 +202,7 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 
 ### Task 6: Application submission and manual messages
 
-**Dependencies:** Tasks 1, 5.
+**Dependencies:** Tasks 1, 3, 5.
 
 **Files:**
 - Modify `hotjob/Services/Candidate/ApplicationService.cs:176-202`, `hotjob/Services/Employer/NotificationService.cs`, and `hotjob/Controllers/EmployerApplicantsController.cs:70-86`.
@@ -290,7 +295,7 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 
 **Files:**
 - Modify `hotjob/Services/Employer/CompanyService.cs`, `hotjob/Services/Admin/EmployerAdminService.cs`, and `hotjob/Tests/hotjob.Tests/Support/TestFixture.cs`.
-- Modify employer-service constructor calls in `hotjob/Tests/hotjob.Tests/CompanyTests/CompanyServiceTests.cs:393-530`.
+- Modify employer-service constructor calls and the shared EmployerCompanyServiceTests factory in `hotjob/Tests/hotjob.Tests/CompanyTests/CompanyServiceTests.cs:353-530`.
 - Create `hotjob/Tests/hotjob.Tests/NotificationTests/MembershipNotificationTests.cs`.
 
 **Interfaces:**
@@ -340,7 +345,6 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 - Create `hotjob/Services/Admin/IAdminBroadcastService.cs` and `AdminBroadcastService.cs`.
 - Modify `hotjob/Models/Admin/AdminAuditLog.cs` for action/target constants and filter lists only.
 - Create `hotjob/Tests/hotjob.Tests/NotificationTests/AdminBroadcastTests.cs` and `BroadcastTransactionTests.cs`.
-- Modify `hotjob/Tests/hotjob.Tests/Support/TestFixture.cs` to support a named shared-cache database with a separate anchor connection.
 
 **Interfaces:**
 - Produces mutable `CreateBroadcastRequest` with Guid RequestId and string Audience/Title/Content, defaults Guid.Empty/`All`/empty/empty; add Required and Task 5's TrimmedMaxLength annotations plus the same service-level validation.
@@ -348,13 +352,12 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 - Produces `Task<ServiceResult<BroadcastResultDto>> IAdminBroadcastService.SendAsync(CreateBroadcastRequest request, CancellationToken cancellationToken = default)`.
 - AdminBroadcastService constructor takes `(IServiceScopeFactory scopes, IAdminAuditService auditService, TimeProvider timeProvider, INotificationBroadcaster broadcaster, ILogger<AdminBroadcastService> logger)`.
 - Capture actor from the caller's audit identity once, then create an isolated async DI scope for DbContext and the transaction. It permits safe failed-claim tracker clearing without discarding unrelated circuit-tracked changes. No user-supplied AdminUserId and no new IAdminAuditService API.
-- Extend TestFixture's existing factory to `Task<TestFixture> CreateAsync(Action<IServiceCollection>? configure = null, string? sqliteConnectionString = null)`. When the optional string is supplied, hold an open anchor connection but register DbContext using UseSqlite(the connection string), not UseSqlite(the anchor object). Existing callers keep the old isolated in-memory behavior.
-- All multi-scope broadcast tests create one `$"Data Source=notification-broadcast-{Guid.NewGuid():N};Mode=Memory;Cache=Shared"` string per test and pass it to that factory; every DbContext opens its own connection to that same named database. An isolated DI scope alone isolates tracking, not the existing fixture's connection.
+- Consumes the optional named-database TestFixture mode produced by Task 1. All multi-scope broadcast tests use that mode; every DbContext opens its own connection to the same per-test database. An isolated DI scope alone isolates tracking, not the default fixture's connection.
 
 - [ ] **Step 1: Add input/audience/security tests.** `Send_ValidatesExactAudienceAndTrimmedLimits` tests Guid.Empty, `candidate`/unknown audiences, whitespace, 200/201 title, 2,000/2,001 content; assert Validation and no rows. `Send_RequiresActiveDatabaseAdmin` tests anonymous, non-admin, removed DB role, disabled actor, and missing email; assert Unauthorized. `Audiences_AreDatabaseRoleSnapshots` covers all three audiences, role-only users, dual-role users, pending/rejected memberships, disabled accounts, and an empty role group; assert exact UserIds and one copy each. `RecipientLimit_IsAtomic` proves 10,000 succeeds, 10,001 conflicts, and 500-row batches stay inside one transaction.
 - [ ] **Step 2: Add retry/failure tests.** `SameKey_ReplaysOriginalResultWithoutReselecting` changes current audience membership before retry and asserts original result/count, one audit, and no extra push. `SameKeyChangedPayload_IsConflict` and `SeparateAdmins_HaveIndependentKeys` pin key scoping. `ConcurrentSameKey_ClaimsOnce` coordinates separate connections and asserts one committed fan-out, with an original result or safe in-flight Conflict for the other caller. `RecipientForeignKeyFailure_RollsBackEverything` injects one absent UserId into a pending notification through a test SaveChangesInterceptor, simulating a recipient lost after selection; assert no submission/recipient/audit/push. SQLite serializes writers, so do not attempt a second-connection delete while its broadcast write transaction holds the lock; exercise the real deletion race on MySQL in Task 15. `AuditInsertFailure_RollsBackEverything` asserts the same rollback. `IdentitySwitchAfterCapture_KeepsOriginalActor` asserts both submission and audit use the captured UserId/email. `CommitAcknowledgementLost_ResolvesBySameKey` injects a commit interceptor that throws after the DB commit and asserts retry resolves one submission/audit/copy set. `PostCommitPushFailure_DoesNotRollback` includes OperationCanceledException and asserts successful persisted result. `FailedClaim_DoesNotClearCallerTrackedEntity` asserts a modified unrelated entity in the circuit scope remains modified.
 - [ ] **Step 3: Run RED.** `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~AdminBroadcastTests|FullyQualifiedName~BroadcastTransactionTests"`; expect missing service/types.
-- [ ] **Step 4: Implement SendAsync and the named-connection test-fixture mode.** Follow spec section 7's exact transaction/replay order. Claim by a unique INSERT, never check-then-insert; catch only the claim's actual unique-constraint violation for replay, not an arbitrary DbUpdateException. Snapshot at most 10,001 distinct active recipient IDs, persist batches of 500 in that same transaction, and add the captured-actor AdminAuditLog directly. Replay from a clean isolated context after rolling back a failed claim; compare normalized strings with ordinal equality. A recipient FK failure is a rollback, not a dedup/replay success. Treat lost commit acknowledgement as unknown; never substitute a new key or return a false “nothing sent” result. Signal after confirmed commit outside rollback logic, retaining the original result despite push failure. Do not log payloads or call mutable-identity LogAsync. The optional fixture mode must register the connection string, hold the anchor until disposal, and leave all existing fixture callers unchanged.
+- [ ] **Step 4: Implement SendAsync using Task 1's named-connection fixture for tests.** Follow spec section 7's exact transaction/replay order. Claim by a unique INSERT, never check-then-insert; catch only the claim's actual unique-constraint violation for replay, not an arbitrary DbUpdateException. Snapshot at most 10,001 distinct active recipient IDs, persist batches of 500 in that same transaction, and add the captured-actor AdminAuditLog directly. Replay from a clean isolated context after rolling back a failed claim; compare normalized strings with ordinal equality. A recipient FK failure is a rollback, not a dedup/replay success. Treat lost commit acknowledgement as unknown; never substitute a new key or return a false “nothing sent” result. Signal after confirmed commit outside rollback logic, retaining the original result despite push failure. Do not log payloads or call mutable-identity LogAsync.
 - [ ] **Step 5: Run GREEN.** Repeat Step 3 plus `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~NotificationBroadcastModelTests|FullyQualifiedName~AdminAuditHooksTests"`; expect atomicity, actor, replay, and old audit tests to pass.
 - [ ] **Step 6: Commit.** `git commit -m "feat: send transactional retry-safe admin broadcasts"`
 
@@ -372,7 +375,7 @@ Each task has RED, implementation, GREEN, and commit steps. Missing-type/member 
 - Produces `POST /api/admin/notifications/broadcasts`, raw BroadcastResultDto on 200, existing admin error-array convention, and inherited Admin/Bearer protection.
 - Declares explicit `[Route("api/admin/notifications")]` and action `[HttpPost("broadcasts")]`; never rely on AdminControllerBase's controller-token route.
 
-- [ ] **Step 1: Add routed API tests.** `BroadcastRoute_RequiresAdminAndReturnsRawResult` asserts 401 anonymous, 403 authenticated non-admin, and 200 Admin with `broadcastId`, `recipientCount`, `createdAt` directly on the JSON root. `BroadcastRoute_UsesServerActorAndReplayContract` asserts same key/payload returns identical result, changed payload gives 409, and forged body fields cannot change actor. `BroadcastRoute_ValidatesBody` asserts 400 for required/length/audience/key errors with an admin error array. `BroadcastRoute_PaddedLimitsAgreeWithDirectService` asserts raw padded-to-limit 200/2,000 input succeeds and persists normalized values through both paths, while trimmed 201/2,001 fails; retrying the same key with equivalent whitespace returns the original result. Use the same real Kestrel route host as Task 2, not direct action invocation only.
+- [ ] **Step 1: Add routed API tests.** `BroadcastRoute_RequiresAdminAndReturnsRawResult` asserts 401 anonymous, 403 authenticated non-admin, and 200 Admin with `broadcastId`, `recipientCount`, `createdAt` directly on the JSON root. `DerivedRoute_DoesNotExposeInheritedAlias` asserts authenticated POST to `/api/admin/AdminNotifications/broadcasts` returns 404, while the explicit `/api/admin/notifications/broadcasts` route succeeds. `BroadcastRoute_UsesServerActorAndReplayContract` asserts same key/payload returns identical result, changed payload gives 409, and forged body fields cannot change actor. `BroadcastRoute_ValidatesBody` asserts 400 for required/length/audience/key errors with an admin error array. `BroadcastRoute_PaddedLimitsAgreeWithDirectService` asserts raw padded-to-limit 200/2,000 input succeeds and persists normalized values through both paths, while trimmed 201/2,001 fails; retrying the same key with equivalent whitespace returns the original result. Use the same real Kestrel route host as Task 2, not direct action invocation only.
 - [ ] **Step 2: Run RED.** `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~NotificationApiTests"`; admin URL should be 404 before controller addition.
 - [ ] **Step 3: Implement the thin controller/DI.** Forward only CreateBroadcastRequest and cancellation to the service; return OkOrFailure. Use TrimmedMaxLength instead of raw DTO MaxLength so pre-action validation agrees with SendAsync; keep Required. Preserve the existing global validation factory's admin error arrays without changing unrelated API behavior. Do not accept recipient/actor IDs.
 - [ ] **Step 4: Run GREEN.** Repeat Step 2 and `dotnet test hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj --configuration Release --filter "FullyQualifiedName~SkillApiValidationTests|FullyQualifiedName~ApiControllerBaseTests"`; expect admin routing and existing envelope tests to pass.
@@ -506,6 +509,7 @@ Do not start unless the effective connection is known to be the approved disposa
 - [x] Specify source/fixture reach, provider limitations, interface names/types, and exact constants without duplicating implementation bodies.
 - [x] Pin all five Review Focus conditions to named tests.
 - [x] Complete Hy4 Flash `high` plan review using review skills, independently verify findings, and fix supported issues.
+- [x] Complete DeepSeek V4.1 Flash `max` final review of both documents, independently verify findings, and fix supported issues.
 - [ ] Obtain user review of this plan and an explicit execution-method choice before product work.
 
 **Execution recommendation:** Native execution is the lower-cost default: tasks share fixtures, DbContext mappings, Program.cs, and recruiting repository interfaces, so sequential ownership avoids coordination conflicts. Subagent-driven execution provides fresh per-task review at additional context cost. The user's prior Hy4 reviewer request does not select an implementation method.
@@ -517,3 +521,13 @@ Hy4 Flash `opencode/hy4-flash-free#high` reviewed this plan using review skills.
 The plan now specifies a shared trim-aware validation attribute and route/service parity tests, explicit cancellation containment with committed-producer integration assertions, and an optional named-database fixture mode that opens distinct connections. It also strengthens per-timestamp UTC assertions, supplies executable old-schema MySQL fixture SQL with all foreign-key prerequisites, and fixes the migration-chain dependency map.
 
 Independent checking additionally accounted for SQLite's single-writer limitation: its lost-recipient test injects the actual FK failure, while the real deletion race remains an explicit MySQL check. No product source, test implementation, migration, database, or browser session was changed during plan authoring.
+
+### Final DeepSeek review disposition
+
+Accepted: the Important shared-context race, the missing Task 3 dependency for Task 6, and the omitted JobAlertServiceTests/EmployerCompanyServiceTests constructor callers. Inbox operations now use their own disposable async scopes/DbContexts; the named-connection fixture moves to Task 1 so a real ungated ApplyAsync/refresh overlap test can run in Task 3. Business producers retain their original atomic transactions without a cross-project UI-gate retrofit.
+
+Rejected: the claim that inherited controller routes necessarily create a second alias. ASP.NET Core 10's DefaultApplicationModelProvider.CreateControllerModel explicitly filters inherited route providers when the derived class defines routes. Keep the explicit-route requirement and pin the unwanted alias's absence in a real-route test.
+
+Sources: https://learn.microsoft.com/en-us/aspnet/core/blazor/blazor-ef-core?view=aspnetcore-10.0#database-access and https://github.com/dotnet/aspnetcore/blob/v10.0.5/src/Mvc/Mvc.Core/src/ApplicationModels/DefaultApplicationModelProvider.cs.
+
+The changes resolve reviewed documentation gaps. They do not establish runtime correctness: new tests, migrations, and browser/provider checks remain unexecuted until implementation.

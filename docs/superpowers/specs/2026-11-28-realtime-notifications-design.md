@@ -86,7 +86,7 @@ No hub method lets a browser choose another user's subscription or send a notifi
 
 ### Responsibilities
 
-- `INotificationInboxService` / `NotificationInboxService`, under `Services/Notifications`: user-owned list/count/read operations and active-account checks.
+- `INotificationInboxService` / `NotificationInboxService`, under `Services/Notifications`: user-owned list/count/read operations and active-account checks. Each operation creates and disposes its own async DI scope and ApplicationDbContext through IServiceScopeFactory, following the existing AccountStatusCircuitHandler pattern. Never use the circuit's business DbContext for inbox operations.
 - Existing `Services/Candidate/NotificationFeed`: retain as the circuit-gated facade; redirect its existing methods to the shared inbox service without breaking current callers.
 - `NotificationCircuitState`, under `Services/Notifications`: one scoped invalidation subscription and reconciliation loop per authenticated circuit. Exposes change notifications to the navbar and any mounted inbox/messages components.
 - `NotificationCircuitHandler`: connection up/down/closed hooks; request refresh on connection up, pause reconciliation while disconnected, and cancel work on closure.
@@ -94,7 +94,7 @@ No hub method lets a browser choose another user's subscription or send a notifi
 - Domain services: construct their event's Notification rows inside their existing unit of work. Do not introduce a second database transaction through a generic notification sender.
 - `IAdminBroadcastService` / `AdminBroadcastService`: authenticated admin validation, audience selection, retry-safe transactional fan-out, and auditing.
 
-Blazor calls services directly through DI. REST controllers expose the same business operations without HTTP loopback from components.
+Blazor calls services directly through DI. REST controllers expose the same business operations without HTTP loopback from components. The facade's gate serializes notification UI work, but it is not a global lock on business services: existing apply, job-close, and company/member decision pages do not all acquire it. Per-operation inbox scopes prevent background refreshes from sharing their DbContext without requiring unrelated page changes. Domain mutations and their notification inserts remain in the producer's original transaction; inbox scopes never create domain-event notifications.
 
 ## 4. Event and recipient contract
 
@@ -281,7 +281,7 @@ Reuse existing admin layout/classes and accessible form patterns. No new UI libr
 - While connected/authenticated, reconcile at **30-second intervals** using PeriodicTimer and TimeProvider. This repairs lost hints, including a crash after commit but before push. Pause on disconnect; reconnect requests an immediate refresh.
 - Navbar, `/notifications`, and the mounted MyApplications messages panel react to the shared circuit change state. A mounted inbox reloads its current page; if that page is now out of range, load the final valid page. Do not force users back to page 1 for every event.
 - Never use `unreadCount++` or `--` as the authoritative update. Fetch the filtered DB count after any invalidation/read action; duplicate or out-of-order hints must not drift the badge.
-- Route all notification database work sharing the circuit DbContext through CircuitDbGate. Circuit callbacks queue refresh work; writers never await that refresh while holding the gate.
+- Run all inbox list/count/read-action database work in the fresh per-operation scope defined in section 3, not the circuit's business DbContext. Keep CircuitDbGate in NotificationFeed for UI serialization, but do not rely on that gate to protect ungated business-service callers. A 30-second refresh must be safe while a real apply, job-close, or company/member decision runs without the gate. Circuit callbacks queue refresh work; writers never await that refresh while holding a gate.
 - Coalesce overlapping invalidations, but preserve a dirty flag if a new signal arrives during a read. Drain another refresh after the current one, rather than dropping the last event. No overlapping reads on one DbContext.
 - Capture an identity generation before each asynchronous refresh. Ignore late results after sign-out/user switch, clear displayed data immediately, and prevent a disposed component from rendering.
 - Read actions refresh locally and invalidate other circuits for the same user. Browser tabs for another user remain unchanged.
@@ -382,7 +382,7 @@ The implementation plan must attach named executable tests to these acceptance g
 4. **Company/membership producers:** company approve/reject/revoke/suspend/reactivate reach the specified distinct recipients; pending/rejected applicants receive no company-wide decision. Owner and admin membership decisions notify the affected user, including admin rejection setting Employer.IsActive false. Refusal, same-state requests, concurrent losers, and audit failure leave no extra messages or push.
 5. **Broadcast security/audiences:** unauthenticated/non-admin direct service calls and endpoints have no side effects; All includes admin-only users; role groups use DB roles; dual-role users get one copy; pending/rejected role holders remain eligible; disabled users are excluded; zero recipients and 10,001 recipients fail atomically; 10,000 succeeds with 500-row insert batches.
 6. **Broadcast idempotency/atomicity:** same-key replay, changed-payload conflict, concurrent same-key sends, separate admins, and response loss after commit; exactly one submission, recipient set, audit entry, and original result. Switch/sign out the circuit's identity after actor capture and assert the submission/audit keep the same original validated UserId/email. Inject recipient-insert/audit and definite pre-commit failures: rolled-back attempts produce no push or partial success. Separately simulate lost commit acknowledgement: a same-key retry resolves the original intent without duplicates. A cancelled/failed push after confirmed commit cannot trigger rollback or change the successful stored result.
-7. **Circuit safety/recovery:** keep existing registry tests and add duplicate/out-of-order signals, stale badge correction, open inbox/messages refresh, concurrent invalidation dirty-flag drain, sign-out/user-switch during a pending read, account disable causing Unauthorized/clear rather than stale private content, reconnection, paused disconnected timer, disposal, transient query failure, and a same-circuit writer holding CircuitDbGate. No deadlock or overlapping DbContext work.
+7. **Circuit safety/recovery:** keep existing registry tests and add duplicate/out-of-order signals, stale badge correction, open inbox/messages refresh, concurrent invalidation dirty-flag drain, sign-out/user-switch during a pending read, account disable causing Unauthorized/clear rather than stale private content, reconnection, paused disconnected timer, disposal, transient query failure, and a same-circuit writer holding CircuitDbGate. Also overlap a real ungated ApplicationService.ApplyAsync operation with a refresh and assert distinct DbContexts/connections, successful operations, and no EF concurrency exception. No deadlock or concurrent use of the same DbContext.
 8. **Cross-tab behavior:** two circuits for one user converge after creation and read actions; another user's circuit is unaffected. With a deliberately dropped post-commit signal, the next 30-second fake-time reconciliation recovers the correct count and mounted list.
 9. **Persistence/providers:** migrate a disposable MySQL database with legacy messages, interviews, and JobAlert rows; prove values survive, existing interviews acquire Revision 0, and new keys/FKs and conditional-update races behave as specified. SQLite relational tests cover nullable unique keys, same-job repeated non-alert events, rollback, ordering, revision checks, and broadcast deduplication. SQLite success does not substitute for the MySQL migration/concurrency check.
 10. **Browser/API/privacy acceptance:** with separate candidate/employer/admin sessions, submit an application, move status, schedule/reschedule/cancel interview, decide company/membership requests, send each broadcast audience, mark read across tabs, disconnect/reconnect, and verify text encoding, focus, loading/error states, UTC timestamps, stable returned ordering, and no manual reload. Route-level integration tests exercise the exact personal and admin API URLs and authentication attributes, rather than only calling controller methods. Logger-capture tests assert manual/admin title/body and interview locations never appear in notification fan-out logs. Use existing styles and controls; browser checks are not replaced by source-text assertions.
@@ -400,6 +400,7 @@ Documentation checklist:
 - [x] Independently verify reviewer findings against source, fix supported issues, and check document consistency.
 - [x] Obtain user approval of the reviewed written specification.
 - [x] Write the implementation plan with `writing-plans`; request plan review before any product implementation.
+- [x] Complete the requested DeepSeek V4.1 Flash `max` final review and independently resolve its findings.
 
 The user requested Hy4 flash at its highest effort as the reviewer. The available model is Hy4 flash Free, with `high` as its highest listed effort.
 
@@ -416,3 +417,16 @@ Existing notification-registry baseline: `dotnet test hotjob/Tests/hotjob.Tests/
 No blocking product-intent question remains. The user approved this specification before implementation planning began. New feature runtime, browser behavior, MySQL migration/concurrency, and the full regression suite have not been verified during this documentation task.
 
 Implementation plan: `docs/superpowers/plans/2026-11-28-realtime-notifications.md`. Hy4 Flash reviewed the plan; the main session verified the findings and corrected the plan. Product implementation remains gated on user plan approval and execution-method selection.
+
+### Final DeepSeek review
+
+DeepSeek V4.1 Flash reviewed both documents at `max` effort. Main-session source checks confirmed its Important finding: existing apply/job-close/company/member pages do not all acquire CircuitDbGate, so a timer using the circuit DbContext could collide with business work. The refined design gives every inbox operation a fresh async scope/DbContext, adds a real-producer overlap test, and retains original producer transactions. The plan also fixes the missing Task 3 dependency and two omitted constructor callers.
+
+The route-alias finding was rejected after checking ASP.NET Core's MVC application-model provider, not merely RouteAttribute's inheritance flag. Its controller-model construction explicitly walks to the first class defining routes and filters inherited route providers; the derived explicit route overrides the base route. The existing route requirement remains correct, with an added route-level negative-alias test.
+
+Framework evidence:
+
+- Microsoft Blazor/EF guidance: “Consider using one context per operation.” https://learn.microsoft.com/en-us/aspnet/core/blazor/blazor-ef-core?view=aspnetcore-10.0#database-access
+- ASP.NET Core 10 MVC source, CreateControllerModel: derived controller routes support overriding inherited routes. https://github.com/dotnet/aspnetcore/blob/v10.0.5/src/Mvc/Mvc.Core/src/ApplicationModels/DefaultApplicationModelProvider.cs
+
+These are reviewed documentation refinements, not implemented or runtime-verified feature fixes.
