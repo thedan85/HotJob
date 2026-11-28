@@ -429,8 +429,10 @@ public sealed class EmployerAtsTests
         var (appId, _, _) = await SeedApplicationAsync(fx, companyId);
         Detach(fx);
 
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 10, 27, 9, 0, 0, TimeSpan.Zero));
+        var interviews = new InterviewService(new ApplicantRepository(fx.Db), clock, NullLogger<InterviewService>.Instance);
         var roundStart = new DateTimeOffset(2026, 11, 26, 9, 0, 0, TimeSpan.Zero).UtcDateTime;
-        var invalid = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        var invalid = await interviews.CreateAsync(owner, appId, new CreateInterviewRequest
         {
             InterviewDate = roundStart.AddDays(1),
             InterviewType = InterviewType.Online,
@@ -439,7 +441,7 @@ public sealed class EmployerAtsTests
         Assert.False(invalid.Success);
         Assert.Equal(ServiceErrorType.Validation, invalid.ErrorType);
 
-        var created = await Interviews(fx).CreateAsync(owner, appId, new CreateInterviewRequest
+        var created = await interviews.CreateAsync(owner, appId, new CreateInterviewRequest
         {
             InterviewDate = roundStart.AddDays(2),
             InterviewType = InterviewType.Online,
@@ -453,7 +455,7 @@ public sealed class EmployerAtsTests
         var list = await Interviews(fx).ListAsync(owner, appId);
         Assert.Equal(2, Assert.Single(list.Data!).Round);
 
-        var updated = await Interviews(fx).UpdateAsync(owner, created.Data.Id, new UpdateInterviewRequest
+        var updated = await interviews.UpdateAsync(owner, created.Data.Id, new UpdateInterviewRequest
         {
             Round = 3
         });
