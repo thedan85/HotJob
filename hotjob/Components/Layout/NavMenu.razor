@@ -22,7 +22,7 @@
         </button>
 
         <nav id="site-menu" class="nav-scrollable @(menuOpen ? "is-open" : string.Empty)"
-             aria-label="Primary navigation" @onclick="CloseMenu">
+             aria-label="Primary navigation">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
             <NavLink class="nav-link" href="companies">Companies</NavLink>
             <NavLink class="nav-link" href="it-jobs">Explore jobs</NavLink>
@@ -35,44 +35,66 @@
                     }
                 </Authorized>
             </AuthorizeView>
-            <AuthorizeView Roles="Employer">
-                <Authorized Context="employerAuth">
-                    <span class="nav-group-label">Employer</span>
-                    <NavLink class="nav-link nav-link-employer" href="employer/jobs">My jobs</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="employer/candidates">Candidates</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="employer/interviews">Applicants</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="employer/company">Company</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="employer/billing">Billing</NavLink>
-                </Authorized>
-            </AuthorizeView>
+
             <AuthorizeView Roles="Candidate">
                 <Authorized>
-                    <NavLink class="nav-link" href="my-applications">Applications</NavLink>
-                    <NavLink class="nav-link nav-link-notifications" href="notifications">
-                        Notifications
-                        @if (unreadCount > 0)
-                        {
-                            <span class="nav-badge" aria-label="@unreadCount unread">@unreadCount</span>
-                        }
-                    </NavLink>
-                    <NavLink class="nav-link" href="recommended-jobs">Recommended</NavLink>
-                    <NavLink class="nav-link" href="saved-jobs">Saved jobs</NavLink>
-                    <NavLink class="nav-link" href="my-reviews">My reviews</NavLink>
-                    <NavLink class="nav-link" href="job-alerts">Alerts</NavLink>
-                    <NavLink class="nav-link" href="premium">Premium</NavLink>
+                    <details class="nav-dropdown" data-nav-dropdown @onclick:stopPropagation="true">
+                        <summary class="nav-link nav-dropdown-toggle">
+                            Job search
+                            @if (unreadCount > 0)
+                            {
+                                <span class="nav-dot" aria-label="@unreadCount unread"></span>
+                            }
+                        </summary>
+                        <div class="nav-dropdown-menu">
+                            <NavLink class="nav-link nav-link-notifications" href="notifications">
+                                Notifications
+                                @if (unreadCount > 0)
+                                {
+                                    <span class="nav-badge" aria-label="@unreadCount unread">@unreadCount</span>
+                                }
+                            </NavLink>
+                            <NavLink class="nav-link" href="my-applications">Applications</NavLink>
+                            <NavLink class="nav-link" href="recommended-jobs">Recommended</NavLink>
+                            <NavLink class="nav-link" href="saved-jobs">Saved jobs</NavLink>
+                            <NavLink class="nav-link" href="my-reviews">My reviews</NavLink>
+                            <NavLink class="nav-link" href="job-alerts">Alerts</NavLink>
+                            <NavLink class="nav-link" href="premium">Premium</NavLink>
+                        </div>
+                    </details>
                 </Authorized>
             </AuthorizeView>
+
+            <AuthorizeView Roles="Employer">
+                <Authorized Context="employerAuth">
+                    <details class="nav-dropdown" data-nav-dropdown @onclick:stopPropagation="true">
+                        <summary class="nav-link nav-dropdown-toggle">Employer</summary>
+                        <div class="nav-dropdown-menu">
+                            <NavLink class="nav-link nav-link-employer" href="employer/jobs">My jobs</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="employer/candidates">Candidates</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="employer/interviews">Applicants</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="employer/company">Company</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="employer/billing">Billing</NavLink>
+                        </div>
+                    </details>
+                </Authorized>
+            </AuthorizeView>
+
             <AuthorizeView Roles="Admin">
                 <Authorized>
-                    <span class="nav-group-label">Admin</span>
-                    <NavLink class="nav-link nav-link-employer" href="admin" Match="NavLinkMatch.All">Dashboard</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="admin/accounts">Accounts</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="admin/companies">Companies</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="admin/employers">Employers</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="admin/jobs">Jobs</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="admin/reviews">Reviews</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="admin/audit-logs">Audit log</NavLink>
-                    <NavLink class="nav-link nav-link-employer" href="admin/model">ML model</NavLink>
+                    <details class="nav-dropdown" data-nav-dropdown @onclick:stopPropagation="true">
+                        <summary class="nav-link nav-dropdown-toggle">Admin</summary>
+                        <div class="nav-dropdown-menu">
+                            <NavLink class="nav-link nav-link-employer" href="admin" Match="NavLinkMatch.All">Dashboard</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="admin/accounts">Accounts</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="admin/companies">Companies</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="admin/employers">Employers</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="admin/jobs">Jobs</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="admin/reviews">Reviews</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="admin/audit-logs">Audit log</NavLink>
+                            <NavLink class="nav-link nav-link-employer" href="admin/model">ML model</NavLink>
+                        </div>
+                    </details>
                 </Authorized>
             </AuthorizeView>
         </nav>
@@ -124,17 +146,23 @@
 
     private void ToggleMenu() => menuOpen = !menuOpen;
 
-    private void CloseMenu() => menuOpen = false;
-
     protected override void OnInitialized()
     {
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        NavigationManager.LocationChanged += OnLocationChanged;
     }
 
     public void Dispose()
     {
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
         notificationSubscription?.Dispose();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        menuOpen = false;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
