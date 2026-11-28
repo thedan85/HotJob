@@ -273,7 +273,7 @@ public sealed class AdminModerationTests
             new JobPostingRepository(fx.Db),
             new EntitlementService(fx.Db, TimeProvider.System),
             new StubJobAlertService(),
-            NullLogger<JobService>.Instance);
+            NullLogger<JobService>.Instance, TimeProvider.System);
         var created = await jobs.CreateAsync(employer.UserId, new CreateJobRequest
         {
             Title = "Engineer",

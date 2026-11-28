@@ -6,7 +6,9 @@ namespace hotjob.Services.Candidate.ResumeParsing;
 
 internal static class ResumeTextNormalization
 {
-    public static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
+    // 100ms was too tight under a fully parallel test/build load: a correct
+    // NonBacktracking regex could time out and make safe parsing fail.
+    public static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     public static string Fold(string text)
     {
         var output = new StringBuilder(text.Length);

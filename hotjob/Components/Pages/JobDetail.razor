@@ -10,7 +10,6 @@
 @using hotjob.Services.Common
 @using hotjob.Services.Job
 @using hotjob.Services.ML
-@using hotjob.Services.Common
 @inject IJobService JobService
 @inject IApplicationService ApplicationService
 @inject IMatchScoreService MatchScoreService
@@ -583,7 +582,8 @@ else
 
     private static string MatchAlgorithmLabel(string? algorithm) => algorithm switch
     {
-        hotjob.Services.ML.MatchScoreService.ModelAlgorithm => "the trained ML model (FastTreeBinary)",
+        var marker when hotjob.Services.ML.MatchScoreService.IsModelAlgorithm(marker)
+            => "the trained ML model (FastTreeBinary)",
         hotjob.Services.ML.MatchScoreService.WeightedRuleAlgorithm => "skill weighting (weighted-rule)",
         _ => "match rules"
     };

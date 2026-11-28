@@ -25,6 +25,10 @@ public class Interview
 
     public int ApplicationId { get; set; }
 
+    /// <summary>Interview round within this application (1-based).</summary>
+    [Range(1, 100)]
+    public int Round { get; set; } = 1;
+
     public DateTime InterviewDate { get; set; }
 
     [MaxLength(2048)]

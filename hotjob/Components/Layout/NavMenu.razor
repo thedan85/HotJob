@@ -5,6 +5,7 @@
 @inject HotJobAuthStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject NavigationManager NavigationManager
+@inject hotjob.Services.Notifications.INotificationRealtime NotificationRealtime
 @using System.Security.Claims
 @using hotjob.Services.Authentication
 @using hotjob.Services.Candidate
@@ -118,6 +119,8 @@
     private int unreadCount;
     private bool isSigningOut;
     private string? signOutError;
+    private IDisposable? notificationSubscription;
+    private string? subscribedUserId;
 
     private void ToggleMenu() => menuOpen = !menuOpen;
 
@@ -131,6 +134,7 @@
     public void Dispose()
     {
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        notificationSubscription?.Dispose();
     }
 
     private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
@@ -154,6 +158,7 @@
         if (state.User.Identity?.IsAuthenticated != true || !state.User.IsInRole("Candidate"))
         {
             unreadCount = 0;
+            EnsureNotificationSubscription(null);
             return;
         }
 
@@ -162,11 +167,38 @@
         if (string.IsNullOrWhiteSpace(userId))
         {
             unreadCount = 0;
+            EnsureNotificationSubscription(null);
             return;
         }
 
+        EnsureNotificationSubscription(userId);
         var result = await NotificationFeed.UnreadCountAsync(userId);
         unreadCount = result.Success ? result.Data : 0;
+    }
+
+    private void EnsureNotificationSubscription(string? userId)
+    {
+        if (string.Equals(subscribedUserId, userId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        notificationSubscription?.Dispose();
+        notificationSubscription = null;
+        subscribedUserId = userId;
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            notificationSubscription = NotificationRealtime.Subscribe(
+                userId,
+                () => InvokeAsync(() =>
+                {
+                    // The write that published this push may hold the same circuit's
+                    // DbContext gate. Count locally; full count reloads on auth change.
+                    unreadCount++;
+                    StateHasChanged();
+                    return Task.CompletedTask;
+                }));
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

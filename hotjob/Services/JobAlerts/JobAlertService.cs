@@ -6,6 +6,7 @@ using hotjob.Models;
 using hotjob.Models.Job;
 using hotjob.Services.Common;
 using hotjob.Services.ML;
+using hotjob.Services.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -21,7 +22,8 @@ public sealed class JobAlertService(
     IMatchScoreService matchScoreService,
     IOptions<JobAlertsOptions> options,
     TimeProvider timeProvider,
-    ILogger<JobAlertService> logger) : IJobAlertService
+    ILogger<JobAlertService> logger,
+    INotificationBroadcaster? broadcaster = null) : IJobAlertService
 {
     private const string TitlePrefix = "New matching job: ";
 
@@ -119,6 +121,9 @@ public sealed class JobAlertService(
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
+                // Job alerts live on their own page; the nav badge counts other notifications.
+                if (broadcaster is not null && notification.Kind != NotificationKinds.JobAlert)
+                    await broadcaster.NotifyAsync(userId, notification.Title, cancellationToken);
                 created++;
                 logger.LogInformation(
                     "Created job alert {NotificationId} for user {UserId} on job {JobId} with a {Score}% match.",

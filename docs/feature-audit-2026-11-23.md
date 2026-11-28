@@ -18,7 +18,7 @@
 
 ## Kết luận
 
-Dự án **chưa phủ đủ các mục được liệt kê trong audit này**. Luồng Job Board + ATS chính đã có backend và UI, nhưng không nên kết luận “toàn bộ employer đã hoàn thiện” hoặc “614 test pass nghĩa là mọi luồng đều chạy đúng trên trình duyệt”.
+Các mục trọng tâm của yêu cầu — employer, thông báo realtime và match score ML — đã được bổ sung và kiểm tra bằng test tự động. Admin vẫn có khoảng trống riêng; kết quả test không thay thế nghiệm thu browser hoặc DB triển khai.
 
 Phần lõi đã hoàn thiện tương đối tốt:
 
@@ -26,17 +26,16 @@ Phần lõi đã hoàn thiện tương đối tốt:
 - Employer: công ty, duyệt thành viên, đăng tin theo quota, tìm ứng viên đã bật discoverable, ATS và lịch phỏng vấn.
 - ATS: snapshot dữ liệu CV khi apply, lịch sử có actor, thông báo cho candidate khi đổi trạng thái/tạo/sửa/hủy lịch và nhắn tin.
 - Billing: checkout/callback VNPay cho employer plan, featured job và candidate Premium; có test tự động, chưa xác nhận với cổng thanh toán thật trong lần audit này.
-- ML: có train FastTree và training log; **điểm hiển thị hiện dùng `weighted-rule`, không dùng dự đoán của model**.
+- ML: có train FastTree, training log và inference; điểm hiển thị dùng xác suất FastTree khi model active, fallback `weighted-rule` khi không có model.
 
 Các khoảng trống lớn:
 
 - Admin back-office còn thiếu nhiều chức năng quản trị.
 - Upload CV chưa bóc tách Education/Skills/Experience.
-- Thông báo chưa tự cập nhật realtime; thiếu notification khi admin duyệt/từ chối công ty và thiếu inbox riêng cho employer-only.
-- File CV upload có URL tương đối nhưng nút mở snapshot của employer chỉ nhận URL HTTP(S) tuyệt đối; dữ liệu snapshot đã có nhưng luồng mở file còn thiếu.
+- Thông báo đã tự cập nhật realtime trong cùng instance Blazor Server; thiếu notification khi admin duyệt/từ chối công ty và thiếu inbox riêng cho employer-only. Cần backplane nếu chạy nhiều instance.
 - Quy tắc công ty bị Rejected chưa nhất quán giữa public jobs, save/recommend và ATS.
 
-Kiểm chứng sau merge ngày 2026-11-26: **614 passed, 0 failed, 0 skipped**. Có cảnh báo dependency và compiler; chi tiết, lịch sử kết quả và giới hạn kiểm chứng ở mục VII.
+Kiểm chứng sau khi merge vào `dev` ngày 2026-11-28: **1051 passed, 0 failed, 0 skipped**. Có cảnh báo dependency và compiler; chi tiết, lịch sử kết quả và giới hạn kiểm chứng ở mục VII.
 
 ---
 
@@ -113,9 +112,9 @@ Ngoài checklist `features-needed.md`: code còn có duyệt/từ chối job (`A
 | CÓ | Trở thành nhà tuyển dụng | Tạo công ty mới hoặc join công ty có sẵn. |
 | CÓ | Gia nhập công ty | Membership Pending chờ owner duyệt. |
 | CÓ | Thành lập công ty | Company Pending chờ admin duyệt; owner Active ngay. |
-| KHÔNG | Thông báo real time | Không có push/polling; badge không tự refresh khi có notification mới giữa các user. |
-| CÓ | Nhận thông báo kết quả | `ApplicantService.UpdateStatusAsync` ghi notification khi status đổi. Đóng job mass-reject là ngoại lệ. |
-| CÓ | Nhận thông báo phỏng vấn | Tạo, sửa, hủy lịch và mark completed đều ghi notification; chưa realtime/email/push. |
+| CÓ | Thông báo real time | Dùng circuit SignalR có sẵn của Blazor Server; broadcaster in-process đẩy tới subscriber của đúng user, NavMenu refresh badge. Chưa có backplane đa instance hay browser E2E hai tài khoản. |
+| CÓ | Nhận thông báo kết quả | `ApplicantService.UpdateStatusAsync` ghi notification khi status đổi; đóng job mass-reject cũng ghi notification cho từng đơn open. |
+| CÓ | Nhận thông báo phỏng vấn | Tạo, sửa, hủy lịch và mark completed đều ghi notification; có push realtime trong app, chưa email/push ngoài. |
 | CÓ | Thanh toán gói premium (1 tháng) | VNPay; seed Premium Monthly 99.000 VND/30 ngày; backend lấy giá/thời hạn từ plan. Chưa xác nhận sandbox. |
 | MỘT PHẦN | Xem điểm CV tương thích (chấm free lần đầu) | Basic score free mọi lần; advanced breakdown cần Premium. Chưa có cơ chế “free lần đầu, sau đó trả phí”. |
 | CÓ | Đẩy hồ sơ ứng viên | Candidate boosted được xếp trước trong employer candidate search. |
@@ -160,7 +159,7 @@ Ngoài checklist `features-needed.md`: code còn có đăng nhập Google, đổ
 
 Cập nhật 2026-11-25: đã xác nhận các bổ sung về snapshot dữ liệu CV, actor trong history và notification sửa/hủy lịch.
 
-Cập nhật 2026-11-26 sau merge `phuong-admin`: các khoảng trống employer dưới đây vẫn còn; merge chỉ bổ sung admin moderation/audit. **Không kết luận toàn bộ employer đã hoàn thiện**: cần phân biệt snapshot dữ liệu với mở file CV, và tạo notification DB với một luồng nhận/đọc hoàn chỉnh.
+Cập nhật 2026-11-26: luồng employer đã khép kín qua bổ sung mở file snapshot, vòng phỏng vấn, notification đóng job và push realtime. Các ghi chú dưới đây là giới hạn kiểm chứng, không phải chức năng bị thiếu trong checklist.
 
 | Trạng thái | Chức năng | Ghi chú |
 |---|---|---|
@@ -171,22 +170,22 @@ Cập nhật 2026-11-26 sau merge `phuong-admin`: các khoảng trống employer
 | CÓ | Quản lý thành viên | Owner duyệt/từ chối member Pending, xem danh sách; chưa chuyển owner/gỡ member Active. |
 | CÓ | Đăng tin (tiêu đề, mô tả, lương, kinh nghiệm, loại hình, hạn nộp, category, skill + trọng số); quota theo gói | `ImportanceWeight`/`MinYears` đi cùng skill; quota tính Draft + Published, company phải Approved. |
 | CÓ | Sửa tin | Cập nhật nội dung, category, skill. |
-| CÓ | Xóa / Đóng tin | Draft xóa hẳn; non-Draft đóng + mass-reject đơn mở, ghi history “Job closed”. Không sinh notification cho mass-reject. |
+| CÓ | Xóa / Đóng tin | Draft xóa hẳn; non-Draft đóng + mass-reject đơn mở, ghi history “Job closed” và notification “Application Rejected” cho từng candidate bị reject. |
 | CÓ | Danh sách tin: job công ty mình, lọc trạng thái, tìm kiếm, phân trang, kèm số ứng viên | `Employer/Jobs.razor`, `IJobService.ListAsync`. |
 | CÓ | Xem chi tiết tin | Đầy đủ nội dung, category, skill, trạng thái. |
 | CÓ | Kiểm tra dữ liệu | Chặn lương sai, hạn nộp quá khứ, skill/category không tồn tại. |
 | CÓ | Phân quyền: Employer Active thuộc công ty Approved, chỉ thấy dữ liệu công ty mình | `EmployerGuard`; scope theo `CompanyProfileId` của caller. |
 | CÓ | Hàng đợi ứng viên: lọc job/trạng thái, tìm tên/email | Có thêm paging, match filter/sort từ `MatchScores` đã lưu của resume hiện tại. |
-| MỘT PHẦN | Xem chi tiết đơn: cover letter, CV snapshot lúc nộp, CV hiện tại và lịch sử trạng thái | `SnapshotJson` lưu dữ liệu + actor history. URL `/uploads/cv/...` bị `SafeUrl` loại nên chưa mở được file snapshot; JSON hỏng thì fallback CV hiện tại. |
+| CÓ | Xem chi tiết đơn: cover letter, CV snapshot lúc nộp, CV hiện tại và lịch sử trạng thái | `SnapshotJson` lưu dữ liệu + actor history. `UploadUrlPolicy` mở URL nội bộ `/uploads/cv/...` và HTTP(S), chặn traversal/script/query/fragment; JSON hỏng thì fallback CV hiện tại. |
 | CÓ | Chuyển trạng thái: Pending → Viewed → Shortlisted → Interviewing → Offered; Reject từ trạng thái mở | Service ép forward-only transition. |
 | CÓ | Ghi lịch sử: người đổi, thời gian, ghi chú | UI hiện email người đổi, fallback username/user id, không có actor thì “System”. |
 | CÓ | Nhắn tin ứng viên | Notification một chiều theo application; không phải chat hai chiều. |
-| CÓ | Đặt lịch phỏng vấn: ngày giờ, địa điểm/link, hình thức, ghi chú | Nhiều interview/application; chưa có số vòng riêng; không đặt mới cho đơn terminal. |
+| CÓ | Đặt lịch phỏng vấn: ngày giờ, địa điểm/link, hình thức, ghi chú | Nhiều interview/application; có `Round` 1–100 trong model, DTO, UI và notification; không đặt mới cho đơn terminal. |
 | CÓ | Tự nâng trạng thái: đặt lịch cho đơn Shortlisted thì chuyển Interviewing | Xem `InterviewService.CreateAsync`. |
 | CÓ | Sửa / Hủy lịch | UI có edit/cancel/completed; service chưa ép state machine lịch như UI. |
 | CÓ | Thông báo lịch cho ứng viên | Create/update/cancel gửi notification; content tối đa 2000 ký tự. |
 | CÓ | Job hết hạn tự ẩn khỏi Candidate, đơn mở vẫn giữ cho HR | `JobExpiryService` lúc startup + mỗi 15 phút; public query cũng loại job quá hạn. |
-| MỘT PHẦN | Thông báo sự kiện cho Candidate: đổi trạng thái, đặt lịch, nhắn tin | Đều ghi notification DB; đóng job mass-reject và realtime là ngoại lệ. |
+| CÓ | Thông báo sự kiện cho Candidate: đổi trạng thái, đặt lịch, nhắn tin | Ghi notification DB, có push realtime; đóng job mass-reject cũng gửi notification. |
 
 Ngoài checklist `features-needed.md`: code còn có tìm ứng viên discoverable (`/employer/candidates`), mua/gia hạn plan và featured job qua VNPay; các tính năng này không tính vào độ phủ bảng trên.
 
@@ -228,7 +227,7 @@ Ngoài checklist `features-needed.md`: code còn có tìm ứng viên discoverab
 | CÓ | Vô hiệu hóa điểm khi đổi dữ liệu đầu vào | Đổi bộ skill hoặc `YearsOfExperience` trên resume, hoặc đổi skill/weight/MinYears/experience trên job thì xóa điểm cũ; lần đọc chấm tiếp theo tính lại. Không phải background tự chấm lại toàn bộ ATS. |
 | CÓ | Phân tích nâng cao cho Premium | Server-side Premium gate, matched/missing skills, số năm yêu cầu/thực tế, experience gap và gợi ý cải thiện. Basic score không bị giới hạn lần dùng. |
 | CÓ | Train/evaluate/promote FastTree thủ công | Mặc định cần ít nhất 50 bản ghi hợp lệ và 5 mỗi outcome. Offered là positive; Rejected/Withdrawn là negative; loại auto-reject có note cuối “Job closed”. Hold-out phân tầng 20%; train thành công có log. Promote nếu accuracy không thấp hơn model active, chưa có log active hoặc file model hiện tại không tồn tại. |
-| KHÔNG | Dùng xác suất FastTree để chấm điểm hiển thị | Code hiện luôn dùng `weighted-rule`, kể cả khi có model active. `docs/specs/ml-matchscore.md` còn mô tả đường FastTree inference cũ; không dùng tài liệu đó để khẳng định tính năng đang chạy. |
+| CÓ | Dùng xác suất FastTree để chấm điểm hiển thị | `MatchScoreService` dùng probability của model active, ghi marker `FastTreeBinary:<version>`; đổi version làm score cũ stale. Không có model/model hỏng thì fallback `weighted-rule`. `docs/specs/ml-matchscore.md` đã cũ, không dùng làm bằng chứng. |
 | CÓ | Seed/train dữ liệu tổng hợp phục vụ development | `POST /api/dev/match-model/seed-and-train`, yêu cầu role Admin + môi trường Development + `DevTools:SyntheticTrainingEnabled`. Không phải chức năng production hay bằng chứng accuracy trên dữ liệu thật. |
 
 Nguồn:
@@ -269,8 +268,8 @@ Nguồn:
 
 1. **Duyệt công ty chưa gửi notification.** `CompanyAdminService.ApproveAsync`/`RejectAsync` chỉ cập nhật công ty rồi ghi audit; dấu `VerifiedAt/VerifiedByAdminId` không thay thế thông báo cho employer. Mục này nằm ngoài checklist `features-needed.md`.
 2. **Công ty Rejected không đồng nghĩa job cũ bị ẩn.** `JobPostingRepository.BrowsePublishedAsync`/`GetPublishedByIdAsync` và `ApplicationService.ApplyAsync` không kiểm tra trạng thái công ty. Trong khi đó `SaveJobAsync`, recommendations, ATS/job và checkout employer yêu cầu Approved. Đây là khác biệt chính sách thực tế, không phải một trạng thái suspend hoàn chỉnh.
-3. **Snapshot dữ liệu không đồng nghĩa UI mở được file.** JSON đã freeze dữ liệu và file cũ được giữ nếu application còn tham chiếu, nhưng URL tương đối của upload bị `Interviews.razor.SafeUrl` loại. Probe .NET `Uri.TryCreate(..., UriKind.Absolute)` + kiểm tra scheme đã xác nhận URL `/uploads/cv/1/example.pdf` bị loại, URL HTTPS được nhận; chưa chạy browser E2E.
-4. **Đóng job có đổi trạng thái nhưng chưa thông báo.** `DeleteOrCloseAsync` thêm history cho mass-reject, không thêm notification như `ApplicantService.UpdateStatusAsync`. Admin hard delete còn xóa dữ liệu liên quan thay vì giữ lịch sử.
+3. **Snapshot dữ liệu và mở file đã nối lại, nhưng chưa browser E2E.** JSON freeze dữ liệu; file cũ được giữ khi application còn tham chiếu. `UploadUrlPolicy` chấp nhận `/uploads/cv/...` và HTTP(S), có unit test cho URL hostile; chưa chạy browser E2E.
+4. **Đóng job đã notify mass-reject.** `DeleteOrCloseAsync` thêm history và notification “Application Rejected” cho đơn open; Admin hard delete vẫn xóa dữ liệu liên quan thay vì giữ lịch sử.
 5. **Điểm ATS không được đóng băng theo CV.** CV snapshot là dữ liệu lúc apply; filter/sort ATS lấy `MatchScores` của resume hiện tại. Sau invalidation, điểm có thể chưa có cho tới khi một luồng chấm điểm đọc lại.
 6. **Đăng ký chỉ Candidate là quy tắc UI, chưa phải quy tắc API.** `AccountService.RegisterAsync`/`AccountController.Register` hỗ trợ cả Candidate và Employer trực tiếp. Không tự suy ra employer đăng ký trực tiếp có cả hai profile/role.
 
@@ -287,10 +286,9 @@ Nguồn bổ sung cho đối chiếu liên luồng:
 
 Thứ tự dưới đây là đề xuất xử lý, không phải cam kết bổ sung scope hoặc kết luận mọi mục đều chặn demo.
 
-1. **Khép kín luồng đang có**
-   - Mở được file CV upload từ chi tiết ứng tuyển employer.
-   - Notification kết quả duyệt công ty, inbox/badge employer-only, notification khi đóng job mass-reject.
-   - Chốt chính sách đối với công ty Rejected và áp dụng nhất quán cho browse/detail/apply/save/recommend.
+1. **Khép kín phần còn lại**
+   - Notification kết quả duyệt công ty và inbox/badge employer-only.
+   - Chốt chính sách đối với công ty Rejected và áp dụng nhất cho browse/detail/apply/save/recommend.
    - Rà soát cảnh báo dependency từ lần chạy test trước khi triển khai.
 
 2. **Admin theo `docs/features-needed.md`**
@@ -334,7 +332,7 @@ Chạy từ repository root (`hotjob/`):
 dotnet test hotjob.slnx --nologo -v q
 ```
 
-Kết quả: **614 passed, 0 failed, 0 skipped, total 614**, exit code 0. Lệnh có build và chạy test project `hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj` trên `net10.0`.
+Kết quả: **1051 passed, 0 failed, 0 skipped, total 1051**, exit code 0. Lệnh có build và chạy test project `hotjob/Tests/hotjob.Tests/hotjob.Tests.csproj` trên `net10.0`.
 
 Cảnh báo xuất hiện trong output:
 
@@ -347,10 +345,10 @@ Cảnh báo xuất hiện trong output:
 | Hạng mục | Mức kiểm chứng |
 |---|---|
 | Service/controller, EF mapping, wiring và UI trong audit | Đã đọc/đối chiếu mã nguồn; test tự động hiện có chạy pass. Không có nghĩa mỗi hàng đều có test chuyên biệt. |
-| Snapshot CV, actor history, notification sửa/hủy lịch | Có test regression trong `ApplicationServiceTests`, `ResumeServiceTests`, `EmployerAtsTests`; chưa nghiệm thu browser. |
-| Guard URL file snapshot | Có probe .NET độc lập với URL tương đối/HTTPS; không phải browser test hay test tích hợp đầy đủ. |
+| Snapshot CV, actor history, notification sửa/hủy lịch, vòng phỏng vấn | Có test regression trong `ApplicationServiceTests`, `ResumeServiceTests`, `EmployerAtsTests`; chưa nghiệm thu browser. |
+| Guard URL file snapshot | Có unit test `UploadUrlPolicyTests` cho URL nội bộ/HTTPS và URL hostile; không phải browser test hay test tích hợp đầy đủ. |
 | MySQL, migration snapshot và seed lúc startup | CHƯA KIỂM CHỨNG trên DB triển khai. Fixture chính dùng SQLite in-memory + `EnsureCreatedAsync`, không chạy chuỗi migration MySQL. |
-| Browser E2E và realtime giữa hai tài khoản | CHƯA KIỂM CHỨNG; không khởi chạy ứng dụng/trình duyệt trong lần rà soát này. |
+| Browser E2E và realtime giữa hai tài khoản | Fan-out in-process có unit test `NotificationRealtimeTests`; chạy browser hai tài khoản CHƯA KIỂM CHỨNG. |
 | Thanh toán VNPay sandbox và OAuth Google thật | CHƯA KIỂM CHỨNG; test service/controller không thay thế callback từ nhà cung cấp thật. |
 | Security/performance/accessibility toàn diện | Ngoài phạm vi lần audit chức năng này; các cảnh báo nêu trên chưa được xử lý trong thay đổi tài liệu. |
 
@@ -371,3 +369,6 @@ Cảnh báo xuất hiện trong output:
 - **2026-11-26 — Cập nhật sau merge `phuong-admin`:** giữ report audit riêng tại `docs/admin/admin-audit-log-phase-0.md`; đánh dấu audit log và form đổi mật khẩu đã có, cập nhật kết quả test 614/614. Không sửa product code.
 - **2026-11-26 — Đối chiếu Admin/Employer:** cập nhật các mục admin đã có (filter công ty/tin, duyệt công ty/job/employer, kiểm duyệt review, audit, self-lock guard); giữ nguyên các khoảng trống employer (mở file snapshot, mass-reject notification, inbox/badge employer-only). Không sửa product code.
 - **2026-11-26 — Chuẩn hóa checklist:** bảng I–III đi theo `docs/features-needed.md`; tính năng ngoài checklist gom thành ghi chú riêng. Không sửa product code.
+- **2026-11-26 — Hoàn thiện employer/realtime/ML:** FastTree inference có version marker và fallback; snapshot URL nội bộ mở được; interview có `Round`; đóng job notify candidate; notification push theo circuit. Chạy lại **1051/1051** test.
+- **2026-11-26 — Sửa theo code review:** migration `Round` default 1; prediction lỗi xóa version marker; label FastTree nhận marker có version; push không đợi callback và badge không query DB trong callback; notification phỏng vấn có số vòng; `JobService` bắt buộc `TimeProvider`; job alert không đẩy badge. Chạy lại **1051/1051** test.
+- **2026-11-28 — Merge `dan` vào `dev`:** giữ cả luồng sign-out của dev và badge realtime của dan; `CandidateService` giữ phân trang đơn ứng tuyển và đưa `Round` vào `InterviewDto`; đăng ký `INotificationRealtime` trong UI test host; nâng timeout regex parser để tránh flaky khi chạy toàn bộ song song. Chạy lại **1051/1051** test.

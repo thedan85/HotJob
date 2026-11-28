@@ -5,6 +5,7 @@ using hotjob.DTOs.Authentication;
 using hotjob.Services.Authentication;
 using hotjob.Services.Candidate;
 using hotjob.Services.Common;
+using hotjob.Services.Notifications;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
@@ -13,6 +14,7 @@ using Microsoft.AspNetCore.Components.Web.HtmlRendering;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
 
 namespace hotjob.Tests.Support;
@@ -83,6 +85,8 @@ internal sealed class AuthUiTestContext : IAsyncDisposable
         collection.AddSingleton<IJSRuntime>(javaScript);
         collection.AddSingleton<IComponentActivator>(activator);
         collection.AddSingleton(new NotificationFeed(null!, new CircuitDbGate()));
+        collection.AddSingleton<INotificationRealtime>(
+            new NotificationRealtime(NullLogger<NotificationRealtime>.Instance));
         collection.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         var services = collection.BuildServiceProvider();
         var renderer = new AuthUiRenderer(services, services.GetRequiredService<ILoggerFactory>());

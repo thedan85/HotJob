@@ -18,7 +18,7 @@ public sealed class JobVisibilityTests
         new JobPostingRepository(fx.Db),
         new EntitlementService(fx.Db, TimeProvider.System),
         new StubJobAlertService(),
-        NullLogger<JobService>.Instance);
+        NullLogger<JobService>.Instance, TimeProvider.System);
 
     private static Task<ServiceResult<hotjob.DTOs.Job.PagedResponse<hotjob.DTOs.Job.PublicJobListItemResponse>>> BrowseAsync(JobService service) =>
         service.BrowsePublishedAsync(null, null, null, null, null, null, null, null, 1, 50);

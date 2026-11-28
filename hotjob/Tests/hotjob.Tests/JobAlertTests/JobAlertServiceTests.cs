@@ -5,6 +5,7 @@ using hotjob.Services.Billing;
 using hotjob.Services.Common;
 using hotjob.Services.JobAlerts;
 using hotjob.Services.ML;
+using hotjob.Services.Notifications;
 using hotjob.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,7 +23,8 @@ public sealed class JobAlertServiceTests
         TempModelDirectory temp,
         FakeTimeProvider clock,
         IMatchScoreService? scores = null,
-        int minMatchPercent = 60)
+        int minMatchPercent = 60,
+        INotificationBroadcaster? broadcaster = null)
     {
         var premium = new CandidatePremiumService(fx.Db, clock);
         scores ??= new MatchScoreService(
@@ -38,7 +40,8 @@ public sealed class JobAlertServiceTests
             scores,
             Options.Create(new JobAlertsOptions { MinMatchPercent = minMatchPercent }),
             clock,
-            NullLogger<JobAlertService>.Instance);
+            NullLogger<JobAlertService>.Instance,
+            broadcaster);
     }
 
     private static async Task MakePremiumAsync(TestFixture fx, Candidate candidate, DateTime until)
@@ -64,9 +67,11 @@ public sealed class JobAlertServiceTests
         var job = await MatchTestData.CreateJobAsync(
             fx, company.Id, [(csharp.Id, 10), (sql.Id, 10)], title: "Backend engineer");
 
-        var created = await CreateService(fx, temp, clock).NotifyForPublishedJobAsync(job.Id);
+        var broadcaster = new RecordingBroadcaster();
+        var created = await CreateService(fx, temp, clock, broadcaster: broadcaster).NotifyForPublishedJobAsync(job.Id);
 
         Assert.Equal(2, created);
+        Assert.Empty(broadcaster.UserIds);
         var alerts = await fx.Db.Notifications.ToListAsync();
         Assert.Equal(2, alerts.Count);
         Assert.All(alerts, alert =>

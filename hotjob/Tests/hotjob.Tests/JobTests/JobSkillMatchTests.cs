@@ -20,7 +20,7 @@ public sealed class JobSkillMatchTests
             new JobPostingRepository(fx.Db),
             new EntitlementService(fx.Db, TimeProvider.System),
             new StubJobAlertService(),
-            NullLogger<JobService>.Instance);
+            NullLogger<JobService>.Instance, TimeProvider.System);
 
     private static async Task<(string UserId, int ResumeId)> SeedCandidateWithSkillsAsync(
         TestFixture fx,

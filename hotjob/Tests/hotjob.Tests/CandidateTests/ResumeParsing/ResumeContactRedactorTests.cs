@@ -1,4 +1,5 @@
 using hotjob.Services.Candidate.ResumeParsing;
+using hotjob.Tests.Support;
 
 namespace hotjob.Tests.CandidateTests.ResumeParsing;
 
@@ -18,7 +19,7 @@ public sealed class ResumeContactRedactorTests
             Sep 2021 - Present
             Tháng 9/2021 - Hiện tại
             """ + new string('x', 29_900) + " late@example.test";
-        var result = new ResumeContactRedactor(TimeProvider.System).Redact(text);
+        var result = new ResumeContactRedactor(new NoElapsedTimeProvider()).Redact(text);
         Assert.True(result.Success);
         Assert.True(result.Data!.Length <= 30_000);
         foreach (var secret in new[] { "fake.person@", "+84 912", "https://", "www.", "linkedin.com", "123 Example", "42 Đường", "late@" })
@@ -29,6 +30,6 @@ public sealed class ResumeContactRedactorTests
     [Fact]
     public void OnlyContactInformation_IsNotSent()
     {
-        Assert.False(new ResumeContactRedactor(TimeProvider.System).Redact("fake@example.test").Success);
+        Assert.False(new ResumeContactRedactor(new NoElapsedTimeProvider()).Redact("fake@example.test").Success);
     }
 }

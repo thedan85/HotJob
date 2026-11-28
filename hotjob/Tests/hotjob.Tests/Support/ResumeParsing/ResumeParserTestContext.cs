@@ -3,6 +3,7 @@ using hotjob.Data;
 using hotjob.Models;
 using hotjob.Models.Users;
 using hotjob.Services.Candidate.ResumeParsing;
+using hotjob.Tests.Support;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +28,7 @@ internal sealed class ResumeParserTestContext : IAsyncDisposable
         var context = new ResumeParserTestContext { Fixture = fixture, UserId = user.Id };
         if (authenticated)
             fixture.AuthStateProvider.SignIn(Principal(user.Id, role));
-        var clock = TimeProvider.System;
+        var clock = new NoElapsedTimeProvider();
         var parsing = Options.Create(new ResumeParsingOptions { UseAi = useAi });
         var ai = new DeepSeekResumeClient(context.Handler, parsing, Options.Create(new DeepSeekOptions { ApiKey = "test-only-key" }),
             new(clock), new(clock, parsing), clock);

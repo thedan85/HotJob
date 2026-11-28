@@ -2,6 +2,7 @@ using System.Text;
 using hotjob.DTOs.Candidate;
 using hotjob.Services.Candidate;
 using hotjob.Services.Candidate.ResumeParsing;
+using hotjob.Tests.Support;
 using hotjob.Tests.Support.ResumeParsing;
 
 namespace hotjob.Tests.CandidateTests.ResumeParsing;
@@ -15,7 +16,7 @@ public sealed class ResumeReviewRegressionTests
     [InlineData("09/2021 – 06/2023 +84 912 345 678", "09/2021 – 06/2023", "912")]
     public void Redaction_SeparatesDatesAndPhones(string source, string? preserved, string? removed)
     {
-        var result = new ResumeContactRedactor(TimeProvider.System).Redact("Skills: C#\n" + source);
+        var result = new ResumeContactRedactor(new NoElapsedTimeProvider()).Redact("Skills: C#\n" + source);
         Assert.True(result.Success);
         if (preserved is not null) Assert.Contains(preserved, result.Data!);
         if (removed is not null) Assert.DoesNotContain(removed, result.Data!);
@@ -24,7 +25,7 @@ public sealed class ResumeReviewRegressionTests
     [Fact]
     public void Redaction_AdjacentDatePhoneNearCutoff()
     {
-        var result = new ResumeContactRedactor(TimeProvider.System).Redact(
+        var result = new ResumeContactRedactor(new NoElapsedTimeProvider()).Redact(
             "Skills: C#\n" + new string('a', 29_960) + "\n2021-2024 0912 345 678");
         Assert.True(result.Success);
         Assert.DoesNotContain("0912", result.Data!);

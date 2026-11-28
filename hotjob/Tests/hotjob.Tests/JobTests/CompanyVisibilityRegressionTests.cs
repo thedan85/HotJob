@@ -34,7 +34,8 @@ public sealed class CompanyVisibilityRegressionTests
         new JobPostingRepository(fx.Db),
         new EntitlementService(fx.Db, TimeProvider.System),
         new StubJobAlertService(),
-        NullLogger<JobService>.Instance);
+        NullLogger<JobService>.Instance,
+        TimeProvider.System);
 
     private static CompanyProfile AddCompany(TestFixture fx, CompanyStatus status) =>
         new() { CompanyName = $"Visibility Co {Guid.NewGuid():N}", Status = status };

@@ -26,7 +26,7 @@ public sealed class JobAlertPublishTests
             new JobPostingRepository(fx.Db),
             new EntitlementService(fx.Db, TimeProvider.System),
             alerts,
-            logger ?? NullLogger<JobService>.Instance);
+            logger ?? NullLogger<JobService>.Instance, TimeProvider.System);
 
     private static async Task<(string UserId, int SkillId, int CategoryId)> SeedEmployerAsync(
         TestFixture fx,

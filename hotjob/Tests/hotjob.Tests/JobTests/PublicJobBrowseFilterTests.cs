@@ -18,7 +18,7 @@ public sealed class PublicJobBrowseFilterTests
             new JobPostingRepository(fx.Db),
             new EntitlementService(fx.Db, TimeProvider.System),
             new StubJobAlertService(),
-            NullLogger<JobService>.Instance);
+            NullLogger<JobService>.Instance, TimeProvider.System);
 
     private static async Task<(int BackendId, int FrontendId)> SeedCategoriesAsync(TestFixture fx)
     {

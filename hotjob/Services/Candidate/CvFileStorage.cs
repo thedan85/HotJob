@@ -14,7 +14,7 @@ public sealed class CvFileStorage(string rootPath, ILogger<CvFileStorage> logger
     public const long MaxFileSizeBytes = CvFileValidation.MaxFileSizeBytes;
 
     /// <summary>Public URL prefix for every stored CV.</summary>
-    public const string PublicPrefix = "/uploads/cv/";
+    public const string PublicPrefix = UploadUrlPolicy.LocalPrefix;
 
     private readonly string fullRoot = Path.GetFullPath(rootPath);
 

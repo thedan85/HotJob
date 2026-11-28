@@ -9,6 +9,7 @@ using hotjob.Repositories.Job;
 using hotjob.Services.Billing;
 using hotjob.Services.Common;
 using hotjob.Services.JobAlerts;
+using hotjob.Services.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -19,8 +20,12 @@ public sealed class JobService(
     IJobPostingRepository jobRepository,
     IEntitlementService entitlementService,
     IJobAlertService jobAlertService,
-    ILogger<JobService> logger) : IJobService
+    ILogger<JobService> logger,
+    TimeProvider timeProvider,
+    INotificationBroadcaster? broadcaster = null) : IJobService
 {
+    private readonly TimeProvider clock = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+
     private static readonly ApplicationStatus[] OpenStatuses =
     [
         ApplicationStatus.Pending,
@@ -218,7 +223,7 @@ public sealed class JobService(
         }
 
         var job = await dbContext.JobPostings
-            .Include(posting => posting.Applications)
+            .Include(posting => posting.Applications).ThenInclude(application => application.Candidate)
             .FirstOrDefaultAsync(posting => posting.Id == id && posting.CompanyProfileId == employer.CompanyProfileId, cancellationToken);
         if (job is null)
         {
@@ -234,6 +239,8 @@ public sealed class JobService(
         }
 
         job.Status = JobStatus.Closed;
+        var changedAt = clock.GetUtcNow().UtcDateTime;
+        var notifiedUserIds = new List<string>();
         foreach (var application in job.Applications.Where(application => OpenStatuses.Contains(application.CurrentStatus)))
         {
             application.CurrentStatus = ApplicationStatus.Rejected;
@@ -243,11 +250,26 @@ public sealed class JobService(
                 Status = ApplicationStatus.Rejected,
                 ChangedByUserId = userId,
                 Notes = "Job closed",
-                ChangedAt = DateTime.UtcNow
+                ChangedAt = changedAt
             });
+            dbContext.Notifications.Add(new Notification
+            {
+                UserId = application.Candidate.UserId,
+                Title = "Application Rejected",
+                Content = $"Your application for \"{job.Title}\" was rejected. Reason: Job closed.",
+                IsRead = false,
+                CreatedAt = changedAt
+            });
+            notifiedUserIds.Add(application.Candidate.UserId);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (broadcaster is not null)
+        {
+            foreach (var userIdToNotify in notifiedUserIds)
+                await broadcaster.NotifyAsync(userIdToNotify, "Application Rejected", cancellationToken);
+        }
+
         logger.LogInformation("Employer {EmployerId} closed job {JobId}.", employer.Id, job.Id);
         return ServiceResult<JobDeleteResponse>.Ok(new JobDeleteResponse(id, Closed: true, JobStatus.Closed));
     }

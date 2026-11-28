@@ -3,13 +3,15 @@ using hotjob.Models;
 using hotjob.Models.Application;
 using hotjob.Repositories.Employer;
 using hotjob.Services.Common;
+using hotjob.Services.Notifications;
 using Microsoft.Extensions.Logging;
 
 namespace hotjob.Services.Employer;
 
 public sealed class ApplicantService(
     IApplicantRepository repo,
-    ILogger<ApplicantService> logger) : IApplicantService
+    ILogger<ApplicantService> logger,
+    INotificationBroadcaster? broadcaster = null) : IApplicantService
 {
     public async Task<ServiceResult<PagedResult<ApplicantListItemResponse>>> ListAsync(
         string? userId,
@@ -101,9 +103,11 @@ public sealed class ApplicantService(
                     ServiceErrorType.Conflict,
                     $"Cannot change status from {app.CurrentStatus} to {target}.");
 
+            string? candidateUserId = null;
             if (app.CurrentStatus != target)
             {
                 app.CurrentStatus = target;
+                candidateUserId = app.Candidate.UserId;
                 repo.AddHistory(new ApplicationStatusHistory
                 {
                     ApplicationId = app.Id,
@@ -114,7 +118,7 @@ public sealed class ApplicantService(
                 });
                 repo.AddNotification(new Notification
                 {
-                    UserId = app.Candidate.UserId,
+                    UserId = candidateUserId,
                     Title = $"Application {target}",
                     Content = string.IsNullOrWhiteSpace(notes)
                         ? $"Your application for \"{app.JobPosting.Title}\" is now {target}."
@@ -126,6 +130,8 @@ public sealed class ApplicantService(
             }
 
             await tx.CommitAsync(cancellationToken);
+            if (candidateUserId is not null && broadcaster is not null)
+                await broadcaster.NotifyAsync(candidateUserId, $"Application {target}", cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
