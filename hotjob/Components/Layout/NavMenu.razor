@@ -15,7 +15,7 @@
             <span class="brand-hot">hot</span><span>job</span>
         </a>
 
-        <button class="menu-toggle" type="button" @onclick="ToggleMenu" aria-expanded="@menuOpen"
+        <button class="menu-toggle" type="button" @onclick="ToggleMenu" aria-expanded="@(menuOpen ? "true" : "false")"
                 aria-controls="site-menu" aria-label="@(menuOpen ? "Close navigation" : "Open navigation")">
             <span></span><span></span><span></span>
         </button>
@@ -90,7 +90,10 @@
                         </span>
                         <span class="nav-user-name">@authState.User.Identity?.Name</span>
                     </a>
-                    <button class="nav-sign-out" type="button" @onclick="SignOutAsync">Sign out</button>
+                    <button class="nav-sign-out" type="button" @onclick="SignOutAsync"
+                            disabled="@isSigningOut" aria-busy="@(isSigningOut ? "true" : "false")">
+                        @(isSigningOut ? "Signing out..." : "Sign out")
+                    </button>
                 </Authorized>
                 <NotAuthorized>
                     <a class="nav-sign-in" href="/login">Sign in</a>
@@ -99,11 +102,22 @@
             </AuthorizeView>
         </div>
     </div>
+    @if (!string.IsNullOrWhiteSpace(signOutError))
+    {
+        <div class="nav-feedback-row">
+            <div class="nav-sign-out-error" role="alert">
+                <span>@signOutError</span>
+                <button class="nav-sign-out-retry" type="button" @onclick="SignOutAsync" aria-label="Try again - sign out">Try again</button>
+            </div>
+        </div>
+    }
 </header>
 
 @code {
     private bool menuOpen;
     private int unreadCount;
+    private bool isSigningOut;
+    private string? signOutError;
 
     private void ToggleMenu() => menuOpen = !menuOpen;
 
@@ -189,18 +203,45 @@
 
     private async Task SignOutAsync()
     {
+        if (isSigningOut)
+        {
+            return;
+        }
+
+        isSigningOut = true;
+        signOutError = null;
+        StateHasChanged();
+
         try
         {
             var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.logout");
             if (result.Ok || result.Status == 401)
             {
+                // 401 means the cookie is already gone. Both outcomes are a real
+                // sign-out: clear local state and reload the document so the nav
+                // and every authenticated component start from one coherent state.
                 AuthStateProvider.SignOut();
-                NavigationManager.NavigateTo("/");
+                NavigationManager.NavigateTo("/", forceLoad: true);
+            }
+            else
+            {
+                // Never clear local auth on a failed request: the browser session
+                // is still live and the user must be able to retry.
+                signOutError = "We could not sign you out. Please try again.";
+                StateHasChanged();
             }
         }
-        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        // A browser JS timeout has no component cancellation token here, so it is
+        // a recoverable logout failure that must keep the session and offer retry.
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or OperationCanceledException)
         {
-            // Network/JS failure: keep the session so the user can retry sign out.
+            signOutError = "We could not sign you out. Please try again.";
+            StateHasChanged();
+        }
+        finally
+        {
+            isSigningOut = false;
+            StateHasChanged();
         }
     }
 }

@@ -31,6 +31,7 @@ public sealed class ProfileAuthorizationTests
         Assert.Contains("Checking your sign-in...", html);
         Assert.DoesNotContain("class=\"profile-summary\"", html);
         Assert.DoesNotContain("<form", html);
+        Assert.DoesNotContain("Create resume from a CV file", html);
         await ui.RunRedirectAsync();
 
         Assert.Equal("/login", ui.Navigation.Destination);
@@ -56,7 +57,9 @@ public sealed class ProfileAuthorizationTests
     {
         await using var ui = await ProfilePage.CreateAsync(role: "Candidate");
 
-        AssertCandidateProfile(await ui.HtmlAsync());
+        var html = await ui.HtmlAsync();
+        AssertCandidateProfile(html);
+        Assert.DoesNotContain("Review parsed CV", html);
         Assert.Empty(ui.Activator.Components.OfType<RedirectToLogin>());
         Assert.Null(ui.Navigation.Destination);
     }
@@ -65,7 +68,9 @@ public sealed class ProfileAuthorizationTests
     public async Task EmployerRender_DeniesProfileWithoutLoginRedirect()
     {
         await using var ui = await ProfilePage.CreateAsync(role: "Employer");
-        Assert.DoesNotContain("class=\"profile-summary\"", await ui.HtmlAsync());
+        var html = await ui.HtmlAsync();
+        Assert.DoesNotContain("class=\"profile-summary\"", html);
+        Assert.DoesNotContain("Create resume from a CV file", html);
 
         await ui.RunRedirectAsync();
 

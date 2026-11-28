@@ -44,7 +44,7 @@ else
         </div>
         <div class="profile-header-actions">
             <a class="profile-btn profile-btn-secondary" href="/my-applications">My applications</a>
-            <button class="profile-btn profile-btn-primary" type="button" @onclick="SaveProfileAsync" disabled="@isSaving">
+            <button class="profile-btn profile-btn-primary" type="button" @onclick="SaveProfileAsync" disabled="@(isSaving || cvReviewBusy)">
                 @(isSaving ? "Saving..." : "Save changes")
             </button>
         </div>
@@ -150,8 +150,23 @@ else
                                 Build CV
                             </button>
                         </div>
+                        <div class="cv-create-option">
+                            <h3>Create resume from a CV file</h3>
+                            <p>Parse a PDF/DOCX into suggestions, review every field, then save once.</p>
+                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button" @onclick="StartCvReview">
+                                Create resume from a CV file
+                            </button>
+                        </div>
                         <button class="cv-remove cv-choice-close" type="button" aria-label="Close create CV options" @onclick="CancelCreate">×</button>
                     </div>
+                }
+
+                @if (showCvReview)
+                {
+                    <CandidateCvReview SkillOptions="skillOptions"
+                                       OnSaved="OnCvReviewSaved"
+                                       OnBusyChanged="OnCvReviewBusyChanged"
+                                       OnCancel="CloseCvReview" />
                 }
 
                 @if (showUploadForm)
@@ -230,7 +245,7 @@ else
                         <div class="profile-upload-icon" aria-hidden="true">↑</div>
                         <h3>Create your first resume</h3>
                         <p>Upload an existing CV, or build one with your experience and skills.</p>
-                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="OpenCreateChoice" disabled="@(showResumeForm || showUploadForm)">
+                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="OpenCreateChoice" disabled="@(showResumeForm || showUploadForm || showCvReview)">
                             Create a new CV
                         </button>
                     </div>
@@ -240,7 +255,7 @@ else
                     <div class="cv-toolbar">
                         <p>Upload a file from each resume card. New uploads replace the previous file for that resume.</p>
                         <button class="profile-btn profile-btn-primary profile-btn-small" type="button" @onclick="OpenCreateChoice"
-                                disabled="@(showResumeForm || showUploadForm || resumes.Count >= 5)">
+                                disabled="@(showResumeForm || showUploadForm || showCvReview || resumes.Count >= 5)">
                             Add CV
                         </button>
                     </div>
@@ -476,6 +491,8 @@ else
     private bool showResumeForm;
     private bool showCreateChoice;
     private bool showUploadForm;
+    private bool showCvReview;
+    private bool cvReviewBusy;
     private ResumeInput uploadForm = new();
     private IBrowserFile? uploadFile;
     private bool isUploadingCv;
@@ -619,6 +636,7 @@ else
 
     private async Task SaveProfileAsync()
     {
+        if (isSaving || cvReviewBusy) return;
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var userId = state.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? state.User.FindFirstValue("sub");
         if (string.IsNullOrWhiteSpace(userId)) return;
@@ -676,6 +694,7 @@ else
     {
         showResumeForm = false;
         showUploadForm = false;
+        showCvReview = false;
         showCreateChoice = true;
         uploadForm = new ResumeInput();
         uploadFile = null;
@@ -688,6 +707,7 @@ else
     private void StartUploadResume()
     {
         showCreateChoice = false;
+        showCvReview = false;
         showUploadForm = true;
         uploadForm = new ResumeInput();
         uploadFile = null;
@@ -706,6 +726,43 @@ else
         uploadSkillPickerId = 0;
         uploadSkillPickerYears = 0;
         resumeError = null;
+    }
+
+    private void StartCvReview()
+    {
+        showCreateChoice = false;
+        showUploadForm = false;
+        showResumeForm = false;
+        showCvReview = true;
+        cvReviewBusy = false;
+        resumeError = null;
+        resumeMessage = null;
+    }
+
+    private void CloseCvReview()
+    {
+        showCvReview = false;
+        cvReviewBusy = false;
+    }
+
+    private void OnCvReviewBusyChanged(bool busy) => cvReviewBusy = busy;
+
+    private async Task OnCvReviewSaved(CvReviewSaveResult result)
+    {
+        resumeError = null;
+        resumeMessage = result.Message;
+        await ReloadResumesAsync();
+        if (!string.IsNullOrWhiteSpace(resumeError))
+            throw new InvalidOperationException(resumeError);
+        // A partial attachment leaves the reviewed draft mounted and locked.
+        // A full save closes only once the list refresh has actually succeeded.
+        // Clear busy synchronously: the child may be disposed before its own
+        // finally runs, and a disposed child suppresses its busy callback.
+        if (!result.AttachmentFailed)
+        {
+            showCvReview = false;
+            cvReviewBusy = false;
+        }
     }
 
     private void OnUploadFileSelected(InputFileChangeEventArgs args)
@@ -820,6 +877,7 @@ else
         confirmRemoveResumeFile = false;
         showCreateChoice = false;
         showUploadForm = false;
+        showCvReview = false;
         editingResumeId = null;
         resumeForm = new ResumeInput();
         skillPickerId = 0;
@@ -832,6 +890,8 @@ else
     private async Task EditResumeAsync(int resumeId)
     {
         if (isRemovingResumeFile) return;
+        showCvReview = false;
+        cvReviewBusy = false;
         confirmRemoveResumeFile = false;
         resumeError = null;
         resumeMessage = null;

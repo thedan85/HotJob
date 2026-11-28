@@ -933,3 +933,528 @@
     .cv-fieldset { padding: 12px; }
     .cv-form-actions .profile-btn { width: 100%; }
 }
+
+/* ---------- Candidate CV review (scoped to .cv-review) ---------- */
+
+.cv-review {
+    container-type: inline-size;
+    container-name: cvreview;
+    overflow-wrap: anywhere;
+    min-width: 0;
+    margin-top: 16px;
+    padding: 18px;
+    border: 1px solid var(--hj-border-strong);
+    border-radius: var(--hj-radius-md);
+    background: var(--hj-surface);
+}
+
+.cv-review fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.cv-review-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--hj-border);
+}
+
+.cv-review-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.cv-review-header .cv-form-hint {
+    margin: 4px 0 0;
+    font-size: 13px;
+}
+
+.cv-review-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.cv-review-side {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.cv-review-main { min-width: 0; }
+
+.cv-review--setup .cv-review-layout { grid-template-columns: minmax(0, 1fr); }
+.cv-review--setup .cv-review-main { display: none; }
+.cv-review--setup .cv-review-side {
+    grid-column: 1;
+    grid-row: auto;
+    padding-left: 0;
+    border-left: 0;
+}
+
+@container cvreview (min-width: 820px) {
+    .cv-review-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+    .cv-review-main { grid-column: 1; grid-row: 1; }
+    .cv-review-side {
+        grid-column: 2;
+        grid-row: 1;
+        padding-left: 18px;
+        border-left: 1px solid var(--hj-border);
+    }
+}
+
+.cv-review-section-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    margin-bottom: 10px;
+}
+
+.cv-review-section-icon {
+    display: inline-grid;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    place-items: center;
+    border: 1px solid var(--hj-primary-light);
+    border-radius: 6px;
+    color: var(--hj-primary);
+    font-size: 12px;
+    line-height: 1;
+}
+
+.cv-review-section-head h4 {
+    margin: 0;
+    color: var(--hj-ink-soft);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.cv-review-count {
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface-muted);
+    color: var(--hj-ink-soft);
+    font-size: 12px;
+    text-align: center;
+}
+
+.cv-review-section-head .profile-btn { margin-left: auto; }
+
+.cv-review .cv-review-file {
+    position: relative;
+    display: block;
+    min-height: 96px;
+    padding: 14px;
+    border: 1px dashed var(--hj-border-strong);
+    border-radius: var(--hj-radius-sm);
+    background: var(--hj-page-bg);
+    cursor: pointer;
+    transition: border-color var(--hj-transition), box-shadow var(--hj-transition);
+}
+
+.cv-review .cv-review-file:hover { border-color: var(--hj-primary); }
+
+.cv-review .cv-review-file:focus-within {
+    outline: none;
+    border-color: var(--hj-primary);
+    box-shadow: var(--hj-focus);
+}
+
+.cv-review .cv-review-file.is-disabled {
+    cursor: not-allowed;
+    opacity: .7;
+}
+
+.cv-review-file-label,
+.cv-review-file-control,
+.cv-review-file-size { display: block; }
+
+.cv-review-file-label { color: var(--hj-ink-soft); font-size: 13px; font-weight: 600; }
+.cv-review-file-control { margin-top: 4px; color: var(--hj-primary); font-size: 14px; font-weight: 500; }
+.cv-review-file-size { margin-top: 4px; color: var(--hj-muted); font-size: 12px; }
+
+.cv-review .cv-review-file input[type="file"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.cv-review .cv-review-file input[type="file"]:focus { outline: none; }
+
+.cv-review .cv-review-selected {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 10px 0 0;
+    font-size: 13px;
+}
+
+.cv-review-selected-label { color: var(--hj-muted); }
+.cv-review-selected-name { color: var(--hj-ink); overflow-wrap: anywhere; }
+
+.cv-review-file-type {
+    padding: 1px 7px;
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface-tint);
+    color: var(--hj-primary);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.cv-review .cv-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.cv-review .cv-review-disclosure {
+    max-width: 70ch;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.cv-review-results,
+.cv-review-notices {
+    padding-top: 12px;
+    border-top: 1px solid var(--hj-border);
+}
+
+.cv-review-results h4,
+.cv-review-notices h4 {
+    margin: 0 0 8px;
+    color: var(--hj-ink-soft);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.cv-review-mode {
+    margin: 0 0 8px;
+    color: var(--hj-primary);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.cv-review-counts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2px 12px;
+    margin: 0 0 6px;
+}
+
+.cv-review-count-row {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+.cv-review-count-row dt { color: var(--hj-muted); font-size: 12px; line-height: 1.4; }
+.cv-review-count-row dd { margin: 0; color: var(--hj-ink); font-size: 13px; font-weight: 600; }
+
+.cv-review-counts-note {
+    margin: 0 0 10px;
+    color: var(--hj-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.cv-review-notices summary {
+    color: var(--hj-ink-soft);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cv-review .cv-form-hint {
+    margin: 0 0 8px;
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.cv-review .cv-review-errors {
+    margin: 0 0 12px;
+    padding-left: 20px;
+    color: var(--hj-danger);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.cv-review .cv-review-hints ul,
+.cv-review-unknowns {
+    margin: 4px 0 8px;
+    padding-left: 20px;
+    overflow-wrap: anywhere;
+}
+
+.cv-review-unknown { color: var(--hj-muted); font-size: 12.5px; }
+
+.cv-review .cv-fieldset legend {
+    padding: 0;
+    font-size: 13px;
+}
+
+.cv-review-basics-heading {
+    margin: 0 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--hj-border);
+    color: var(--hj-ink-soft);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.cv-review-basics {
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--hj-border);
+}
+
+.cv-review .profile-form-grid label,
+.cv-review .cv-form-row label,
+.cv-review .cv-skill-picker label,
+.cv-review .cv-years {
+    color: var(--hj-muted);
+    font-family: var(--hj-font);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 1.4;
+    text-transform: none;
+}
+
+.cv-review .cv-review-field { gap: 4px; }
+
+.cv-review-label-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    min-width: 0;
+}
+
+.cv-review-required { color: var(--hj-danger); }
+
+.cv-review-confidence {
+    max-width: 100%;
+    padding: 1px 6px;
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface-tint);
+    color: var(--hj-primary);
+    font-size: 11.5px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.cv-review textarea {
+    max-width: 100%;
+    padding: 8px 10px;
+    resize: vertical;
+    font-family: var(--hj-font);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.cv-review-description textarea { min-height: 80px; }
+
+.cv-review .cv-form-row {
+    align-items: start;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+    min-width: 0;
+    padding: 12px 0;
+    border-top: 1px solid var(--hj-border);
+}
+
+.cv-review-section-head + .cv-review-entry { border-top: 0; }
+
+.cv-review-entry-head {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    gap: 8px;
+}
+
+.cv-review-entry-label { color: var(--hj-ink-soft); font-size: 13px; font-weight: 600; }
+.cv-review-entry-meta { margin-left: auto; color: var(--hj-muted); font-size: 12px; }
+.cv-review-entry-head .cv-remove { flex: 0 0 28px; width: 28px; height: 28px; }
+.cv-review-description,
+.cv-review-major { grid-column: 1 / -1; }
+
+.cv-review-entry > label { min-width: 0; }
+
+.cv-review-entry--education .cv-review-field-school { grid-column: 1 / -1; }
+.cv-review-entry--work .cv-review-field-company { grid-column: 1; }
+.cv-review-entry--work .cv-review-field-title { grid-column: 2; }
+
+.cv-review-entry--education .cv-review-field-degree { grid-column: 1; }
+.cv-review-entry--education .cv-review-field-major { grid-column: 2; }
+.cv-review-entry .cv-review-field-start { grid-column: 1; }
+.cv-review-entry .cv-review-field-end { grid-column: 2; }
+
+.cv-review-field-gpa {
+    grid-column: 1;
+    max-width: 140px;
+}
+
+.cv-review-present {
+    display: flex;
+    grid-column: 2;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    color: var(--hj-muted);
+    font-size: 13px;
+}
+
+.cv-review-present-label {
+    color: var(--hj-muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.cv-review-present-value {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid var(--hj-border);
+    border-radius: 8px;
+    background: var(--hj-surface-muted);
+    color: var(--hj-ink-soft);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.cv-review-entry .cv-review-current { grid-column: 1 / -1; margin-top: 0; }
+
+.cv-review .cv-form-row .preference-check {
+    flex-direction: row;
+    align-items: center;
+}
+
+.cv-review .cv-form-row .preference-check input[type="checkbox"] {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    flex: 0 0 auto;
+}
+
+.cv-review-skill-head,
+.cv-review .cv-review-skill-row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) 48px;
+    align-items: center;
+    gap: 10px;
+}
+
+.cv-review-skill-head span:last-child { text-align: right; }
+
+.cv-review .cv-review-skill-row .cv-remove { justify-self: end; }
+
+.cv-review .cv-years .cv-review-years-short { display: none; }
+
+.cv-review-skill-head {
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--hj-border);
+    color: var(--hj-muted);
+    font-size: 12px;
+}
+
+.cv-review .cv-review-skill-row {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--hj-border);
+}
+
+.cv-review-skill-name { color: var(--hj-ink); font-size: 13px; font-weight: 500; }
+.cv-review-skill-confidence { color: var(--hj-muted); font-size: 12.5px; }
+
+.cv-review .cv-years {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.cv-review .cv-years input { width: 64px; }
+
+.cv-review-skill-picker {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--hj-border);
+}
+
+.cv-review-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--hj-border);
+}
+
+.cv-review-attach { margin-top: 0; font-size: 13px; }
+
+.cv-review-footer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-left: auto;
+}
+
+@container cvreview (max-width: 640px) {
+    .cv-review-skill-head { display: none; }
+    .cv-review .cv-review-skill-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .cv-review .cv-review-skill-row .cv-years { grid-column: 1; }
+    .cv-review .cv-review-skill-row .cv-remove { grid-column: 2; grid-row: 2; }
+    .cv-review .cv-years .cv-review-years-short { display: inline; }
+}
+
+@container cvreview (max-width: 480px) {
+    .cv-review .cv-form-row { grid-template-columns: minmax(0, 1fr); }
+    .cv-review .cv-review-entry > label,
+    .cv-review .cv-review-entry > span,
+    .cv-review .cv-review-entry .cv-review-entry-head { grid-column: 1; max-width: none; }
+    .cv-review-counts { grid-template-columns: 1fr; }
+}
+
+@container cvreview (max-width: 420px) {
+    .cv-review-section-head .profile-btn { width: 100%; margin-left: 0; }
+    .cv-review-footer-actions { width: 100%; margin-left: 0; }
+    .cv-review-entry-head { flex-wrap: wrap; }
+    .cv-review-entry-head .cv-remove { margin-left: auto; }
+    .cv-review-entry-meta { margin-left: 0; }
+}
+
+@media (max-width: 760px) {
+    .cv-review .cv-review-actions .profile-btn { flex: 1 1 auto; }
+    .cv-review-footer-actions { width: 100%; margin-left: 0; }
+}

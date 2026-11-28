@@ -179,6 +179,53 @@
     color: #FFFFFF;
 }
 
+.nav-sign-out[disabled] {
+    cursor: progress;
+    opacity: .75;
+}
+
+/* Sign-out feedback owns a full-width row below the controls, so it never
+   competes with the avatar and sign-out button for horizontal space. */
+.nav-feedback-row {
+    display: flex;
+    justify-content: flex-end;
+    width: min(100% - 40px, 1320px);
+    margin: 0 auto 8px;
+}
+
+.nav-sign-out-error {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--hj-danger);
+    border-radius: var(--hj-radius-sm);
+    background: var(--hj-danger-bg);
+    color: var(--hj-danger);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.nav-sign-out-retry {
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--hj-danger);
+    border-radius: var(--hj-radius-pill);
+    background: var(--hj-surface);
+    color: var(--hj-danger);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.nav-sign-out-retry:hover {
+    background: var(--hj-surface-tint);
+}
+
 .menu-toggle {
     display: none;
     width: 44px;
@@ -212,6 +259,8 @@
         min-height: 64px;
         gap: 10px;
     }
+
+    .nav-feedback-row { width: min(100% - 32px, 1320px); }
 
     .menu-toggle {
         display: grid;

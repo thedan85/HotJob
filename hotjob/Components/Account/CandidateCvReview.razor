@@ -1,0 +1,297 @@
+@using hotjob.DTOs.Candidate
+@using Microsoft.AspNetCore.Components.Forms
+
+<div class="cv-form cv-review @(draft is null || editContext is null ? "cv-review--setup" : string.Empty)" aria-busy="@(Busy ? "true" : "false")">
+    <header class="cv-review-header">
+        <div>
+            <h3>Review parsed CV</h3>
+            <p class="cv-form-hint">Parsing creates suggestions only. Nothing is saved until you choose Save.</p>
+        </div>
+        <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                @onclick="CancelAsync" disabled="@isSaving">Close</button>
+    </header>
+
+    <div class="cv-review-layout">
+        <aside class="cv-review-side" aria-label="CV source, parsing results and review warnings">
+            <fieldset class="cv-fieldset cv-review-section" disabled="@(Busy || Created)">
+                <legend class="visually-hidden">CV source</legend>
+                <div class="cv-review-section-head">
+                    <span class="cv-review-section-icon" aria-hidden="true">◈</span>
+                    <h4>CV source</h4>
+                </div>
+                <label class="cv-review-file @(Busy || Created ? "is-disabled" : string.Empty)">
+                    <span class="cv-review-file-label">CV file</span>
+                    <span class="cv-review-file-control">Choose a PDF or DOCX file</span>
+                    <span class="cv-review-file-size">PDF or DOCX, up to 5 MB.</span>
+                    <InputFile OnChange="OnFileSelected" accept=".pdf,.docx" disabled="@(Busy || Created)"
+                               class="cv-review-file-input" />
+                </label>
+                @if (sourceFile is not null)
+                {
+                    <p class="cv-review-selected">
+                        <span class="cv-review-selected-label">Selected:</span>
+                        <span class="cv-review-selected-name">@sourceFile.Name</span>
+                        <span class="cv-review-file-type">@(sourceFile.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ? "PDF" : "DOCX")</span>
+                    </p>
+                }
+                <div class="cv-review-actions">
+                    <button class="profile-btn profile-btn-primary profile-btn-small" type="button"
+                            @onclick="OnParseRulesClickAsync"
+                            disabled="@(Busy || Created || sourceFile is null)">Parse CV</button>
+                    @if (Parser.IsAiAvailable)
+                    {
+                        <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                                @onclick="OnParseAiClickAsync"
+                                disabled="@(Busy || Created || sourceFile is null)">Parse with AI</button>
+                    }
+                    <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                            @onclick="StartManual" disabled="@(Busy || Created)">Start with an empty CV</button>
+                </div>
+                @if (Parser.IsAiAvailable)
+                {
+                    <p class="cv-form-hint cv-review-disclosure">
+                        With AI, CV text with obvious emails, phone numbers, links, and addresses removed is sent to an external AI provider.
+                        Names, schools, companies, and dates may still be included. This is not anonymization.
+                    </p>
+                }
+            </fieldset>
+
+            @if (isParsing)
+            {
+                <p class="cv-form-hint" role="status" aria-live="polite">Parsing CV...</p>
+            }
+            @if (Created)
+            {
+                <p class="cv-form-hint" role="status" aria-live="polite">
+                    Your resume was saved. This review is locked to prevent duplicate creation. You can manage attachments from the resume card.
+                </p>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(statusMessage))
+            {
+                <p class="profile-save-message @(partialSuccess ? "is-error" : string.Empty)"
+                   role="@(partialSuccess ? "alert" : "status")" aria-live="polite">@statusMessage</p>
+            }
+            @if (clientErrors.Count > 0)
+            {
+                <ul class="cv-review-errors" role="alert" aria-live="polite">
+                    @foreach (var error in clientErrors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            }
+
+            @if (draft is not null && editContext is not null)
+            {
+                <section class="cv-review-results" aria-label="Parsing results">
+                    <h4>Results</h4>
+                    @if (manualEntry)
+                    {
+                        <p class="cv-form-hint" role="status">Manual entry</p>
+                    }
+                    else
+                    {
+                        <p class="cv-review-mode">Mode used: @draft.ModeUsed</p>
+                        <dl class="cv-review-counts">
+                            <div class="cv-review-count-row"><dt>Education entries</dt><dd>@draft.Educations.Count</dd></div>
+                            <div class="cv-review-count-row"><dt>Work experience entries</dt><dd>@draft.WorkExperiences.Count</dd></div>
+                            <div class="cv-review-count-row"><dt>Skills</dt><dd>@draft.Skills.Count</dd></div>
+                        </dl>
+                        <p class="cv-review-counts-note">Current review, including your edits — not the original extraction totals.</p>
+                    }
+                    <p class="cv-form-hint">Parsing assistance may be incomplete. Check every field and confirm every skill before saving.</p>
+                    <p class="cv-form-hint">Confidence describes the original suggestion, not your edits. Manually added items are marked manual entry.</p>
+                </section>
+
+                @if (draft.Warnings.Count > 0 || draft.UnrecognizedSkills.Count > 0)
+                {
+                    <details class="cv-review-notices" aria-label="Warnings and hints">
+                        @{ var warningLabel = draft.Warnings.Count == 1 ? "warning" : "warnings"; }
+                        @{ var hintLabel = draft.UnrecognizedSkills.Count == 1 ? "hint" : "hints"; }
+                        <summary><span role="status" aria-live="polite">Warnings and hints: @draft.Warnings.Count @warningLabel, @draft.UnrecognizedSkills.Count @hintLabel</span></summary>
+                        @foreach (var warning in draft.Warnings)
+                        {
+                            <p class="cv-form-hint" role="status">@warning</p>
+                        }
+                        @if (draft.UnrecognizedSkills.Count > 0)
+                        {
+                            <div>
+                                <p class="cv-form-hint">Unrecognized words (shown as hints only, never added as skills):</p>
+                                <ul class="cv-review-unknowns">
+                                    @foreach (var word in draft.UnrecognizedSkills)
+                                    {
+                                        <li class="cv-review-unknown">@word</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </details>
+                }
+            }
+        </aside>
+
+        <div class="cv-review-main">
+            @if (draft is not null && editContext is not null)
+            {
+                @if (confirmReplace)
+                {
+                    <div class="cv-confirm" role="group" aria-label="Replace suggestions">
+                        <span>Replace the current suggestions? Your edits will be lost.</span>
+                        <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                                @onclick="CancelReplace">Keep my edits</button>
+                        <button class="profile-btn profile-btn-primary profile-btn-small" type="button"
+                                @onclick="ConfirmReplaceAsync">Replace suggestions</button>
+                    </div>
+                }
+
+                <EditForm EditContext="editContext">
+                    <ValidationSummary class="cv-review-errors" />
+                    <h4 class="cv-review-basics-heading">Basic information</h4>
+                    <div class="profile-form-grid cv-review-basics">
+                        <label class="profile-field-wide cv-review-field">
+                            <span class="cv-review-label-line">CV title <span class="cv-review-required" aria-hidden="true">*</span><span class="visually-hidden">(required)</span></span>
+                            <InputText @bind-Value="draft.Title" disabled="@(Busy || Created)" />
+                        </label>
+                        <label class="profile-field-wide cv-review-field">
+                            <span class="cv-review-label-line">Professional summary
+                                @if (draft.SummaryConfidence is { } summaryConfidence)
+                                {
+                                    <span class="cv-review-confidence">Summary confidence: @summaryConfidence</span>
+                                }
+                            </span>
+                            <InputTextArea @bind-Value="draft.Summary" rows="3" disabled="@(Busy || Created)" />
+                        </label>
+                    </div>
+
+                    <fieldset class="cv-fieldset cv-review-section" disabled="@(Busy || Created)">
+                        <legend class="visually-hidden">Education</legend>
+                        <div class="cv-review-section-head">
+                            <span class="cv-review-section-icon" aria-hidden="true">▤</span>
+                            <h4>Education</h4>
+                            <span class="cv-review-count">@draft.Educations.Count</span>
+                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                                    @onclick="AddEducation">+ Add education</button>
+                        </div>
+                        @foreach (var item in draft.Educations)
+                        {
+                            <div class="cv-form-row cv-review-entry cv-review-entry--education" @key="item.Key">
+                                <div class="cv-review-entry-head">
+                                    <span class="cv-review-entry-label">Entry @(draft.Educations.IndexOf(item) + 1)</span>
+                                    <span class="cv-review-entry-meta">@(item.IsManual ? "manual entry" : $"Confidence: {item.Confidence}")</span>
+                                    <button class="cv-remove" type="button" aria-label="Remove education entry"
+                                            @onclick="() => RemoveEducation(item.Key)">×</button>
+                                </div>
+                                <label class="cv-review-field-school">School <InputText @bind-Value="item.SchoolName" /></label>
+                                <label class="cv-review-field-degree">Degree <InputText @bind-Value="item.Degree" /></label>
+                                <label class="cv-review-field-major">Field of study <InputText @bind-Value="item.FieldOfStudy" /></label>
+                                <label class="cv-review-field-start">Start <InputDate @bind-Value="item.StartDate" /></label>
+                                <label class="cv-review-field-end">End <InputDate @bind-Value="item.EndDate" /></label>
+                                <label class="cv-review-field-gpa">GPA <InputNumber @bind-Value="item.Gpa" step="0.1" min="0" max="4" /></label>
+                                <label class="profile-field-wide cv-review-description">Description <InputTextArea @bind-Value="item.Description" rows="3" /></label>
+                                <span class="cv-form-hint cv-review-major">Major preview: @item.MajorPreview</span>
+                                @if (item.MajorShortened)
+                                {
+                                    <span class="cv-form-hint" role="status">Major was shortened to its supported length.</span>
+                                }
+                            </div>
+                        }
+                    </fieldset>
+
+                    <fieldset class="cv-fieldset cv-review-section" disabled="@(Busy || Created)">
+                        <legend class="visually-hidden">Work experience</legend>
+                        <div class="cv-review-section-head">
+                            <span class="cv-review-section-icon" aria-hidden="true">▤</span>
+                            <h4>Work experience</h4>
+                            <span class="cv-review-count">@draft.WorkExperiences.Count</span>
+                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                                    @onclick="AddWork">+ Add experience</button>
+                        </div>
+                        @foreach (var item in draft.WorkExperiences)
+                        {
+                            <div class="cv-form-row cv-review-entry cv-review-entry--work" @key="item.Key">
+                                <div class="cv-review-entry-head">
+                                    <span class="cv-review-entry-label">Entry @(draft.WorkExperiences.IndexOf(item) + 1)</span>
+                                    <span class="cv-review-entry-meta">@(item.IsManual ? "manual entry" : $"Confidence: {item.Confidence}")</span>
+                                    <button class="cv-remove" type="button" aria-label="Remove work experience entry"
+                                            @onclick="() => RemoveWork(item.Key)">×</button>
+                                </div>
+                                <label class="cv-review-field-company">Company <InputText @bind-Value="item.CompanyName" /></label>
+                                <label class="cv-review-field-title">Job title <InputText @bind-Value="item.JobTitle" /></label>
+                                <label class="cv-review-field-start">Start <InputDate @bind-Value="item.StartDate" /></label>
+                                @if (!item.IsCurrent)
+                                {
+                                    <label class="cv-review-field-end">End <InputDate @bind-Value="item.EndDate" /></label>
+                                }
+                                else
+                                {
+                                    <span class="cv-review-present"><span class="cv-review-present-label">End</span><span class="cv-review-present-value">Present</span></span>
+                                }
+                                <label class="preference-check cv-review-current">
+                                    <InputCheckbox @bind-Value="item.IsCurrent" /> Current job
+                                </label>
+                                <label class="profile-field-wide cv-review-description">Description <InputTextArea @bind-Value="item.Description" rows="3" /></label>
+                            </div>
+                        }
+                    </fieldset>
+
+                    <fieldset class="cv-fieldset cv-review-section" disabled="@(Busy || Created)">
+                        <legend class="visually-hidden">Skills</legend>
+                        <div class="cv-review-section-head">
+                            <span class="cv-review-section-icon" aria-hidden="true">◈</span>
+                            <h4>Skills</h4>
+                            <span class="cv-review-count">@draft.Skills.Count</span>
+                        </div>
+                        <div class="cv-review-skill-head" aria-hidden="true">
+                            <span>Skill</span><span>Confidence</span><span>Years of experience</span><span>Remove</span>
+                        </div>
+                        @foreach (var skill in draft.Skills)
+                        {
+                            <div class="cv-skill-row cv-review-skill-row" @key="skill.Key">
+                                <span class="cv-review-skill-name">@skill.SkillName</span>
+                                <span class="cv-review-skill-confidence">@(skill.IsManual ? "manual entry" : skill.Confidence.ToString())</span>
+                                <label class="cv-years"><span class="visually-hidden">Years of experience for @skill.SkillName</span><span aria-hidden="true" class="cv-review-years-short">Years</span><InputNumber @bind-Value="skill.YearsOfExperience" min="0" max="50" /></label>
+                                <button class="cv-remove" type="button" aria-label="Remove @skill.SkillName"
+                                        @onclick="() => RemoveSkill(skill.Key)">×</button>
+                            </div>
+                        }
+                        <div class="cv-skill-picker cv-review-skill-picker">
+                            <label>
+                                Skill
+                                <select @bind="skillPickerId">
+                                    <option value="0">Choose a skill</option>
+                                    @foreach (var option in AvailableSkills)
+                                    {
+                                        <option value="@option.Id">@option.Name</option>
+                                    }
+                                </select>
+                            </label>
+                            <label>
+                                <span class="visually-hidden">Years of experience to add</span><span aria-hidden="true">Years</span>
+                                <input type="number" min="0" max="50" @bind="skillPickerYears" />
+                            </label>
+                            <button class="profile-btn profile-btn-secondary profile-btn-small" type="button"
+                                    @onclick="AddSkill">Add skill</button>
+                        </div>
+                    </fieldset>
+                </EditForm>
+            }
+        </div>
+    </div>
+
+    <footer class="cv-review-footer">
+        @if (sourceFile is not null)
+        {
+            <label class="preference-check cv-review-attach">
+                <InputCheckbox @bind-Value="attachOriginal" disabled="@(Busy || Created)" />
+                <span>Also attach the original file to this resume</span>
+            </label>
+        }
+        <div class="cv-review-footer-actions">
+            <button class="profile-btn profile-btn-secondary" type="button"
+                    @onclick="CancelAsync" disabled="@isSaving">Cancel</button>
+            <button class="profile-btn profile-btn-primary" type="button"
+                    @onclick="SaveAsync" disabled="@(Busy || draft is null || createdResumeId is not null)">@(isSaving ? "Saving..." : "Save CV")</button>
+        </div>
+    </footer>
+</div>

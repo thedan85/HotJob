@@ -5,51 +5,109 @@
 @using hotjob.Services.Authentication
 @using Microsoft.JSInterop
 
-@if (isAuthenticated)
-{
-    <p>You do not have access to this page.</p>
-}
-else
+@if (resolution == Resolution.Checking)
 {
     <p role="status">Checking your sign-in...</p>
 }
+else if (resolution == Resolution.Denied)
+{
+    <section class="state-page state-page-compact" role="alert" aria-labelledby="auth-access-denied-title">
+        <p class="state-kicker">Access denied</p>
+        <h1 id="auth-access-denied-title">You do not have access to this page.</h1>
+        <p class="state-lede">Your account does not have the role this page needs. You can browse jobs or head back home.</p>
+        <div class="state-actions">
+            <a class="state-btn state-btn-primary" href="/it-jobs">Browse jobs</a>
+            <a class="state-btn state-btn-secondary" href="/">Go home</a>
+        </div>
+    </section>
+}
+else if (resolution == Resolution.Failed)
+{
+    <section class="state-page state-page-compact" role="alert" aria-labelledby="auth-check-failed-title">
+        <p class="state-kicker">Sign-in check failed</p>
+        <h1 id="auth-check-failed-title">We could not check your sign-in. Please try again.</h1>
+        <p class="state-lede">Nothing has changed in your session. Retry the check, or head back home.</p>
+        <div class="state-actions">
+            <button class="state-btn state-btn-primary" type="button" @onclick="RetryAsync" disabled="@isChecking">Try again</button>
+            <a class="state-btn state-btn-secondary" href="/">Go home</a>
+        </div>
+    </section>
+}
 
 @code {
-    private bool isAuthenticated;
+    private enum Resolution { Checking, Denied, Failed }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private Resolution resolution = Resolution.Checking;
+    private bool isChecking;
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        var state = await AuthStateProvider.GetAuthenticationStateAsync();
-        if (state.User.Identity?.IsAuthenticated == true)
+        return CheckSessionAsync();
+    }
+
+    private Task RetryAsync() => CheckSessionAsync();
+
+    private async Task CheckSessionAsync()
+    {
+        if (isChecking)
         {
-            // Logged in but missing the required role (e.g. Candidate on an employer page).
-            // Stay put with access-denied instead of bouncing to /login.
-            isAuthenticated = true;
-            StateHasChanged();
             return;
         }
 
+        isChecking = true;
         try
         {
+            // A session already resolved in this circuit is authoritative. The
+            // surrounding AuthorizeView will dispose this component for roles it
+            // allows; if we are still mounted, the role is not permitted.
+            var state = await AuthStateProvider.GetAuthenticationStateAsync();
+            if (state.User.Identity?.IsAuthenticated == true)
+            {
+                resolution = Resolution.Denied;
+                StateHasChanged();
+                return;
+            }
+
             var result = await JS.InvokeAsync<AuthApiResult>("hotjobAuth.me");
             if (result.Ok && result.Data is not null)
             {
                 AuthStateProvider.SignIn(result.ToTokens());
-                // AuthorizeView flips to Authorized; this component is disposed, no redirect.
+                // Restoration can complete after AuthorizeView already chose the
+                // NotAuthorized branch. Resolve that still-mounted branch too;
+                // permitted roles replace this component on the next render.
+                resolution = Resolution.Denied;
+                StateHasChanged();
                 return;
             }
-        }
-        catch (Exception exception) when (exception is JSException or InvalidOperationException)
-        {
-            // JS unavailable (prerender) — keep the loading UI; the interactive pass retries.
-            return;
-        }
 
-        NavigationManager.NavigateTo("/login");
+            if (!result.Ok && result.Status == 401)
+            {
+                // Confirmed anonymous: leave the failure state as soon as the
+                // redirect starts so the old error is not shown during hand-off.
+                resolution = Resolution.Checking;
+                StateHasChanged();
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            resolution = Resolution.Failed;
+            StateHasChanged();
+        }
+        // JS interop here has no component cancellation token: a canceled/faulted
+        // browser timeout is a recoverable check failure, not circuit cancellation.
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or OperationCanceledException)
+        {
+            resolution = Resolution.Failed;
+            StateHasChanged();
+        }
+        finally
+        {
+            isChecking = false;
+        }
     }
 }
